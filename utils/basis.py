@@ -1,7 +1,7 @@
 import numpy as np
 import scipy
 
-def create_impulse_basis(T_max=100,
+def create_basis(T_max=100,
                          type='cosine', 
                          fname='None',
                          **kwargs):

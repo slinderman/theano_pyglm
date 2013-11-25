@@ -27,7 +27,7 @@ class BasisImpulse:
                 
         # Create a basis for the stimulus response
         if prms['basis'] is None:
-            self.basis = create_impulse_basis(**prms)
+            self.basis = create_basis(**prms)
         else:
             self.basis = prms['basis']
 

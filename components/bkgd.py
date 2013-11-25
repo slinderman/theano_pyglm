@@ -22,7 +22,7 @@ class FilteredStimulus:
         self.sig_w = prms['sig_w']
 
         # Create a basis for the stimulus response
-        self.basis = create_impulse_basis(**prms)
+        self.basis = create_basis(**prms)
         
         # Compute the number of parameters
         (_,B) = self.basis.shape
