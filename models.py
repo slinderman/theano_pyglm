@@ -1,10 +1,20 @@
-__author__ = 'Scott'
-
 """
 Simple GLM
 """
 SimpleModel = \
 {
+    # Number of neurons (parametric model!)
+    'N' : 2,
+    # Dimensionality of the stimulus
+    'D_stim' : 1,
+    
+    # Parameters of the nonlinearity
+    'nonlinearity' :
+        {
+            'type' : 'exp'
+        },
+    
+    # Parameters of the bias    
     'bias' :
         {
             'type' : 'constant',
@@ -12,6 +22,7 @@ SimpleModel = \
             'sigma' : 0.1
         },
 
+    # Parameters of the background model
     'bkgd' :
         {
             'type' : 'basis',
@@ -21,6 +32,7 @@ SimpleModel = \
             'sigma' : 0.1
         },
 
+    # Parameters of the impulse responses
     'impulse' :
         {
             'type' : 'basis',
@@ -30,11 +42,13 @@ SimpleModel = \
             'sigma' : 1
         },
 
+    # Parameters of the network
     'network' :
         {
             'type' : 'complete'
         },
 
+    # Parameters of the basis functions
     'basis' :
         {
             'n_eye' : 0,

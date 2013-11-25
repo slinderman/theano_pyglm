@@ -1,6 +1,32 @@
 import theano
 import numpy as np
 
+class Bias:
+    """
+    Generic class for a bias. This is overkill, the bias is really just
+    a constant, but we use this abstraction for consistency with other 
+    components.
+    """
+    def __init__(self, model, vars, offset):
+        """
+        Create the specific bias implementation
+        """
+        type = model['bias']['type'].lower() 
+        if type == 'constant':
+            self.__bias = ConstantBias(model, vars, offset)
+        
+        else:
+            raise Exception("Unrecognized bias model: %s" % type)
+    
+    def set_data(self, data):
+        self.__bias.set_data(data)
+        
+    def sample(self):
+        return self.__bias.sample()
+    
+    def params(self):
+        return self.__bias.params()
+    
 class ConstantBias:
     """
     """
