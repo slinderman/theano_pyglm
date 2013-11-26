@@ -1,47 +1,27 @@
 import theano
 import numpy as np
+from component import Component
 
-class Bias:
+def create_bias_component(model, vars, offset):
+    type = model['bias']['type'].lower()
+    if type == 'constant':
+        bias = ConstantBias(model, vars, offset)
+    else:
+        raise Exception("Unrecognized bias model: %s" % type)
+    return bias
+
+class ConstantBias(Component):
     """
-    Generic class for a bias. This is overkill, the bias is really just
-    a constant, but we use this abstraction for consistency with other 
-    components.
     """
+    
     def __init__(self, model, vars, offset):
-        """
-        Create the specific bias implementation
-        """
-        type = model['bias']['type'].lower() 
-        if type == 'constant':
-            self.__bias = ConstantBias(model, vars, offset)
-        
-        else:
-            raise Exception("Unrecognized bias model: %s" % type)
-    
-    def set_data(self, data):
-        self.__bias.set_data(data)
-        
-    def sample(self):
-        return self.__bias.sample()
-    
-    def params(self):
-        return self.__bias.params()
-    
-class ConstantBias:
-    """
-    """
-    
-    def __init__(self, vars, offset, **kwargs):
         """ Initialize a simple scalara bias. This is only in a class
             for consistency with the other model components
         """
 
-        prms = {'mu_bias' : -3,
-                'sig_bias' : 0.1}
-        prms.update(kwargs)
-
-        self.mu_bias = prms['mu_bias']
-        self.sig_bias = prms['sig_bias']
+        prms = model['bias']
+        self.mu_bias = prms['mu']
+        self.sig_bias = prms['sigma']
 
         # Define a bias to the membrane potential
         bias = vars[offset]

@@ -5,8 +5,6 @@ SimpleModel = \
 {
     # Number of neurons (parametric model!)
     'N' : 2,
-    # Dimensionality of the stimulus
-    'D_stim' : 1,
     
     # Parameters of the nonlinearity
     'nonlinearity' :
@@ -26,10 +24,20 @@ SimpleModel = \
     'bkgd' :
         {
             'type' : 'basis',
+            'D_stim' : 1,       # Dimensionality of the stimulus
             'T_max' : 100,
-            'basis' : 'cosine',
             'mu' : 0,
-            'sigma' : 0.1
+            'sigma' : 0.1,
+            'basis' :
+                {
+                    'type' : 'cosine',
+                    'n_eye' : 0,
+                    'n_cos' : 3,
+                    'a': 1.0/120,
+                    'b': 0.5,
+                    'orth' : False,
+                    'norm' : True
+                }
         },
 
     # Parameters of the impulse responses
@@ -37,27 +45,33 @@ SimpleModel = \
         {
             'type' : 'basis',
             'T_max' : 10,
-            'basis' : 'cosine',
             'mu' : 0,
-            'sigma' : 1
+            'sigma' : 1,
+            'basis' :
+                {
+                    'type' : 'cosine',
+                    'n_eye' : 0,
+                    'n_cos' : 3,
+                    'a': 1.0/120,
+                    'b': 0.5,
+                    'orth' : False,
+                    'norm' : True
+                }
         },
 
     # Parameters of the network
     'network' :
         {
-            'type' : 'complete'
-        },
+            'weight' :
+                {
+                    'type' : 'constant'
+                },
 
-    # Parameters of the basis functions
-    'basis' :
-        {
-            'n_eye' : 0,
-            'n_cos' : 3,
-            'a': 1.0/120,
-            'b': 0.5,
-            'orth' : False,
-            'norm' : True
-        }
+            'graph' :
+                {
+                    'type' : 'complete'
+                }
+        },
 }
 
 

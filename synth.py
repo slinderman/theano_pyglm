@@ -1,4 +1,5 @@
 from glm import *
+from models import *
 
 def plot_results(glms, x_trues, x_opts):
     """ Plot the inferred stimulus tuning curves and impulse responses
@@ -45,17 +46,13 @@ def plot_results(glms, x_trues, x_opts):
 if __name__ == "__main__":
     # Test
     print "Initializing GLM"
-    N = 2
     T_max = 10000
     dt_stim = 100
     dt = 1
-    D_stim = 1
+    D_stim = SimpleModel['bkgd']['D_stim']
+    N = SimpleModel['N']
 
-    glms = []
-    x_trues = []
-    for n in np.arange(N):
-        glms.append(Glm(n,N,D_stim))
-        x_trues.append(glms[n].sample())
+    glm = NetworkGlm(SimpleModel)
 
     # Generate random stimulus
     print "Generating random data"

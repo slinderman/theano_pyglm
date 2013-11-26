@@ -2,31 +2,33 @@ import theano
 import theano.tensor as T
 from utils.basis import *
 
-class FilteredStimulus:
+def create_bkgd_component(model, vars, offset):
+    type = model['bkgd']['type'].lower()
+    if type == 'basis':
+        bkgd = BasisStimulus(model, vars, offset)
+    else:
+        raise Exception("Unrecognized backgound model: %s" % type)
+    return bkgd
+
+
+class BasisStimulus:
     """ Filter the stimulus and expose the filtered stimulus
     """
 
-    def __init__(self, vars, v_offset, D, **kwargs):
+    def __init__(self, model, vars, v_offset):
         """ Initialize the filtered stim model
         """
-        prms = {'T_max' : 100,
-                'basis_type' : 'cosine',
-                'orth' : False,
-                'norm' : True,
-                'n_cos' : 3,
-                'mu_w' : 0,
-                'sig_w' : 0.1}
-        prms.update(kwargs)
+        prms = model['bkgd']
 
-        self.mu_w = prms['mu_w']
-        self.sig_w = prms['sig_w']
+        self.mu_w = prms['mu']
+        self.sig_w = prms['sigma']
 
         # Create a basis for the stimulus response
-        self.basis = create_basis(**prms)
+        self.basis = create_basis(**prms['basis'])
         
         # Compute the number of parameters
         (_,B) = self.basis.shape
-        self.n_vars = B*D 
+        self.n_vars = B*prms['D_stim']
 
         # Store stimulus in shared memory
         self.stim = theano.shared(name='stim',
