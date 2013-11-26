@@ -18,9 +18,3 @@ class Component:
         return a sample of the variables
         """
         pass
-
-    def params(self):
-        """
-        Get the parameters of this component?
-        """
-        pass

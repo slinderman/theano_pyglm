@@ -43,6 +43,3 @@ class ConstantBias(Component):
         """
         bias = self.mu_bias + self.sig_bias * np.random.randn()
         return bias
-
-    def params(self):
-        pass
