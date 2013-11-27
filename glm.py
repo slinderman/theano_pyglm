@@ -7,6 +7,8 @@ import utils.poisson_process as pp
 import scipy.optimize as opt
 import scipy.linalg as linalg
 
+from components.network import *
+
 from components.bkgd import *
 from components.bias import *
 from components.impulse import *
@@ -22,20 +24,57 @@ class NetworkGlm:
         """
         self.model = model
         N = model['N']
-        # TODO Create a network model to connect the GLMs
+
+        # Create a network model to connect the GLMs
+        self.network = Network(model)
 
         # Create GLMs for each neuron
         self.glms = []
         for n in np.arange(N):
-            self.glms.append(Glm(n, model))
+            self.glms.append(Glm(n, model, self.network))
 
-        # Create a function to compute the log prob
-        self.f_lp = lambda vars: sum(map(lambda (n,glm): glm.f_lp(vars[n]),
-                                         zip(range(N), self.glms)))
+        # Evalualte the total log probability
+        log_p_glms = map(lambda glm: T.shape_padright(glm.log_p, n_ones=1),
+                         self.glms)
+
+        # Concatenate the log posteriors into a vector
+        self.log_p = T.sum(T.concatenate(log_p_glms, axis=0)) + \
+                     self.network.log_p
+        
+        # Concatenate all variables into a list
+        self.vars = reduce(lambda vacc,glm: vacc+[glm.vars], self.glms,
+                           self.network.vars)
+
+        # Compute gradients of the joint log probability
+        self.compute_gradients()
+
+    def compute_gradients(self):
+        """ Compute gradients of the joint log posterior distribution over GLM
+            parameters and networks. Try to take advantage of conditional
+            independencies between the GLMs. For example, The background and impulse
+            responses may be conditionally independent given the network.
+        """
+
+        # Most general form: compute the gradient of the joint log posterior
+        self.g_vars = T.grad(self.log_p, self.vars)
+
+        # TODO: Compute this for all pairs of input variables
+        # Finally, compute the Hessian
+        self.H_vars,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
+                               sequences=T.arange(self.g_vars.shape[0]),
+                               non_sequences=[self.g_vars, self.vars])
+
+        # Create callable functions to compute firing rate, log likelihood, and gradients
+        self.f_lp = theano.function(self.vars, self.log_p)
+        self.g_lp = theano.function(self.vars, self.g_vars)
+        self.H_lp = theano.function(self.vars, self.H_vars)
+
     def set_data(self, data):
         """
         Condition on the data
         """
+        self.network.set_data(data)
+
         for glm in self.glms:
             glm.set_data(data)
             
@@ -44,6 +83,9 @@ class NetworkGlm:
         Sample parameters of the GLM from the prior
         """
         vars = []
+
+        vars.append(self.network.sample())
+
         for glm in self.glms:
             vars.append(glm.sample())
             
@@ -84,6 +126,9 @@ class NetworkGlm:
                             np.arange(N)))
         imps = np.array(imps)
         T_imp = imps.shape[2]
+
+        import pdb
+        pdb.set_trace()
 
         # Iterate over each time step and generate spikes
         S = np.zeros((nT,N))
@@ -155,6 +200,11 @@ class NetworkGlm:
         if x0 is None:
             x0 = self.sample()
 
+        # Determine the shapes of the parameters
+        shapes = map(lambda x: x.shape, x0)
+
+        # Concatenate the states int
+
         x_opts = []
         for n in np.arange(N):
             print "Fitting GLM %d" % n
@@ -185,27 +235,33 @@ class Glm:
                                value=np.zeros((1, model['N'])))
 
         # Concatenate the variables into one long vector
-        vars = T.dvector()
+        self.vars = T.dvector(name='vars')
         v_offset = 0
 
         # Define a bias to the membrane potential
         #self.bias_model = ConstantBias(vars, v_offset)
-        self.bias_model = create_bias_component(model, vars, v_offset)
+        self.bias_model = create_bias_component(model, self.vars, v_offset)
         v_offset += self.bias_model.n_vars
        
         # Define stimulus and stimulus filter
-        self.bkgd_model = create_bkgd_component(model, vars, v_offset)
+        self.bkgd_model = create_bkgd_component(model, self.vars, v_offset)
         v_offset += self.bkgd_model.n_vars
 
         # Create a list of impulse responses for each incoming connections
-        self.imp_model = create_impulse_component(model, vars, v_offset, n)
+        self.imp_model = create_impulse_component(model, self.vars, v_offset, n)
         v_offset += self.imp_model.n_vars
 
-        # TODO Weight the impulse response currents and sum them up
-        I_net = T.sum(self.imp_model.I_imp, axis=1)
+        # If a network is given, weight the impulse response currents and sum them up
+        if network is not None:
+            # Compute the effective incoming weights
+            W_eff = network.graph.A[:,n] * network.weights.W[:,n]
+        else:
+            W_eff = np.ones((model['N'],))
+
+        I_net = T.dot(self.imp_model.I_imp, W_eff)
 
         # Rectify the currents to get a firing rate
-        self.nlin_model = create_nlin_component(model, vars, v_offset)
+        self.nlin_model = create_nlin_component(model, self.vars, v_offset)
         lam = self.nlin_model.nlin(self.bias_model.I_bias +
                                    self.bkgd_model.I_stim +
                                    I_net)
@@ -218,21 +274,23 @@ class Glm:
         lp_bkgd = self.bkgd_model.log_p
         lp_imp = self.imp_model.log_p
         lp_nlin = self.nlin_model.log_p
-        lp = ll + lp_bias + lp_bkgd + lp_imp + lp_nlin
+        self.log_p = ll + lp_bias + lp_bkgd + lp_imp + lp_nlin
 
         # Compute the gradient of the log likelihood wrt vars
-        g_vars = T.grad(lp, vars)
-                
-        # Finally, compute the Hessian
-        H_vars,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
-                               sequences=T.arange(g_vars.shape[0]),
-                               non_sequences=[g_vars, vars])
-
-        # Create callable functions to compute firing rate, log likelihood, and gradients
-        self.f_lam = theano.function([vars], lam)
-        self.f_lp = theano.function([vars], lp)
-        self.g_lp = theano.function([vars], g_vars)
-        self.H_lp = theano.function([vars], H_vars)
+        all_vars = [self.vars] + network.vars
+        g_vars = T.grad(self.log_p, all_vars)
+        #
+        ## Finally, compute the Hessian
+        #H_vars,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
+        #                       sequences=T.arange(g_vars.shape[0]),
+        #                       non_sequences=[g_vars, self.vars])
+        #
+        ## Create callable functions to compute firing rate, log likelihood, and gradients
+        #theano.config.on_unused_input = 'ignore'
+        self.f_lam = theano.function(all_vars, lam)
+        self.f_log_p = theano.function(all_vars, self.log_p)
+        #self.g_lp = theano.function([self.vars, network.weights.W], g_vars)
+        #self.H_lp = theano.function([self.vars, network.weights.W], H_vars)
 
     def set_data(self, data):
         """ Update the shared memory where the data is stored

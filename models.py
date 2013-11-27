@@ -41,23 +41,23 @@ SimpleModel = \
         },
 
     # Parameters of the impulse responses
-    #'impulse' :
-    #    {
-    #        'type' : 'basis',
-    #        'dt_max' : 10,
-    #        'mu' : 0,
-    #        'sigma' : 0.33,
-    #        'basis' :
-    #            {
-    #                'type' : 'cosine',
-    #                'n_eye' : 0,
-    #                'n_cos' : 3,
-    #                'a': 1.0/120,
-    #                'b': 0.5,
-    #                'orth' : False,
-    #                'norm' : True
-    #            }
-    #    },
+    # 'impulse' :
+    #     {
+    #         'type' : 'basis',
+    #         'dt_max' : 10,
+    #         'mu' : 0.0,
+    #         'sigma' : 0.33,
+    #         'basis' :
+    #             {
+    #                 'type' : 'cosine',
+    #                 'n_eye' : 0,
+    #                 'n_cos' : 3,
+    #                 'a': 1.0/120,
+    #                 'b': 0.5,
+    #                 'orth' : False,
+    #                 'norm' : True
+    #             }
+    #     },
     'impulse' :
         {
             'type' : 'dirichlet',
@@ -80,7 +80,11 @@ SimpleModel = \
         {
             'weight' :
                 {
-                    'type' : 'constant'
+                    #'type' : 'constant',
+                    #'value' : 1.0
+                    'type' : 'gaussian',
+                    'mu' : 0.0,
+                    'sigma' : 0.2
                 },
 
             'graph' :

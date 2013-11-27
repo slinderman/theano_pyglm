@@ -32,12 +32,14 @@ class ConcatenatedImpulses(Component):
         #             self.imp_models)
         I_imps = map(lambda im: T.shape_padright(im.I_ir, n_ones=1),
                      self.imp_models)
-        lp_imps = map(lambda im: im.log_p, self.imp_models)
+#         lp_imps = map(lambda im: im.log_p, self.imp_models)
+        lp_imps = map(lambda im: T.shape_padright(im.log_p, n_ones=1),
+                      self.imp_models)
 
         # Concatenate impulse currents into a matrix
         self.I_imp = T.concatenate(I_imps, axis=1)
-        self.log_p = T.sum(T.stack(lp_imps))
-
+        self.log_p = T.sum(T.concatenate(lp_imps, axis=0))
+        
         self.f_I_imp = theano.function([vars], self.I_imp)
 
     def set_data(self, data):
@@ -203,8 +205,8 @@ class DirichletImpulse:
 
         # Log probability
         self.log_p = -B*scipy.special.gammaln(self.alpha) + \
-                      T.sum((self.alpha-1)*self.g) + \
-                      T.sum(-self.g)
+                      T.sum((self.alpha-1.0)*self.g) + \
+                      T.sum(-1.0*self.g)
 
         # Expose outputs to the Glm class
         self.I_ir = T.dot(self.ir, self.w)
@@ -256,4 +258,4 @@ class DirichletImpulse:
         return w_imp
 
     def params(self):
-        return {'basis' : self.basis}
+        return {'impulse' : self.f_impulse(vars)}
