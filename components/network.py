@@ -31,6 +31,13 @@ class Network(Component):
 
         # Concatenate the variables into a single list of variables
         self.vars = self.graph.vars + self.weights.vars
+        
+        # Create function to evaluate W
+        self.f_A = theano.function(self.vars, self.graph.A,
+                                   on_unused_input='ignore')
+        self.f_W = theano.function(self.vars, self.weights.W,
+                                   on_unused_input='ignore')
+
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
@@ -45,6 +52,13 @@ class Network(Component):
         # Sample adjacency and weight matrices
         A_vars = self.graph.sample()
         W_vars = self.weights.sample()
-        vars = np.concatenate((A_vars,W_vars))
-
+        
+        vars = []
+        if A_vars is not None:
+            if W_vars is not None:
+                vars = np.concatenate((A_vars,W_vars))
+            else:
+                vars = A_vars
+        elif W_vars is not None:
+                vars = W_vars
         return vars

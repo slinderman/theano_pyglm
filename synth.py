@@ -75,7 +75,7 @@ if __name__ == "__main__":
 
     # Simulate spikes
     S,X = glm.simulate(x_true, (T_start,T_stop), dt)
-
+    
     # Put the spikes into a data dictionary
     data = {"S": S,
             "X": X,
@@ -84,26 +84,25 @@ if __name__ == "__main__":
             "T": np.float(T_stop),
             "stim": stim,
             'dt_stim': dt_stim}
-
     glm.set_data(data)
 
-    lam_true = glm.glms[0].f_lam(x_true[0])
+#    lam_true = glm.glms[0].f_lam(x_true[0])
+#
+#    # Save the data
+#    data["lam"] = lam_true
+#    import scipy.io
+#    scipy.io.savemat("data.mat", data)
 
-    # Save the data
-    data["lam"] = lam_true
-    import scipy.io
-    scipy.io.savemat("data.mat", data)
-
-    ll_true = glm.f_lp(x_true)
+    ll_true = glm.f_lp(*x_true)
     print "true LL: %f" % ll_true
 
     # Sample random initial state
     x0 = glm.sample()
-    ll0 = glm.f_lp(x0)
+    ll0 = glm.f_lp(*x0)
     print "LL0: %f" % ll0
 
     x_opt = glm.fit(x0)
-    ll_opt = glm.f_lp(x_opt)
+    ll_opt = glm.f_lp(*x_opt)
     print "LL_opt: %f" % ll_opt
 
     plot_results(glm, x_true, x_opt)

@@ -25,7 +25,7 @@ class ConstantWeightModel(Component):
 
         prms = model['network']['weight']
         self.value = prms['value']
-
+        
         # Define weight matrix
         self.W = self.value * T.ones((N,N))
 
@@ -54,13 +54,13 @@ class GaussianWeightModel(Component):
 
         # Define a getter for the variables of the model
         self.vars = [self.W_flat]
-
+        
     def sample(self):
         """
         return a sample of the variables
         """
         N = self.model['N']
-        W = self.mu + self.sigma * np.random.randn((N,N))
+        W = self.mu + self.sigma * np.random.randn(N,N)
         W = np.reshape(W, (N**2,))
         return W
 
