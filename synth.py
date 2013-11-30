@@ -8,26 +8,43 @@ def plot_results(glm, x_trues, x_opts):
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
+    true_state = glm.get_state(x_trues)
+    opt_state = glm.get_state(x_opts)
+
     N = len(glm.glms)
+    
+    # Plot the inferred connectivity matrix
+    f = plt.figure()
+    plt.subplot(1,2,1)
+    plt.imshow(true_state['net'], extent=[0,1,0,1])
+    plt.title('True Network')
+    plt.subplot(1,2,2)
+    plt.imshow(opt_state['net'], extent=[0,1,0,1])
+    plt.title('Inferred Network')
+
+    f.savefig('conn.pdf')
+    
     # Plot the stimulus tuning curve
     f = plt.figure()
     for n in np.arange(N):
         plt.subplot(1,N,n+1)
-        plt.plot(glm.glms[n].bkgd_model.f_stim_resp(x_trues[n]),'b')
+        plt.plot(true_state[n]['stim'],'b')
         plt.hold(True)
-        plt.plot(glm.glms[n].bkgd_model.f_stim_resp(x_opts[n]),'r')
+        plt.plot(opt_state[n]['stim'],'r')
         plt.title('GLM[%d]: Stim Response' % n)
 
     f.savefig('stim_resp.pdf')
 
     # Plot the impulse responses
+    import pdb
+    pdb.set_trace()
     f = plt.figure()
     for n_pre in np.arange(N):
         for n_post in np.arange(N):
             plt.subplot(N,N,n_pre*N+n_post + 1)
-            plt.plot(glm.glms[n_post].imp_model.imp_models[n_pre].f_impulse(x_trues[n_post]),'b')
+            plt.plot(true_state[n_post]['ir'][n_pre,:],'b')
             plt.hold(True)
-            plt.plot(glm.glms[n_post].imp_model.imp_models[n_pre].f_impulse(x_opts[n_post]),'r')
+            plt.plot(opt_state[n_post]['ir'][n_pre,:],'r')
             plt.title('Imp Response %d->%d' % (n_pre,n_post))
 
     f.savefig('imp_resp.pdf')
@@ -36,9 +53,9 @@ def plot_results(glm, x_trues, x_opts):
     f = plt.figure()
     for n in np.arange(N):
         plt.subplot(1,N,n+1)
-        plt.plot(glm.glms[n].f_lam(x_trues[n]),'b')
+        plt.plot(true_state[n]['lam'],'b')
         plt.hold(True)
-        plt.plot(glm.glms[n].f_lam(x_opts[n]),'r')
+        plt.plot(opt_state[n]['lam'],'r')
 
         # TODO Plot the spike times
         plt.title('Firing rate %d' % n)
@@ -85,13 +102,6 @@ if __name__ == "__main__":
             "stim": stim,
             'dt_stim': dt_stim}
     glm.set_data(data)
-
-#    lam_true = glm.glms[0].f_lam(x_true[0])
-#
-#    # Save the data
-#    data["lam"] = lam_true
-#    import scipy.io
-#    scipy.io.savemat("data.mat", data)
 
     ll_true = glm.f_lp(*x_true)
     print "true LL: %f" % ll_true

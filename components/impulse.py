@@ -42,6 +42,14 @@ class ConcatenatedImpulses(Component):
         
         self.f_I_imp = theano.function([vars], self.I_imp)
 
+    def get_state(self, vars):
+        """ Get the impulse responses 
+        """
+        imps = map(lambda im: im.f_impulse(vars), self.imp_models)
+        imps = np.array(imps)
+        return {'ir' : imps}
+        
+
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
         """

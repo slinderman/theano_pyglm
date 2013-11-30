@@ -38,7 +38,17 @@ class Network(Component):
         self.f_W = theano.function(self.vars, self.weights.W,
                                    on_unused_input='ignore')
 
-
+        self.f_lp = theano.function(self.vars, self.log_p,
+                                    on_unused_input='ignore')
+        
+    def get_state(self, net_vars):
+        """ Get the effective weights (A*W)
+        """
+        W = self.f_W(net_vars)
+        A = self.f_A(net_vars)
+        
+        return {'net' : A*W}
+    
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
         """

@@ -59,8 +59,6 @@ class NetworkGlm:
             independencies between the GLMs. For example, The background and impulse
             responses may be conditionally independent given the network.
         """
-        import pdb
-        pdb.set_trace()
         # Most general form: compute the gradient of the joint log posterior
 #        self.g_net = T.grad(self.log_p, self.network.vars)
         self.g_net, g_list = grad_wrt_list(self.log_p, self.network.vars)
@@ -79,6 +77,31 @@ class NetworkGlm:
         self.g_lp_net = theano.function(self.vars, self.g_net)
         self.H_lp_net = theano.function(self.vars, self.H_net)
 
+    def eval_log_p(self, var_list):
+        """ Evaluate the log probability of the network GLM with 
+            a given set of variables.
+        """
+        net_vars = var_list[0]
+        glm_vars = var_list[1:]
+        lp = self.network.f_lp(net_vars)
+        
+        for n in self.model['N']:
+            lp += self.glms[n].f_lp(net_vars, glm_vars[n])
+        return lp
+    
+    def get_state(self, vars):
+        """ Get the 'state' of the system
+        """
+        net_vars = vars[0]
+        glm_vars = vars[1:]
+        state = {}
+        state.update(self.network.get_state(net_vars))
+        
+        for (n,glm) in enumerate(self.glms):
+            state.update(glm.get_state(net_vars, glm_vars[n]))
+            
+        return state
+    
     def set_data(self, data):
         """
         Condition on the data
@@ -212,8 +235,6 @@ class NetworkGlm:
         # Alternate fitting the network and fitting the GLMs
         x = x0
         converged = False
-        import pdb
-        pdb.set_trace()
         while not converged:
             # Fit the network
             print "Fitting network"
@@ -242,7 +263,7 @@ class NetworkGlm:
             
             converged = True
             
-        return x_opts
+        return x
 
 class Glm:
     def __init__(self, n, model, network=None):
@@ -315,6 +336,19 @@ class Glm:
         self.g_lp = theano.function(network.vars + [self.vars], self.g)
         self.H_lp = theano.function(network.vars + [self.vars], self.H)
 
+    def get_state(self, net_vars, glm_vars):
+        """ Get the state of this GLM
+        """
+        state = {}
+        
+        # Save the firing rate
+        state['lam'] = self.f_lam(net_vars, glm_vars)
+        # Get state from each component
+        state.update(self.bias_model.get_state(glm_vars))
+        state.update(self.bkgd_model.get_state(glm_vars))
+        state.update(self.imp_model.get_state(glm_vars))
+        return {self.n : state}
+        
     def compute_gradients(self):
         """ Compute gradients of this GLM's log prob wrt its variables.
         """
