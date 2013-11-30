@@ -16,7 +16,7 @@ SimpleModel = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : -0.5,
+            'mu' : -2,
             'sigma' : 0.1
         },
 
@@ -25,9 +25,9 @@ SimpleModel = \
         {
             'type' : 'basis',
             'D_stim' : 1,       # Dimensionality of the stimulus
-            'dt_max' : 100,
+            'dt_max' : 500,
             'mu' : 0,
-            'sigma' : 0.01,
+            'sigma' : 0.5,
             'basis' :
                 {
                     'type' : 'cosine',
@@ -61,7 +61,7 @@ SimpleModel = \
     'impulse' :
         {
             'type' : 'dirichlet',
-            'dt_max' : 10,
+            'dt_max' : 50,
             'alpha' : 1,
             'basis' :
                 {
@@ -84,7 +84,7 @@ SimpleModel = \
                     #'value' : 1.0
                     'type' : 'gaussian',
                     'mu' : 0.0,
-                    'sigma' : 0.2
+                    'sigma' : 1
                 },
 
             'graph' :

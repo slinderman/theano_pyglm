@@ -17,9 +17,11 @@ def plot_results(glm, x_trues, x_opts):
     f = plt.figure()
     plt.subplot(1,2,1)
     plt.imshow(true_state['net'], extent=[0,1,0,1])
+    plt.colorbar()
     plt.title('True Network')
     plt.subplot(1,2,2)
     plt.imshow(opt_state['net'], extent=[0,1,0,1])
+    plt.colorbar()
     plt.title('Inferred Network')
 
     f.savefig('conn.pdf')
@@ -36,15 +38,15 @@ def plot_results(glm, x_trues, x_opts):
     f.savefig('stim_resp.pdf')
 
     # Plot the impulse responses
-    import pdb
-    pdb.set_trace()
+    W_true = true_state['net']
+    W_opt = opt_state['net']
     f = plt.figure()
     for n_pre in np.arange(N):
         for n_post in np.arange(N):
             plt.subplot(N,N,n_pre*N+n_post + 1)
-            plt.plot(true_state[n_post]['ir'][n_pre,:],'b')
+            plt.plot(W_true[n_pre,n_post]*true_state[n_post]['ir'][n_pre,:],'b')
             plt.hold(True)
-            plt.plot(opt_state[n_post]['ir'][n_pre,:],'r')
+            plt.plot(W_opt[n_pre,n_post]*opt_state[n_post]['ir'][n_pre,:],'r')
             plt.title('Imp Response %d->%d' % (n_pre,n_post))
 
     f.savefig('imp_resp.pdf')
@@ -66,8 +68,8 @@ if __name__ == "__main__":
     # Test
     print "Initializing GLM"
     T_start = 0
-    T_stop = 1000
-    dt = 0.1
+    T_stop = 10000
+    dt = 1
     model = SimpleModel
 
     dt_stim = 10

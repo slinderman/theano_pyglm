@@ -234,10 +234,15 @@ class NetworkGlm:
         
         # Alternate fitting the network and fitting the GLMs
         x = x0
+        import copy
+        x_prev = copy.deepcopy(x0)
         converged = False
-        while not converged:
+        iter = 0
+        maxiter = 50
+        while not converged and iter < maxiter:
+            iter += 1
             # Fit the network
-            print "Fitting network"
+            print "Fitting network. Iter %d." % iter
             nll = lambda x_net: -1.0 * self.f_lp(x_net, *x[1:])
             grad_nll = lambda x_net: -1.0*self.g_lp_net(x_net, *x[1:])
             hess_nll = lambda x_net: -1.0*self.H_lp_net(x_net, *x[1:])
@@ -260,9 +265,18 @@ class NetworkGlm:
                                      fhess=hess_nll,
                                      disp=True)
                 x[n+1] = xn_opt
-            
-            converged = True
-            
+
+            diffs = np.zeros(len(x))
+            for i in range(len(x)):
+                xi = x[i]
+                xip = x_prev[i]
+                dxi = np.mean((xi-xip)**2)
+                diffs[i] = dxi
+            maxdiff = np.max(diffs)
+
+            print diffs
+            converged = maxdiff < 1e-5
+            x_prev = copy.deepcopy(x)
         return x
 
 class Glm:
