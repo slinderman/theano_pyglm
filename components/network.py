@@ -44,8 +44,8 @@ class Network(Component):
     def get_state(self, net_vars):
         """ Get the effective weights (A*W)
         """
-        W = self.f_W(net_vars)
-        A = self.f_A(net_vars)
+        W = self.f_W(*net_vars)
+        A = self.f_A(*net_vars)
         
         return {'net' : A*W}
     

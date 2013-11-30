@@ -45,7 +45,7 @@ class ConcatenatedImpulses(Component):
     def get_state(self, vars):
         """ Get the impulse responses 
         """
-        imps = map(lambda im: im.f_impulse(vars), self.imp_models)
+        imps = map(lambda im: im.f_impulse(*vars), self.imp_models)
         imps = np.array(imps)
         return {'ir' : imps}
         

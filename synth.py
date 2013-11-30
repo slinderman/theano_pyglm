@@ -34,7 +34,7 @@ def plot_results(glm, x_trues, x_opts):
         plt.subplot(1,N,n+1)
         plt.plot(true_state[n]['stim'],'b')
         plt.hold(True)
-        plt.plot(opt_state[n]['stim'],'r')
+        plt.plot(opt_state[n]['stim'],'--r')
         plt.title('GLM[%d]: Stim Response' % n)
 
     f.savefig('stim_resp.pdf')
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     T_start = 0
     T_stop = 10000
     dt = 1
-    model = SimpleWeightedTwoNeuronModel
+    model = SimpleTwoNeuronModel
 
-    dt_stim = 10
+    dt_stim = 100
     D_stim = model['bkgd']['D_stim']
     N = model['N']
 
