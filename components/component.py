@@ -20,4 +20,4 @@ class Component:
         """
         return a sample of the variables
         """
-        pass
+        return []

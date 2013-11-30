@@ -1,7 +1,7 @@
 """
-Simple GLM
+Simple GLM with two neurons connected by a complete network with Gaussian weights.
 """
-SimpleModel = \
+SimpleWeightedTwoNeuronModel = \
 {
     # Number of neurons (parametric model!)
     'N' : 2,

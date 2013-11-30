@@ -4,7 +4,6 @@ from theano.tensor.shared_randomstreams import RandomStreams
     
 import numpy as np
 import utils.poisson_process as pp
-import scipy.optimize as opt
 import scipy.linalg as linalg
 
 from components.network import *
@@ -47,11 +46,19 @@ class NetworkGlm:
         self.vars = reduce(lambda vacc,glm: vacc+[glm.vars], self.glms,
                            self.network.vars)
 
+        self.f_lp = theano.function(self.vars, self.log_p)
         # Compute gradients of the joint log probability
-        self.compute_gradients()
-        
-        # Create functions for the gradients
-        self.create_functions()
+#        self.compute_gradients()
+#        
+#        # Create functions for the gradients
+#        self.create_functions()
+
+    def compute_log_p(self, vars):
+        """ Compute the log joint probability under a given set of variables 
+        """
+        var_flat = reduce(lambda vacc,v: vacc+v, vars, [])
+        lp = self.f_lp(*var_flat)
+        return lp
 
     def compute_gradients(self):
         """ Compute gradients of the joint log posterior distribution over GLM
@@ -76,19 +83,7 @@ class NetworkGlm:
         self.f_lp = theano.function(self.vars, self.log_p)
         self.g_lp_net = theano.function(self.vars, self.g_net)
         self.H_lp_net = theano.function(self.vars, self.H_net)
-
-    def eval_log_p(self, var_list):
-        """ Evaluate the log probability of the network GLM with 
-            a given set of variables.
-        """
-        net_vars = var_list[0]
-        glm_vars = var_list[1:]
-        lp = self.network.f_lp(net_vars)
         
-        for n in self.model['N']:
-            lp += self.glms[n].f_lp(net_vars, glm_vars[n])
-        return lp
-    
     def get_state(self, vars):
         """ Get the 'state' of the system
         """
@@ -121,7 +116,7 @@ class NetworkGlm:
 
         for glm in self.glms:
             vars.append(glm.sample())
-            
+        
         return vars
         
     def simulate(self, vars,  (T_start,T_stop), dt):
@@ -146,16 +141,16 @@ class NetworkGlm:
         # Initialize the background rate
         X = np.zeros((nT,N))
         for n in np.arange(N):
-            X[:,n] = self.glms[n].bias_model.f_I_bias(vars[n+1])
+            X[:,n] = self.glms[n].bias_model.f_I_bias(*vars[n+1])
 
         # Add stimulus induced currents if given
         for n in np.arange(N):
-            X[:,n] += self.glms[n].bkgd_model.f_I_stim(vars[n+1])[t_ind]
+            X[:,n] += self.glms[n].bkgd_model.f_I_stim(*vars[n+1])[t_ind]
 
         # Get the impulse response functions
         imps = []
         for n_pre in np.arange(N):
-            imps.append(map(lambda n_post: self.glms[n_post].imp_model.imp_models[n_pre].f_impulse(vars[n_post+1]),
+            imps.append(map(lambda n_post: self.glms[n_post].imp_model.imp_models[n_pre].f_impulse(*vars[n_post+1]),
                             np.arange(N)))
         imps = np.array(imps)
         T_imp = imps.shape[2]
@@ -182,8 +177,9 @@ class NetworkGlm:
             t_imp = np.minimum(nT-t-1,T_imp)
             
             # Get the instantaneous connectivity
-            At = np.tile(np.reshape(self.network.f_A(vars[0]),[N,N,1]),[1,1,t_imp])
-            Wt = np.tile(np.reshape(self.network.f_W(vars[0]),[N,N,1]),[1,1,t_imp])
+            
+            At = np.tile(np.reshape(self.network.f_A(*vars[0]),[N,N,1]),[1,1,t_imp])
+            Wt = np.tile(np.reshape(self.network.f_W(*vars[0]),[N,N,1]),[1,1,t_imp])
             
             # Iterate until no more spikes
             while n_spk > 0:
@@ -241,24 +237,25 @@ class NetworkGlm:
         maxiter = 50
         while not converged and iter < maxiter:
             iter += 1
-            # Fit the network
-            print "Fitting network. Iter %d." % iter
-            nll = lambda x_net: -1.0 * self.f_lp(x_net, *x[1:])
-            grad_nll = lambda x_net: -1.0*self.g_lp_net(x_net, *x[1:])
-            hess_nll = lambda x_net: -1.0*self.H_lp_net(x_net, *x[1:])
-            
-            x_net_opt = opt.fmin_ncg(nll,x[0],
-                                     fprime=grad_nll,
-                                     fhess=hess_nll,
-                                     disp=True)
-            x[0] = x_net_opt
+            if len(x[0]) > 0:
+                # Fit the network
+                print "Fitting network. Iter %d." % iter
+                nll = lambda x_net: -1.0 * self.f_lp(*([x_net] +x[1:]))
+                grad_nll = lambda x_net: -1.0*self.g_lp_net(*([x_net] +x[1:]))
+                hess_nll = lambda x_net: -1.0*self.H_lp_net(*([x_net] +x[1:]))
+                
+                x_net_opt = opt.fmin_ncg(nll,x[0],
+                                         fprime=grad_nll,
+                                         fhess=hess_nll,
+                                         disp=True)
+                x[0] = x_net_opt
             
             for n in np.arange(N):
                 print "Fitting GLM %d" % n
     
-                nll = lambda xn: -1.0 * self.glms[n].f_lp(x[0], xn)
-                grad_nll = lambda xn: -1.0*self.glms[n].g_lp(x[0], xn)
-                hess_nll = lambda xn: -1.0*self.glms[n].H_lp(x[0], xn)
+                nll = lambda xn: -1.0 * self.glms[n].f_lp(*(x[0] + [xn]))
+                grad_nll = lambda xn: -1.0*self.glms[n].g_lp(*(x[0] + [xn]))
+                hess_nll = lambda xn: -1.0*self.glms[n].H_lp(*(x[0] + [xn]))
     
                 xn_opt = opt.fmin_ncg(nll,x[n+1],
                                      fprime=grad_nll,
@@ -312,7 +309,10 @@ class Glm:
         # If a network is given, weight the impulse response currents and sum them up
         if network is not None:
             # Compute the effective incoming weights
-            W_eff = network.graph.A[:,n] * network.weights.W[:,n]
+#            W_eff = network.graph.A[:,n] * network.weights.W[:,n]
+            An = network.graph.A[:,n]
+            Wn = network.weights.W[:,n]
+            W_eff = An * Wn
         else:
             W_eff = np.ones((model['N'],))
 
@@ -323,7 +323,7 @@ class Glm:
         lam = self.nlin_model.nlin(self.bias_model.I_bias +
                                    self.bkgd_model.I_stim +
                                    I_net)
-
+        
         # Compute the log likelihood under the Poisson process
         ll = T.sum(-self.dt*lam + T.log(lam)*self.S[:,n])
 
@@ -335,7 +335,7 @@ class Glm:
         self.log_p = ll + lp_bias + lp_bkgd + lp_imp + lp_nlin
 
         # Compute the gradient of the log likelihood wrt vars
-        self.compute_gradients()
+#        self.compute_gradients()
 #        g_vars = T.grad(self.log_p, vars)
         #
         ## Finally, compute the Hessian
@@ -346,9 +346,9 @@ class Glm:
         ## Create callable functions to compute firing rate, log likelihood, and gradients
         #theano.config.on_unused_input = 'ignore'
         self.f_lam = theano.function(network.vars + [self.vars], lam)
-        self.f_lp = theano.function(network.vars + [self.vars], self.log_p)
-        self.g_lp = theano.function(network.vars + [self.vars], self.g)
-        self.H_lp = theano.function(network.vars + [self.vars], self.H)
+#        self.f_lp = theano.function(network.vars + [self.vars], self.log_p)
+#        self.g_lp = theano.function(network.vars + [self.vars], self.g)
+#        self.H_lp = theano.function(network.vars + [self.vars], self.H)
 
     def get_state(self, net_vars, glm_vars):
         """ Get the state of this GLM
@@ -356,7 +356,7 @@ class Glm:
         state = {}
         
         # Save the firing rate
-        state['lam'] = self.f_lam(net_vars, glm_vars)
+        state['lam'] = self.f_lam(*(net_vars + glm_vars))
         # Get state from each component
         state.update(self.bias_model.get_state(glm_vars))
         state.update(self.bkgd_model.get_state(glm_vars))
@@ -403,7 +403,7 @@ class Glm:
     def sample(self):
         """ Sample a random set of parameters
         """
-        vars = []
+        vars = np.array([])
         
         # Sample bias
         bias = self.bias_model.sample()
@@ -417,7 +417,7 @@ class Glm:
         net_vars = self.imp_model.sample()
         vars = np.concatenate((vars,net_vars))
 
-        return vars
+        return [vars]
     
     def params(self):
         params = {}

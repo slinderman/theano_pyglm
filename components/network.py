@@ -63,12 +63,14 @@ class Network(Component):
         A_vars = self.graph.sample()
         W_vars = self.weights.sample()
         
-        vars = []
-        if A_vars is not None:
-            if W_vars is not None:
-                vars = np.concatenate((A_vars,W_vars))
-            else:
-                vars = A_vars
-        elif W_vars is not None:
-                vars = W_vars
+#        vars = []
+#        if A_vars is not None:
+#            if W_vars is not None:
+#                vars = [np.concatenate((A_vars,W_vars))]
+#            else:
+#                vars = A_vars
+#        elif W_vars is not None:
+#                vars = W_vars
+#        return vars
+        vars = A_vars + W_vars
         return vars

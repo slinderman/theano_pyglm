@@ -41,7 +41,7 @@ class BasisStimulus:
         self.w_stim = vars[v_offset:v_offset+self.n_vars]
         
         # Log probability
-        self.log_p = -0.5/self.sigma**2 *T.sum(T.pow(self.w_stim-self.mu,2))
+        self.log_p = -0.5/self.sigma**2 *T.sum((self.w_stim-self.mu)**2)
         
         # Expose outputs to the Glm class
         self.I_stim = T.dot(self.stim,self.w_stim)

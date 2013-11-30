@@ -1,5 +1,7 @@
 from glm import *
-from models import *
+from models.simple_weighted_two_neuron import *
+from models.simple_two_neuron import *
+from inference.map import map_estimate
 
 def plot_results(glm, x_trues, x_opts):
     """ Plot the inferred stimulus tuning curves and impulse responses
@@ -70,7 +72,7 @@ if __name__ == "__main__":
     T_start = 0
     T_stop = 10000
     dt = 1
-    model = SimpleModel
+    model = SimpleWeightedTwoNeuronModel
 
     dt_stim = 10
     D_stim = model['bkgd']['D_stim']
@@ -91,7 +93,7 @@ if __name__ == "__main__":
             "stim": stim,
             'dt_stim': dt_stim}
     glm.set_data(data)
-
+    
     # Simulate spikes
     S,X = glm.simulate(x_true, (T_start,T_stop), dt)
     
@@ -105,16 +107,17 @@ if __name__ == "__main__":
             'dt_stim': dt_stim}
     glm.set_data(data)
 
-    ll_true = glm.f_lp(*x_true)
+    ll_true = glm.compute_log_p(x_true)
     print "true LL: %f" % ll_true
 
     # Sample random initial state
     x0 = glm.sample()
-    ll0 = glm.f_lp(*x0)
+    ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-    x_opt = glm.fit(x0)
-    ll_opt = glm.f_lp(*x_opt)
+    x_opt = map_estimate(glm, x0)
+    ll_opt = glm.compute_log_p(x_opt)
+    
     print "LL_opt: %f" % ll_opt
 
     plot_results(glm, x_true, x_opt)

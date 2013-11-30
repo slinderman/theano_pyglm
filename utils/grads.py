@@ -11,6 +11,9 @@ def grad_wrt_list(cost, wrt_list):
     Compute gradient of cost wrt the variables in wrt_list.
     Return a concatenated vector of the results
     """
+    if wrt_list == []:
+        return T.constant(0.),[]
+    
     g_list = T.grad(cost, wrt_list)
     
     for (n,g) in enumerate(g_list):
@@ -18,7 +21,7 @@ def grad_wrt_list(cost, wrt_list):
             g_list[n] = T.shape_padright(g,nones=1)
         elif g.ndim > 1:
             raise Exception("Gradients can only be taken wrt vectors.")
-        
+    
     g_vec = T.concatenate(g_list)
     
     return g_vec, g_list
@@ -28,6 +31,9 @@ def hessian_wrt_list(cost, wrt_list, g_list=None):
     Compute gradient of cost wrt the variables in wrt_list.
     Return a concatenated vector of the results
     """
+    if wrt_list == []:
+        return T.constant(0.)
+    
     if g_list is None:
         g_list = T.grad(cost, wrt_list)
     # Compute the hessian

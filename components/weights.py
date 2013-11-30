@@ -50,7 +50,7 @@ class GaussianWeightModel(Component):
         self.W = T.reshape(self.W_flat,(N,N))
 
         # Define log probability
-        self.log_p = T.sum(-1.0/(2.0*self.sigma**2) * (self.W-self.mu)**2)
+        self.log_p = T.sum(-1.0/(2.0*self.sigma**2) * (self.W_flat-self.mu)**2)
 
         # Define a getter for the variables of the model
         self.vars = [self.W_flat]
@@ -62,7 +62,7 @@ class GaussianWeightModel(Component):
         N = self.model['N']
         W = self.mu + self.sigma * np.random.randn(N,N)
         W = np.reshape(W, (N**2,))
-        return W
+        return [W]
 
 
 
