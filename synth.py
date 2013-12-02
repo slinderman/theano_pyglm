@@ -2,7 +2,7 @@ from glm_shared import *
 from models.simple_weighted_two_neuron import *
 from models.simple_two_neuron import *
 from inference.map import map_estimate
-from inference.coord_ascent import coord_descent
+from inference.coord_descent import coord_descent
 
 def plot_results(network_glm, x_trues, x_opts):
     """ Plot the inferred stimulus tuning curves and impulse responses
