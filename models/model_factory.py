@@ -3,6 +3,7 @@ Make models from a template
 """
 from simple_weighted_model import SimpleWeightedModel
 from standard_glm import StandardGlm
+from spatiotemporal_glm import SpatiotemporalGlm
 import copy
 
 def make_model(template, N=None):
@@ -13,6 +14,8 @@ def make_model(template, N=None):
         if template.lower() == 'standard_glm' or \
            template.lower() == 'standardglm':
             model = copy.deepcopy(StandardGlm)
+        elif template.lower() == 'spatiotemporal_glm':
+            model = copy.deepcopy(SpatiotemporalGlm)
         elif template.lower() == 'simple_weighted_model' or \
              template.lower() == 'simpleweightedmodel':
             model = copy.deepcopy(SimpleWeightedModel)
@@ -26,6 +29,6 @@ def make_model(template, N=None):
     if N is not None:
         model['N'] = N
 
-    # TODO Update other paramters as necessary
+    # TODO Update other parameters as necessary
 
     return model

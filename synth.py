@@ -83,7 +83,7 @@ if __name__ == "__main__":
     T_start = 0
     T_stop = 10000
     dt = 1
-    model = make_model('simple_weighted_model', N=10)
+    model = make_model('spatiotemporal_glm', N=2)
 
     dt_stim = 100
     D_stim = model['bkgd']['D_stim']

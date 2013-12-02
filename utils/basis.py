@@ -10,6 +10,8 @@ def create_basis(prms):
         basis = create_exp_basis(prms)
     elif type == 'cosine':
         basis = create_cosine_basis(prms)
+    elif type == 'gaussian':
+        basis = create_gaussian_basis(prms)
     elif type == 'file':
         if os.path.exists(prms["fname"]):
             basis = load_basis_from_file(prms['fname'])
@@ -146,13 +148,13 @@ def create_gaussian_basis(prms):
     basis[:n_eye,:n_eye] = np.eye(n_eye)
 
     # The remaining basis functions are Gaussian bumps at equally spaced points
-    mus = np.arange(n_gauss)
-    sigma = 1.0
+    mus = np.linspace(0,n_pts,n_gauss)
+    sigma = float(n_pts)/n_gauss
 
     # Basis function is a raised cosine centered at c with width w
-    basis_fn = lambda t,mu,sig: np.exp(-0.5/sig*(t-mu)**2)
+    basis_fn = lambda t,mu,sig: np.exp(-0.5/(sig**2)*(t-mu)**2)
     for i in np.arange(n_gauss):
-        basis[:,i] = basis_fn(np.arange(n_pts),mus[i])
+        basis[:,i] = basis_fn(np.arange(n_pts),mus[i],sigma)
 
     # Orthonormalize basis (this may decrease the number of effective basis vectors)
     if prms['orth']:
