@@ -145,11 +145,10 @@ class BasisImpulse:
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
             ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
-            #Keep the total L1 norm the same
-            #ibasis[:,b] /= (np.sum(ibasis[:,b])/np.sum(self.basis[:,b]))
 
         # Normalize so that the interpolated basis has volume 1
-        ibasis = ibasis / self.prms['dt_max']
+        if self.prms['basis']['norm']:
+            ibasis = ibasis / self.prms['dt_max']
         self.ibasis.set_value(ibasis)
 
         # Project the presynaptic spiking onto the basis

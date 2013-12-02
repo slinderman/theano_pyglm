@@ -149,11 +149,11 @@ class SpatiotemporalStimulus:
         # The weights are an outer product of the two factors
         w_op = T.dot(T.shape_padright(self.w_t, n_ones=1),
                      T.shape_padleft(self.w_x, n_ones=1))
-        # TODO Check that reshaping the weights matches the reshaping of the stimulus
         self.w_stim = T.reshape(w_op, (Bt*Bx,))
 
         # Log probability
-        self.log_p = -0.5/self.sigma**2 *T.sum((self.w_stim-self.mu)**2)
+        self.log_p = -0.5/self.sigma**2 *T.sum((self.w_x-self.mu)**2) + \
+                     -0.5/self.sigma**2 *T.sum((self.w_t-self.mu)**2)
 
         # Expose outputs to the Glm class
         self.I_stim = T.dot(self.stim, self.w_stim)
@@ -171,8 +171,15 @@ class SpatiotemporalStimulus:
     def get_state(self, vars):
         """ Get the stimulus response
         """
-        return {'stim_x' : self.f_stim_resp_x(*vars),
-                'stim_t' : self.f_stim_resp_t(*vars)}
+        # The filters are non-identifiable as we can negate both the
+        # temporal and the spatial filters and get the same net effect.
+        # By convention, choose the sign that results in the most
+        # positive temporal filter.
+        stim_t = self.f_stim_resp_t(*vars)
+        stim_x = self.f_stim_resp_x(*vars)
+        sign = np.sign(np.sum(stim_t))
+        return {'stim_x' : sign*stim_x,
+                'stim_t' : sign*stim_t}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
@@ -209,8 +216,8 @@ class SpatiotemporalStimulus:
             ibasis_x[:,b] = np.interp(x_int, x_bas, self.spatial_basis[:,b])
         
         # Normalize so that the interpolated basis has volume 1
-        ibasis_t = ibasis_t / self.prms['dt_max']
-        ibasis_x = ibasis_x / np.tile(np.sum(ibasis_x,0),[Lx_int,1])
+        if self.prms['temporal_basis']['norm']:
+            ibasis_t = ibasis_t / self.prms['dt_max']
 
         # Save the interpolated bases
         self.ibasis_t.set_value(ibasis_t)
@@ -231,8 +238,9 @@ class SpatiotemporalStimulus:
                 fstim[:,bt,bx] = convolve_with_2d_basis(stim, bas)
                 
         # Flatten the filtered stimulus
-        fstim = np.reshape(fstim,(nt,Bt*Bx))
-        self.stim.set_value(fstim)
+        fstim2 = np.reshape(fstim,(nt,Bt*Bx))
+
+        self.stim.set_value(fstim2)
 
     def sample(self):
         """

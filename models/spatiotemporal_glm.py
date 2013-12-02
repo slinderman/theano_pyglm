@@ -27,7 +27,7 @@ SpatiotemporalGlm = \
             'D_stim' : 3,       # Dimensionality of the stimulus
             'dt_max' : 500,
             'mu' : 0,
-            'sigma' : 0.5,
+            'sigma' : 0.3,
             'temporal_basis' :
                 {
                     'type' : 'cosine',
@@ -38,15 +38,18 @@ SpatiotemporalGlm = \
                     'orth' : False,
                     'norm' : True
                 },
+            #'spatial_basis' :
+            #    {
+            #        'type' : 'gaussian',
+            #        'n_eye' : 0,
+            #        'n_gauss' : (3,),
+            #        'orth' : False,
+            #        'norm' : True
+            #    }
             'spatial_basis' :
                 {
-                    'type' : 'gaussian',
-                    'n_eye' : 0,
-                    'n_gauss' : 3,
-                    'a': 1.0/120,
-                    'b': 0.5,
-                    'orth' : False,
-                    'norm' : True
+                    'type' : 'identity',
+                    'n_eye' : 3
                 }
         },
 
@@ -56,7 +59,7 @@ SpatiotemporalGlm = \
              'type' : 'basis',
              'dt_max' : 10,
              'mu' : 0.0,
-             'sigma' : 0.33,
+             'sigma' : 0.3,
              'basis' :
                  {
                      'type' : 'cosine',

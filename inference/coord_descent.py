@@ -98,10 +98,16 @@ def coord_descent(network_glm, x0=None):
             grad_nll = lambda xn: -1.0 * network_glm.glm.g_lp(*([n] + x_net + unpack(xn, shapes)))
             hess_nll = lambda xn: -1.0 * network_glm.glm.H_lp(*([n] + x_net + unpack(xn, shapes)))
 
+            #try:
+            import pdb
             xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                   fprime=grad_nll,
                                   fhess=hess_nll,
                                   disp=True)
+            #except Exception as e:
+            #    import pdb
+            #    pdb.set_trace()
+            #    raise e
             x[n + 1] = unpack(xn_opt, shapes)
 
         diffs = np.zeros(len(x))

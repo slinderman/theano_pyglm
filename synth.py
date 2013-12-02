@@ -40,15 +40,27 @@ def plot_results(network_glm, x_trues, x_opts):
     f.savefig('conn.pdf')
     
     # Plot the stimulus tuning curve
-    f = plt.figure()
     for n in np.arange(N):
-        plt.subplot(1,N,n+1)
-        plt.plot(true_state[n]['stim'],'b')
-        plt.hold(True)
-        plt.plot(opt_state[n]['stim'],'--r')
-        plt.title('GLM[%d]: Stim Response' % n)
+        f = plt.figure()
+        if 'stim_t' in true_state[n].keys() and \
+            'stim_x' in true_state[n].keys():
+            plt.subplot(1,2,1)
+            plt.plot(true_state[n]['stim_x'],'b')
+            plt.hold(True)
+            plt.plot(opt_state[n]['stim_x'],'--r')
+            plt.title('GLM[%d]: Spatial stimulus filter' % n)
 
-    f.savefig('stim_resp.pdf')
+            plt.subplot(1,2,2)
+            plt.plot(true_state[n]['stim_t'],'b')
+            plt.hold(True)
+            plt.plot(opt_state[n]['stim_t'],'--r')
+            plt.title('GLM[%d]: Temporal stimulus filter' % n)
+        elif 'stim' in true_state[n].keys():
+            plt.plot(true_state[n]['stim'],'b')
+            plt.hold(True)
+            plt.plot(opt_state[n]['stim'],'--r')
+            plt.title('GLM[%d]: stimulus filter' % n)
+        f.savefig('stim_resp_%d.pdf' % n)
 
     # Plot the impulse responses
     W_true = true_state['net']
@@ -60,7 +72,9 @@ def plot_results(network_glm, x_trues, x_opts):
             plt.plot(W_true[n_pre,n_post]*true_state[n_post]['ir'][n_pre,:],'b')
             plt.hold(True)
             plt.plot(W_opt[n_pre,n_post]*opt_state[n_post]['ir'][n_pre,:],'r')
-            plt.title('Imp Response %d->%d' % (n_pre,n_post))
+            #plt.title('Imp Response %d->%d' % (n_pre,n_post))
+            plt.xlabel("")
+            plt.ylabel("")
 
     f.savefig('imp_resp.pdf')
 

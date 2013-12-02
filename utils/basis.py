@@ -12,6 +12,8 @@ def create_basis(prms):
         basis = create_cosine_basis(prms)
     elif type == 'gaussian':
         basis = create_gaussian_basis(prms)
+    elif type == 'identity' or type == 'eye':
+        basis = create_identity_basis(prms)
     elif type == 'file':
         if os.path.exists(prms["fname"]):
             basis = load_basis_from_file(prms['fname'])
@@ -91,6 +93,9 @@ def create_cosine_basis(prms):
     if prms['orth']: 
         basis = scipy.linalg.orth(basis)
     if prms['norm']:
+        # We can only normalize nonnegative bases
+        if np.any(basis<0):
+            raise Exception("We can only normalize nonnegative impulse responses!")
         # Normalize such that \int_0^1 b(t) dt = 1
         basis = basis / np.tile(np.sum(basis,axis=0), [n_pts,1]) / (1.0/n_pts)
     
@@ -106,7 +111,7 @@ def create_exp_basis(prms):
     n_pts = 100             # Number of points at which to evaluate the basis
     n_exp = prms['n_exp']   # Number of exponential basis functions
     n_eye = prms['n_eye']   # Number of identity basis functions
-    n_bas = n_eye + n_cos
+    n_bas = n_eye + n_exp
     basis = np.zeros((n_pts,n_bas))
     
     # The first n_eye basis elements are identity vectors in the first time bins
@@ -125,6 +130,9 @@ def create_exp_basis(prms):
     if prms['orth']: 
         basis = scipy.linalg.orth(basis)
     if prms['norm']:
+        # We can only normalize nonnegative bases
+        if np.any(basis<0):
+            raise Exception("We can only normalize nonnegative impulse responses!")
         # Normalize such that \int_0^1 b(t) dt = 1
         basis = basis / np.tile(np.sum(basis,axis=0), [n_pts,1]) / (1.0/n_pts)
     
@@ -138,31 +146,51 @@ def create_gaussian_basis(prms):
     # Set default parameters. These can be overriden by kwargs
 
     # Default to a raised cosine basis
-    n_pts = 100             # Number of points at which to evaluate the basis
-    n_gauss = prms['n_gauss']   # Number of exponential basis functions
+    n_gauss = prms['n_gauss']   # Tuple indicating number of Gaussian bumps along each dimension
+    n_dim = len(n_gauss)
     n_eye = prms['n_eye']   # Number of identity basis functions
-    n_bas = n_eye + n_gauss
-    basis = np.zeros((n_pts,n_bas))
+    n_bas = n_eye + np.prod(n_gauss)
+    basis = np.zeros((n_bas,n_bas))
 
     # The first n_eye basis elements are identity vectors in the first time bins
     basis[:n_eye,:n_eye] = np.eye(n_eye)
 
-    # The remaining basis functions are Gaussian bumps at equally spaced points
-    mus = np.linspace(0,n_pts,n_gauss)
-    sigma = float(n_pts)/n_gauss
+    # The remaining basis functions are Gaussian bumps at intervals of 1 in each dimension
+    sigma = 1
+    for g1 in np.arange(np.prod(n_gauss)):
+        mu = np.array(np.unravel_index(g1,n_gauss))
+        for g2 in np.arange(np.prod(n_gauss)):
+            x = np.array(np.unravel_index(g2,n_gauss))
+            basis[n_eye+g2,n_eye+g1] = np.exp(-0.5/(sigma**2)*np.sum((x-mu)**2))
+
 
     # Basis function is a raised cosine centered at c with width w
-    basis_fn = lambda t,mu,sig: np.exp(-0.5/(sig**2)*(t-mu)**2)
-    for i in np.arange(n_gauss):
-        basis[:,i] = basis_fn(np.arange(n_pts),mus[i],sigma)
+    #basis_fn = lambda t,mu,sig: np.exp(-0.5/(sig**2)*(t-mu)**2)
+    #for i in np.arange(n_gauss):
+    #    basis[:,i] = basis_fn(np.arange(n_pts),mus[i],sigma)
 
     # Orthonormalize basis (this may decrease the number of effective basis vectors)
     if prms['orth']:
         basis = scipy.linalg.orth(basis)
     if prms['norm']:
+        # We can only normalize nonnegative bases
+        if np.any(basis<0):
+            raise Exception("We can only normalize nonnegative impulse responses!")
         # Normalize such that \int_0^1 b(t) dt = 1
-        basis = basis / np.tile(np.sum(basis,axis=0), [n_pts,1]) / (1.0/n_pts)
-    basis = basis / np.tile(np.sqrt(np.sum(basis**2,axis=0)), [n_pts,1])
+        basis = basis / np.tile(np.sum(basis,axis=0), [basis.shape[0],1])
+
+    return basis
+
+def create_identity_basis(prms):
+    """
+    Create a basis of Gaussian bumps.
+    This is primarily for spatial filters.
+    """
+    # Set default parameters. These can be overriden by kwargs
+
+    # Default to a raised cosine basis
+    n_eye = prms['n_eye']   # Number of identity basis functions
+    basis = np.eye(n_eye)
 
     return basis
 
@@ -186,7 +214,7 @@ def convolve_with_basis(stim, basis):
     # (t-R:t-1). That means we need to prepend a row of zeros to make
     # sure the basis remains causal
     basis = np.vstack((np.zeros((1,B)),basis))
-    
+
     # Initialize array for filtered stimulus
     fstim = np.empty((T,D,B))
     
@@ -223,7 +251,8 @@ def convolve_with_2d_basis(stim, basis):
     basis = np.vstack((np.zeros((1,D)),basis))
 
     # Flip the spatial dimension for convolution
-    # TODO Check that temporal filter is flipped by convention
+    # We are convolving the stimulus with the filter, so the temporal part does
+    # NOT need to be flipped
     basis = basis[:,::-1]
 
     # Compute convolution
