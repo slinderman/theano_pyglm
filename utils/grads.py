@@ -20,7 +20,8 @@ def grad_wrt_list(cost, wrt_list):
         if g.ndim < 1:
             g_list[n] = T.shape_padright(g,nones=1)
         elif g.ndim > 1:
-            raise Exception("Gradients can only be taken wrt vectors.")
+#            raise Exception("Gradients can only be taken wrt vectors.")
+            g_list[n] = T.flatten(g)
     
     g_vec = T.concatenate(g_list)
     

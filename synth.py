@@ -1,19 +1,20 @@
-from glm import *
+from glm_shared import *
 from models.simple_weighted_two_neuron import *
 from models.simple_two_neuron import *
 from inference.map import map_estimate
+from inference.coord_ascent import coord_descent
 
-def plot_results(glm, x_trues, x_opts):
+def plot_results(network_glm, x_trues, x_opts):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     import matplotlib
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
-    true_state = glm.get_state(x_trues)
-    opt_state = glm.get_state(x_opts)
+    true_state = network_glm.get_state(x_trues)
+    opt_state = network_glm.get_state(x_opts)
 
-    N = len(glm.glms)
+    N = network_glm.N
     
     # Plot the inferred connectivity matrix
     f = plt.figure()
@@ -72,7 +73,7 @@ if __name__ == "__main__":
     T_start = 0
     T_stop = 10000
     dt = 1
-    model = SimpleTwoNeuronModel
+    model = SimpleWeightedTwoNeuronModel
 
     dt_stim = 100
     D_stim = model['bkgd']['D_stim']
@@ -115,7 +116,8 @@ if __name__ == "__main__":
     ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-    x_opt = map_estimate(glm, x0)
+#    x_opt = map_estimate(glm, x0)
+    x_opt = coord_descent(glm, x0)
     ll_opt = glm.compute_log_p(x_opt)
     
     print "LL_opt: %f" % ll_opt

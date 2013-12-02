@@ -46,23 +46,32 @@ class GaussianWeightModel(Component):
         self.sigma = prms['sigma']
 
         # Define weight matrix
-        self.W_flat = T.dvector(name='W')
-        self.W = T.reshape(self.W_flat,(N,N))
-
+#        self.W_flat = T.dvector(name='W')
+#        self.W = T.reshape(self.W_flat,(N,N))
+        
+        # Define weight matrix in terms of columns of the weight matrix.
+        # This way gradients can be computed by each GLM node in parallel
+        self.W_cols = []
+        for n in np.arange(N):
+            self.W_cols.append(T.dcol(name='W%d'%n))
+            
+        self.W = T.concatenate(self.W_cols,axis=1)
+        
         # Define log probability
-        self.log_p = T.sum(-1.0/(2.0*self.sigma**2) * (self.W_flat-self.mu)**2)
+        self.log_p = T.sum(-1.0/(2.0*self.sigma**2) * (self.W-self.mu)**2)
 
         # Define a getter for the variables of the model
-        self.vars = [self.W_flat]
+        self.vars = self.W_cols
         
     def sample(self):
         """
         return a sample of the variables
         """
         N = self.model['N']
-        W = self.mu + self.sigma * np.random.randn(N,N)
-        W = np.reshape(W, (N**2,))
-        return [W]
+        Wcols = []
+        for n in np.arange(N):
+            Wcols.append(self.mu + self.sigma * np.random.randn(N,1))
+        return Wcols
 
 
 
