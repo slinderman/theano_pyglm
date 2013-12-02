@@ -64,7 +64,7 @@ def create_cosine_basis(prms):
     basis = np.zeros((n_pts,n_bas))
     
     # The first n_eye basis elements are identity vectors in the first time bins
-    basis[1:n_eye+1,:n_eye] = np.eye(n_eye)
+    basis[:n_eye,:n_eye] = np.eye(n_eye)
     
     # The remaining basis elements are raised cosine functions with peaks
     # logarithmically warped between [n_eye*dt:dt_max].
@@ -108,7 +108,7 @@ def create_exp_basis(prms):
     basis = np.zeros((n_pts,n_bas))
     
     # The first n_eye basis elements are identity vectors in the first time bins
-    basis[1:n_eye+1,:n_eye] = np.eye(n_eye)
+    basis[:n_eye,:n_eye] = np.eye(n_eye)
     
     # The remaining basis elements are exponential functions with logarithmically
     # spaced time constants
@@ -122,8 +122,46 @@ def create_exp_basis(prms):
     # Orthonormalize basis (this may decrease the number of effective basis vectors)
     if prms['orth']: 
         basis = scipy.linalg.orth(basis)
-    basis = basis / np.tile(np.sqrt(np.sum(basis**2,axis=0)), [n_pts,1])
+    if prms['norm']:
+        # Normalize such that \int_0^1 b(t) dt = 1
+        basis = basis / np.tile(np.sum(basis,axis=0), [n_pts,1]) / (1.0/n_pts)
     
+    return basis
+
+def create_gaussian_basis(prms):
+    """
+    Create a basis of Gaussian bumps.
+    This is primarily for spatial filters.
+    """
+    # Set default parameters. These can be overriden by kwargs
+
+    # Default to a raised cosine basis
+    n_pts = 100             # Number of points at which to evaluate the basis
+    n_gauss = prms['n_gauss']   # Number of exponential basis functions
+    n_eye = prms['n_eye']   # Number of identity basis functions
+    n_bas = n_eye + n_gauss
+    basis = np.zeros((n_pts,n_bas))
+
+    # The first n_eye basis elements are identity vectors in the first time bins
+    basis[:n_eye,:n_eye] = np.eye(n_eye)
+
+    # The remaining basis functions are Gaussian bumps at equally spaced points
+    mus = np.arange(n_gauss)
+    sigma = 1.0
+
+    # Basis function is a raised cosine centered at c with width w
+    basis_fn = lambda t,mu,sig: np.exp(-0.5/sig*(t-mu)**2)
+    for i in np.arange(n_gauss):
+        basis[:,i] = basis_fn(np.arange(n_pts),mus[i])
+
+    # Orthonormalize basis (this may decrease the number of effective basis vectors)
+    if prms['orth']:
+        basis = scipy.linalg.orth(basis)
+    if prms['norm']:
+        # Normalize such that \int_0^1 b(t) dt = 1
+        basis = basis / np.tile(np.sum(basis,axis=0), [n_pts,1]) / (1.0/n_pts)
+    basis = basis / np.tile(np.sqrt(np.sum(basis**2,axis=0)), [n_pts,1])
+
     return basis
 
 def convolve_with_basis(stim, basis):
@@ -135,7 +173,7 @@ def convolve_with_basis(stim, basis):
                   R is the length of the impulse response
                   B is the number of bases
     
-    :rtype TxDxR tensor of stimuli convolved with bases 
+    :rtype TxDxB tensor of stimuli convolved with bases
     """
     (T,D) = stim.shape
     (R,B) = basis.shape
@@ -159,6 +197,42 @@ def convolve_with_basis(stim, basis):
                                       'full')[:T,:]
     
     return fstim
+
+def convolve_with_2d_basis(stim, basis):
+    """ Project stimulus onto a basis.
+    :param stim   TxD matrix of inputs.
+                  T is the number of time bins
+                  D is the number of stimulus dimensions.
+    :param basis  RxD basis matrix
+                  R is the length of the impulse response
+                  D is the number of stimulus dimensions.
+
+    :rtype Tx1 vector of stimuli convolved with the 2D basis
+    """
+    (T,D) = stim.shape
+    (R,Db) = basis.shape
+    assert D==Db, "Spatial dimension of basis must match spatial dimension of stimulus."
+
+    import scipy.signal as sig
+
+    # First, by convention, the impulse responses are apply to times
+    # (t-R:t-1). That means we need to prepend a row of zeros to make
+    # sure the basis remains causal
+    basis = np.vstack((np.zeros((1,D)),basis))
+
+    # Flip the spatial dimension for convolution
+    # TODO Check that temporal filter is flipped by convention
+    basis = basis[:,::-1]
+
+    # Compute convolution
+    # TODO Performance can be improved for rank 2 filters
+    assert np.all(np.isreal(stim))
+    assert np.all(np.isreal(basis))
+    fstim = sig.convolve2d(stim,basis,'full')
+
+    # Only keep the first T time bins and the D-th spatial vector
+    # This is the only vector for which the filter and stimulus completely overlap
+    return fstim[:T,D]
 
 def project_onto_basis(f, basis):
         """

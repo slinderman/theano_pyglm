@@ -1,6 +1,5 @@
 from glm_shared import *
-from models.simple_weighted_two_neuron import *
-from models.simple_two_neuron import *
+from models.model_factory import *
 from inference.map import map_estimate
 from inference.coord_descent import coord_descent
 
@@ -19,11 +18,22 @@ def plot_results(network_glm, x_trues, x_opts):
     # Plot the inferred connectivity matrix
     f = plt.figure()
     plt.subplot(1,2,1)
-    plt.imshow(true_state['net'], extent=[0,1,0,1])
+    W_true = true_state['net']
+    W_inf = opt_state['net']
+    W_max = np.amax(np.maximum(np.abs(W_true),np.abs(W_inf)))
+    px_per_node = 10
+    plt.imshow(np.kron(W_true,np.ones((px_per_node,px_per_node))),
+               vmin=-W_max,vmax=W_max,
+               extent=[0,1,0,1],
+               interpolation='nearest')
     plt.colorbar()
     plt.title('True Network')
     plt.subplot(1,2,2)
-    plt.imshow(opt_state['net'], extent=[0,1,0,1])
+
+    plt.imshow(np.kron(W_inf,np.ones((px_per_node,px_per_node))),
+               vmin=-W_max,vmax=W_max,
+               extent=[0,1,0,1],
+               interpolation='nearest')
     plt.colorbar()
     plt.title('Inferred Network')
 
@@ -73,7 +83,7 @@ if __name__ == "__main__":
     T_start = 0
     T_stop = 10000
     dt = 1
-    model = SimpleWeightedTwoNeuronModel
+    model = make_model('simple_weighted_model', N=10)
 
     dt_stim = 100
     D_stim = model['bkgd']['D_stim']

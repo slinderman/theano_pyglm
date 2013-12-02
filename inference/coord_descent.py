@@ -23,7 +23,7 @@ def coord_descent(network_glm, x0=None):
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
     if not isinstance(network.graph, CompleteGraphModel):
-        raise Exception("MAP inference can only be performed with the complete graph model.")
+        raise Exception("MAP inference via coordinate descent can only be performed with the complete graph model.")
     
     # Draw initial state from prior if not given
     if x0 is None:
@@ -31,10 +31,18 @@ def coord_descent(network_glm, x0=None):
 
     # Compute the log prob, gradient, and Hessian wrt to the network
     if not network.vars == []:
-        import pdb
-        pdb.set_trace()
         # If the network is deterministic then there are no params to optimize
         # Otherwise compute the joint log probability
+
+        # Compute the prior
+        net_prior = theano.function(network.vars, network.log_p)
+        # Compute the gradient of the joint log prob wrt the network
+        g_prior, g_list = grad_wrt_list(network.log_p, network.vars)
+        net_g_prior = theano.function(network.vars, g_prior)
+        # Compute the Hessian of the joint log prob wrt the network
+        H_prior = hessian_wrt_list(network.log_p, network.vars, g_list)
+        net_H_prior = theano.function(network.vars, H_prior)
+
         all_vars = [network_glm.glm.n] + network.vars + [network_glm.glm.vars]
         net_lp = theano.function(all_vars, network_glm.glm.log_p)
         # Compute the gradient of the joint log prob wrt the network
@@ -56,23 +64,30 @@ def coord_descent(network_glm, x0=None):
         print "MAP Iteration %d." % iter
         if not network.vars == []:
             # Fit the network
-            
-            # TODO: Parallelize this
-            for n in np.arange(N):
-                x_net_0, shapes = pack(x[0])
-                nll = lambda x_net: -1.0 * net_lp(*([n] + x_net + x_glms[n]))
-                grad_nll = lambda x_net: -1.0 * net_g(*([n] + x_net + x_glms[n]))
-                hess_nll = lambda x_net: -1.0 * net_H(*([n] + x_net + x_glms[n]))
-    
-                x_net_opt = opt.fmin_ncg(nll, x_net_0,
-                                         fprime=grad_nll,
-                                         fhess=hess_nll,
-                                         disp=True)
-                x[0] = unpack(x_net_opt, shapes)
 
-            
-            # TODO: Fit network hyperparameters
-            
+            # Reduce the log prob, gradient, and Hessian across all GLM nodes.
+            # We can do this because the log prob is a sum of log probs from each GLM,
+            # plus the log prior from the network model.
+
+            # TODO: Parallelize the reduction
+            x_net_0, shapes = pack(x[0])
+            x_glms = x[1:]
+            nll = lambda x_net: -1.0 * reduce(lambda lp_acc,n: lp_acc + net_lp(*([n] + unpack(x_net,shapes) + x_glms[n])),
+                                              np.arange(N),
+                                              net_prior(x_net))
+            grad_nll = lambda x_net: -1.0 * reduce(lambda g_acc,n: g_acc + net_g(*([n] + unpack(x_net,shapes) + x_glms[n])),
+                                                   np.arange(N),
+                                                   net_g_prior(x_net))
+            hess_nll = lambda x_net: -1.0 * reduce(lambda H_acc,n: H_acc + net_H(*([n] + unpack(x_net,shapes) + x_glms[n])),
+                                                   np.arange(N),
+                                                   net_H_prior(x_net))
+
+            x_net_opt = opt.fmin_ncg(nll, x_net_0,
+                                     fprime=grad_nll,
+                                     fhess=hess_nll,
+                                     disp=True)
+            x[0] = unpack(x_net_opt, shapes)
+
         # Fit the GLMs.
         # TODO Parallelize this!
         for n in np.arange(N):
@@ -88,18 +103,6 @@ def coord_descent(network_glm, x0=None):
                                   fhess=hess_nll,
                                   disp=True)
             x[n + 1] = unpack(xn_opt, shapes)
-            
-            # Fit the network for this GLM
-            xnet_0, shapes = pack(x[0])
-            nll = lambda xnet: -1.0 * network_glm.glm.f_lp(*([n] + xnet + x[n+1]))
-            grad_nll = lambda xnet: -1.0 * network_glm.glm.g_lp(*([n] + xnet + x[n+1]))
-            hess_nll = lambda xnet: -1.0 * network_glm.glm.H_lp(*([n] + xnet + x[n+1]))
-
-            xnet_opt = opt.fmin_ncg(nll, xnet_0,
-                                  fprime=grad_nll,
-                                  fhess=hess_nll,
-                                  disp=True)
-            x[0] = unpack(xnet_opt, shapes)
 
         diffs = np.zeros(len(x))
         for i in range(len(x)):

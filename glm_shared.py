@@ -32,26 +32,8 @@ class NetworkGlm:
         # Create a single GLM that is shared across neurons
         self.glm = Glm(model, self.network)
 
-        # Evalualte the total log probability
-#        log_p_glms = map(lambda glm: T.shape_padright(glm.log_p, n_ones=1),
-#                         self.glms)
-#
-#        # Concatenate the log posteriors into a vector
-#        self.log_p = theano.scan(lambda lp_acc, n: self.glm.log_p)
-#        self.log_p = T.sum(T.concatenate(log_p_glms, axis=0)) + \
-#                     self.network.log_p
-#        
-#        # Concatenate all variables into a list
-#        self.vars = reduce(lambda vacc,glm: vacc+[glm.vars], self.glms,
-#                           self.network.vars)
-
         self.f_lp = lambda vars: reduce(lambda lp_acc,n: lp_acc + self.glm.f_lp(n,vars[0],vars[n]),
                                         self.network.f_lp(vars['net']))
-        # Compute gradients of the joint log probability
-#        self.compute_gradients()
-#        
-#        # Create functions for the gradients
-#        self.create_functions()
 
     def compute_log_p(self, vars):
         """ Compute the log joint probability under a given set of variables 
@@ -66,30 +48,6 @@ class NetworkGlm:
         
         return lp
 
-    def compute_gradients(self):
-        """ Compute gradients of the joint log posterior distribution over GLM
-            parameters and networks. Try to take advantage of conditional
-            independencies between the GLMs. For example, The background and impulse
-            responses may be conditionally independent given the network.
-        """
-        # Most general form: compute the gradient of the joint log posterior
-#        self.g_net = T.grad(self.log_p, self.network.vars)
-        self.g_net, g_list = grad_wrt_list(self.log_p, self.network.vars)
-        
-        # TODO: Compute this for all pairs of input variables
-        # Finally, compute the Hessian
-#        self.H_net,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
-#                                   sequences=T.arange(self.g_net[0].shape[0]),
-#                                   non_sequences=[self.g_net[0], self.network.vars[0]])
-        self.H_net = hessian_wrt_list(self.log_p, self.network.vars, g_list)
-
-    def create_functions(self):
-        # Create callable functions to compute firing rate, log likelihood, and gradients
-        theano.config.on_unused_input = 'ignore'
-        self.f_lp = theano.function(self.vars, self.log_p)
-        self.g_lp_net = theano.function(self.vars, self.g_net)
-        self.H_lp_net = theano.function(self.vars, self.H_net)
-        
     def get_state(self, vars):
         """ Get the 'state' of the system
         """
@@ -181,7 +139,6 @@ class NetworkGlm:
             t_imp = np.minimum(nT-t-1,T_imp)
             
             # Get the instantaneous connectivity
-            
             At = np.tile(np.reshape(self.network.f_A(*vars[0]),[N,N,1]),[1,1,t_imp])
             Wt = np.tile(np.reshape(self.network.f_W(*vars[0]),[N,N,1]),[1,1,t_imp])
             
@@ -309,30 +266,30 @@ class Glm:
         state.update(self.imp_model.get_state(glm_vars))
         return {n : state}
         
-    def compute_gradients(self):
-        """ Compute gradients of this GLM's log prob wrt its variables.
-        """
-        # TODO Rather than using a single vector of parameters, let each component
-        #      own its own variables and take the gradient with respect to each
-        #      set of variables separately.
-        var_list = [self.vars]
-        g_list = T.grad(self.log_p, var_list)
-        self.g = T.concatenate(g_list)
-        
-        # Compute the hessian
-        H_rows = []
-        for gv1 in g_list:
-            H_v1 = []
-            for v2 in var_list:
-                # Compute dgv1/dv2
-                H_v1v2,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
-                                       sequences=T.arange(gv1.shape[0]),
-                                       non_sequences=[gv1, v2])
-                H_v1.append(H_v1v2)
-            H_rows.append(T.concatenate(H_v1, axis=1))
-        
-        # Concatenate the Hessian blocks into a matrix
-        self.H = T.concatenate(H_rows, axis=0)
+    #def compute_gradients(self):
+    #    """ Compute gradients of this GLM's log prob wrt its variables.
+    #    """
+    #    # TODO Rather than using a single vector of parameters, let each component
+    #    #      own its own variables and take the gradient with respect to each
+    #    #      set of variables separately.
+    #    var_list = [self.vars]
+    #    g_list = T.grad(self.log_p, var_list)
+    #    self.g = T.concatenate(g_list)
+    #
+    #    # Compute the hessian
+    #    H_rows = []
+    #    for gv1 in g_list:
+    #        H_v1 = []
+    #        for v2 in var_list:
+    #            # Compute dgv1/dv2
+    #            H_v1v2,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
+    #                                   sequences=T.arange(gv1.shape[0]),
+    #                                   non_sequences=[gv1, v2])
+    #            H_v1.append(H_v1v2)
+    #        H_rows.append(T.concatenate(H_v1, axis=1))
+    #
+    #    # Concatenate the Hessian blocks into a matrix
+    #    self.H = T.concatenate(H_rows, axis=0)
     
     def set_data(self, data):
         """ Update the shared memory where the data is stored
@@ -364,10 +321,3 @@ class Glm:
         vars = np.concatenate((vars,net_vars))
 
         return [vars]
-    
-    def params(self):
-        params = {}
-        params['bkgd'] = self.bkgdmodel.params()
-        params['imp'] = self.imp_model.params()
-        
-        return params
