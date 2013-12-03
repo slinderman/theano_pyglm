@@ -7,42 +7,7 @@ import cPickle
 import numpy as np
 import scipy.io
 
-def average_list_of_dicts(smpls):
-    """ Average a list of dictionaries, e.g. a list of samples from
-        the MCMC loop. The dictionary elements may themselves be 
-        dictionaries, so work recursively and only average the leaves.
-    """
-    N_smpls = len(smpls)
-    import copy
-    avg = copy.deepcopy(smpls[0])
-    
-    def inc_avg(avg, smpl):
-        """ Helper to recrusively add to the average
-        """
-        for (key,val) in smpl.items():
-            if isinstance(val,dict):
-                # Recurse if the entry is another dict
-                avg[key] = inc_avg(avg[key], val)
-            else:
-                # Otherwise increment the value
-                avg[key] += val
-        return avg
-    
-    for smpl in smpls[1:]:
-        avg = inc_avg(avg, smpl)
-    
-    def norm_avg(avg, N_smpls):
-        """ Normalize the average by dividing by N_smpls 
-        """
-        for (key,val) in avg.items():
-            if isinstance(val,dict):
-                avg[key] = norm_avg(val, N_smpls)
-            else:
-                avg[key] /= N_smpls
-        return avg
-    
-    avg = norm_avg(avg, N_smpls)
-    return avg 
+from utils.avg_dicts import *
 
 def plot_results(network_glm, x_trues, x_inf):
     """ Plot the inferred stimulus tuning curves and impulse responses
@@ -51,7 +16,9 @@ def plot_results(network_glm, x_trues, x_inf):
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
-    avg_x_inf = average_list_of_dicts(x_inf)
+    # Only use the last 50% of the data
+    N_smpls = len(x_inf)
+    avg_x_inf = average_list_of_lists(x_inf[N_smpls/2:])
     true_state = network_glm.get_state(x_trues)
     inf_state = network_glm.get_state(avg_x_inf)
 
@@ -264,11 +231,11 @@ if __name__ == "__main__":
     ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-    x_smpls = gibbs_sample(glm, x0)
+    x_smpls = gibbs_sample(glm, x0, N_samples=100)
     ll_trace = np.zeros(len(x_smpls))
     for (i,x_smpl) in enumerate(x_smpls):
         ll_trace[i] = glm.compute_log_p(x_smpl)
 
     #print "LL_opt: %f" % ll_opt
 
-    plot_results(glm, x_true, x_smpls[-1])
+    plot_results(glm, x_true, x_smpls)
