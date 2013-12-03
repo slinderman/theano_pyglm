@@ -321,3 +321,15 @@ class Glm:
         vars = np.concatenate((vars,net_vars))
 
         return [vars]
+
+    def gibbs_step(self, state, n):
+        """ Perform an HMC step to update the GLM parameters
+        """
+#        all_vars = [self.n] + self.network.vars + [self.vars]
+#        f_lp = theano.function(all_vars, self.log_p)
+#        # Compute the gradient of the joint log prob wrt the network
+#        g, g_list = grad_wrt_list(self.log_p, [self.vars])
+#        f_g = theano.function(all_vars, g)
+
+        
+        

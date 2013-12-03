@@ -15,7 +15,8 @@ class Network(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
-        prms = model['network']
+        self.model = model
+        self.prms = model['network']
 
         # Keep track of the number of variables
         self.n_vars = 0
@@ -63,14 +64,27 @@ class Network(Component):
         A_vars = self.graph.sample()
         W_vars = self.weights.sample()
         
-#        vars = []
-#        if A_vars is not None:
-#            if W_vars is not None:
-#                vars = [np.concatenate((A_vars,W_vars))]
-#            else:
-#                vars = A_vars
-#        elif W_vars is not None:
-#                vars = W_vars
-#        return vars
         vars = A_vars + W_vars
         return vars
+    
+    def gibbs_step(self, state, network_glm):
+        """ Sample network given the GLM state variables.
+            This can be done in parallel for each column of A and W.
+            If W is Gaussian, we can use Gauss-Hermite quadrature to integrate out
+            the W's and use a collapsed Gibbs sampler for A.
+        """
+        x_net = state[0]
+        
+        N = self.model['N']
+        for n_post in np.arange(N):
+            # Sample the entries in random order
+            perm = np.random.permutation(N)
+            for n_pre in perm:
+                x_net = self.graph.sample_A(state,network_glm,n_pre,n_post)
+                x_net = self.weights.sample_W(state,network_glm,n_pre,n_post)
+                
+        # Sample latent variables of the graph and weights
+        x_net = self.graph.gibbs_sample_parameters()
+        x_net = self.weights.gibbs_sample_parameters()
+        
+        return x_net

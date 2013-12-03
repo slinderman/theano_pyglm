@@ -72,5 +72,10 @@ class GaussianWeightModel(Component):
         W_flat = np.reshape(W,(N**2,))
         return [W_flat]
 
-
-
+    def sample_W(self, state, network_glm, n_pre, n_post):
+        """ Sample W[n_pre,n_post] given the state of the network
+        """
+        # How should we sample W? Slice sample? HMC?
+        
+        pass
+        
