@@ -257,8 +257,6 @@ def convolve_with_2d_basis(stim, basis):
 
     # Compute convolution
     # TODO Performance can be improved for rank 2 filters
-    assert np.all(np.isreal(stim))
-    assert np.all(np.isreal(basis))
     fstim = sig.convolve2d(stim,basis,'full')
 
     # Only keep the first T time bins and the D-th spatial vector

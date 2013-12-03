@@ -3,15 +3,17 @@ import theano
 from theano.tensor.shared_randomstreams import RandomStreams
     
 import numpy as np
-import utils.poisson_process as pp
+from utils.packvec import *
 import scipy.linalg as linalg
 
 from components.network import *
-
 from components.bkgd import *
 from components.bias import *
 from components.impulse import *
 from components.nlin import *
+
+# TODO: Should the model contain inference code as well?
+from inference.hmc import hmc
 
 from utils.grads import *
 
@@ -322,14 +324,17 @@ class Glm:
 
         return [vars]
 
-    def gibbs_step(self, state, n):
+    def gibbs_step(self, state, network_glm, n):
         """ Perform an HMC step to update the GLM parameters
         """
-#        all_vars = [self.n] + self.network.vars + [self.vars]
-#        f_lp = theano.function(all_vars, self.log_p)
-#        # Compute the gradient of the joint log prob wrt the network
-#        g, g_list = grad_wrt_list(self.log_p, [self.vars])
-#        f_g = theano.function(all_vars, g)
+        x_glm_0, shapes = pack(state[n+1])
+        nll = lambda x_glm: -1.0 * self.f_lp(*([n] + state[0] + unpack(x_glm, shapes)))
+        g_nll = lambda x_glm: -1.0 * self.g_lp(*([n] + state[0] + unpack(x_glm, shapes)))
 
-        
-        
+        # Call HMC
+        # TODO Automatically tune these parameters
+        epsilon = 0.01
+        L = 10
+        x_glm = hmc(nll, g_nll, epsilon, L, x_glm_0)
+
+        return unpack(x_glm, shapes)

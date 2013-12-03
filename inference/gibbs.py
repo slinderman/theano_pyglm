@@ -7,10 +7,7 @@ import theano
 import theano.tensor as T
 import numpy as np
 
-import scipy.optimize as opt
-
 from utils.grads import *
-from components.graph import CompleteGraphModel
 
 def gibbs_sample(network_glm, x0=None, N_samples=1000):
     """
@@ -28,18 +25,22 @@ def gibbs_sample(network_glm, x0=None, N_samples=1000):
     # Compute gradients for HMC, etc. 
 
     # Alternate fitting the network and fitting the GLMs
+    x_smpls = []
     x = x0
-    converged = False
     for smpl in np.arange(N_samples):
-        x_prev = copy.deepcopy(x)
         # Go through variables, sampling one at a time, in parallel where possible
-        x[0] = network.gibbs_step(x)
+        x[0] = network.gibbs_step(x, network_glm)
         
         # Sample the GLM parameters
         # TODO Parallelize this!
         for n in np.arange(N):
             n = np.int32(n)
-            x[n+1] = network.glm.gibbs_step(x, n)
-        
-    return x
+            x[n+1] = network_glm.glm.gibbs_step(x, network_glm, n)
+        x_smpls.append(copy.deepcopy(x))
+
+        # Print the current log likelihood
+        lp = network_glm.compute_log_p(x)
+        print "Iter %d: Log prob: %.3f" % (smpl,lp)
+
+    return x_smpls
 

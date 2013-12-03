@@ -25,7 +25,7 @@ SpatiotemporalGlm = \
         {
             'type' : 'spatiotemporal',
             'D_stim' : 3,       # Dimensionality of the stimulus
-            'dt_max' : 500,
+            'dt_max' : 50,
             'mu' : 0,
             'sigma' : 0.3,
             'temporal_basis' :

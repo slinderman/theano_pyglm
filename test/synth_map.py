@@ -1,6 +1,6 @@
+# Run as script using 'python -m test.synth'
 from glm_shared import *
 from models.model_factory import *
-from inference.map import map_estimate
 from inference.coord_descent import coord_descent
 
 def plot_results(network_glm, x_trues, x_opts):

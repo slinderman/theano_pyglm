@@ -84,7 +84,7 @@ class Network(Component):
                 x_net = self.weights.sample_W(state,network_glm,n_pre,n_post)
                 
         # Sample latent variables of the graph and weights
-        x_net = self.graph.gibbs_sample_parameters()
-        x_net = self.weights.gibbs_sample_parameters()
+        x_net = self.graph.gibbs_sample_parameters(state)
+        x_net = self.weights.gibbs_sample_parameters(state)
         
         return x_net

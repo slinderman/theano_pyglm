@@ -16,7 +16,22 @@ def create_weight_component(model):
             raise Exception("Unrecognized weight model: %s" % type)
         return weight
 
-class ConstantWeightModel(Component):
+class WeightModel(Component):
+    """ GraphModel extends component with graph specific functions assumed
+        by the parent network.
+    """
+    def sample_W(self, state, network_glm, n_pre, n_post):
+        """
+        Sample a specific entry in W
+        """
+        raise Exception('sample_W has not been implemented!')
+
+    def gibbs_sample_parameters(self, state):
+        """ Gibbs sample any hyperparameters of the weight matrix
+        """
+        raise Exception('gibbs_sample_parameters has not been implemented!')
+
+class ConstantWeightModel(WeightModel):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -34,7 +49,18 @@ class ConstantWeightModel(Component):
 
         self.vars = []
 
-class GaussianWeightModel(Component):
+    def sample_W(self, state, network_glm, n_pre, n_post):
+        """
+        Sample a specific entry in W
+        """
+        return state[0]
+
+    def gibbs_sample_parameters(self, state):
+        """ Gibbs sample any hyperparameters of the weight matrix
+        """
+        return state[0]
+
+class GaussianWeightModel(WeightModel):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -48,15 +74,7 @@ class GaussianWeightModel(Component):
         # Define weight matrix
         self.W_flat = T.dvector(name='W')
         self.W = T.reshape(self.W_flat,(N,N))
-        
-        # Define weight matrix in terms of columns of the weight matrix.
-        # This way gradients can be computed by each GLM node in parallel
-        #self.W_cols = []
-        #for n in np.arange(N):
-        #    self.W_cols.append(T.dcol(name='W%d'%n))
-        #
-        #self.W = T.concatenate(self.W_cols,axis=1)
-        
+
         # Define log probability
         self.log_p = T.sum(-1.0/(2.0*self.sigma**2) * (self.W-self.mu)**2)
 
@@ -73,9 +91,13 @@ class GaussianWeightModel(Component):
         return [W_flat]
 
     def sample_W(self, state, network_glm, n_pre, n_post):
-        """ Sample W[n_pre,n_post] given the state of the network
         """
-        # How should we sample W? Slice sample? HMC?
-        
-        pass
-        
+        Sample a specific entry in W
+        """
+        # How to sample W?
+        raise Exception("sample_W has not yet been implemented!")
+
+    def gibbs_sample_parameters(self, state):
+        """ Gibbs sample any hyperparameters of the weight matrix
+        """
+        return state
