@@ -7,18 +7,53 @@ import cPickle
 import numpy as np
 import scipy.io
 
-def plot_results(network_glm, x_trues, x_opts):
+def average_list_of_dicts(smpls):
+    """ Average a list of dictionaries, e.g. a list of samples from
+        the MCMC loop. The dictionary elements may themselves be 
+        dictionaries, so work recursively and only average the leaves.
+    """
+    N_smpls = len(smpls)
+    import copy
+    avg = copy.deepcopy(smpls[0])
+    
+    def inc_avg(avg, smpl):
+        """ Helper to recrusively add to the average
+        """
+        for (key,val) in smpl.items():
+            if isinstance(val,dict):
+                # Recurse if the entry is another dict
+                avg[key] = inc_avg(avg[key], val)
+            else:
+                # Otherwise increment the value
+                avg[key] += val
+        return avg
+    
+    for smpl in smpls[1:]:
+        avg = inc_avg(avg, smpl)
+    
+    def norm_avg(avg, N_smpls):
+        """ Normalize the average by dividing by N_smpls 
+        """
+        for (key,val) in avg.items():
+            if isinstance(val,dict):
+                avg[key] = norm_avg(val, N_smpls)
+            else:
+                avg[key] /= N_smpls
+        return avg
+    
+    avg = norm_avg(avg, N_smpls)
+    return avg 
+
+def plot_results(network_glm, x_trues, x_inf):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     import matplotlib
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
-    import pdb
-    pdb.set_trace()
-
+    avg_x_inf = average_list_of_dicts(x_inf)
     true_state = network_glm.get_state(x_trues)
-    opt_state = network_glm.get_state(x_opts)
+    inf_state = network_glm.get_state(avg_x_inf)
 
     N = network_glm.N
     
@@ -26,7 +61,7 @@ def plot_results(network_glm, x_trues, x_opts):
     f = plt.figure()
     plt.subplot(1,2,1)
     W_true = true_state['net']
-    W_inf = opt_state['net']
+    W_inf = inf_state['net']
     W_max = np.amax(np.maximum(np.abs(W_true),np.abs(W_inf)))
     px_per_node = 10
     plt.imshow(np.kron(W_true,np.ones((px_per_node,px_per_node))),
@@ -54,31 +89,31 @@ def plot_results(network_glm, x_trues, x_opts):
             plt.subplot(1,2,1)
             plt.plot(true_state[n]['stim_x'],'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim_x'],'--r')
+            plt.plot(inf_state[n]['stim_x'],'--r')
             plt.title('GLM[%d]: Spatial stimulus filter' % n)
 
             plt.subplot(1,2,2)
             plt.plot(true_state[n]['stim_t'],'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim_t'],'--r')
+            plt.plot(inf_state[n]['stim_t'],'--r')
             plt.title('GLM[%d]: Temporal stimulus filter' % n)
         elif 'stim' in true_state[n].keys():
             plt.plot(true_state[n]['stim'],'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim'],'--r')
+            plt.plot(inf_state[n]['stim'],'--r')
             plt.title('GLM[%d]: stimulus filter' % n)
         f.savefig('stim_resp_%d.pdf' % n)
 
     # Plot the impulse responses
     W_true = true_state['net']
-    W_opt = opt_state['net']
+    W_opt = inf_state['net']
     f = plt.figure()
     for n_pre in np.arange(N):
         for n_post in np.arange(N):
             plt.subplot(N,N,n_pre*N+n_post + 1)
             plt.plot(W_true[n_pre,n_post]*true_state[n_post]['ir'][n_pre,:],'b')
             plt.hold(True)
-            plt.plot(W_opt[n_pre,n_post]*opt_state[n_post]['ir'][n_pre,:],'r')
+            plt.plot(W_opt[n_pre,n_post]*inf_state[n_post]['ir'][n_pre,:],'r')
             #plt.title('Imp Response %d->%d' % (n_pre,n_post))
             plt.xlabel("")
             plt.ylabel("")
@@ -91,7 +126,7 @@ def plot_results(network_glm, x_trues, x_opts):
         plt.subplot(1,N,n+1)
         plt.plot(true_state[n]['lam'],'b')
         plt.hold(True)
-        plt.plot(opt_state[n]['lam'],'r')
+        plt.plot(inf_state[n]['lam'],'r')
 
         # TODO Plot the spike times
         plt.title('Firing rate %d' % n)
@@ -236,6 +271,4 @@ if __name__ == "__main__":
 
     #print "LL_opt: %f" % ll_opt
 
-    plot_results(glm, x_true, x_smpls)
-
-    # Run a synthetic MCMC
+    plot_results(glm, x_true, x_smpls[-1])
