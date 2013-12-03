@@ -14,6 +14,9 @@ def plot_results(network_glm, x_trues, x_opts):
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
+    import pdb
+    pdb.set_trace()
+
     true_state = network_glm.get_state(x_trues)
     opt_state = network_glm.get_state(x_opts)
 
