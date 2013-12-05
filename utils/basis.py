@@ -222,11 +222,16 @@ def convolve_with_basis(stim, basis):
     for b in np.arange(B):
         assert np.all(np.isreal(stim))
         assert np.all(np.isreal(basis[:,b]))
-        fstim[:,:,b] = sig.convolve2d(stim, 
-                                      np.reshape(basis[:,b],[R+1,1]), 
-                                      'full')[:T,:]
+#         fstim[:,:,b] = sig.convolve2d(stim, 
+#                                       np.reshape(basis[:,b],[R+1,1]), 
+#                                       'full')[:T,:]
+        fstim[:,:,b] = sig.fftconvolve(stim, 
+                                       np.reshape(basis[:,b],[R+1,1]), 
+                                       'full')[:T,:]
     
     return fstim
+
+_fft_cache = []
 
 def convolve_with_2d_basis(stim, basis):
     """ Project stimulus onto a basis.
@@ -243,7 +248,8 @@ def convolve_with_2d_basis(stim, basis):
     (R,Db) = basis.shape
     assert D==Db, "Spatial dimension of basis must match spatial dimension of stimulus."
 
-    import scipy.signal as sig
+#    import scipy.signal as sig
+    import fftconv 
 
     # First, by convention, the impulse responses are apply to times
     # (t-R:t-1). That means we need to prepend a row of zeros to make
@@ -257,11 +263,25 @@ def convolve_with_2d_basis(stim, basis):
 
     # Compute convolution
     # TODO Performance can be improved for rank 2 filters
-    fstim = sig.convolve2d(stim,basis,'full')
+#     fstim = sig.convolve2d(stim,basis,'full')
+    # Look for fft_stim in _fft_cache
+    fft_stim = None
+    for (cache_stim, cache_fft_stim) in _fft_cache:
+        if np.allclose(stim[-128:],cache_stim[-128:]) and \
+           np.allclose(stim[:128],cache_stim[:128]):
+            fft_stim = cache_fft_stim
+            break
+
+    if not fft_stim is None:
+        fstim,_ = fftconv.fftconvolve(stim, basis, 'full',
+                                      fft_in1=fft_stim)
+    else:
+        fstim,fft_stim,_ = fftconv.fftconvolve(stim, basis, 'full')
+        _fft_cache.append((stim,fft_stim))
 
     # Only keep the first T time bins and the D-th spatial vector
     # This is the only vector for which the filter and stimulus completely overlap
-    return fstim[:T,D]
+    return fstim[:T,D-1]
 
 def project_onto_basis(f, basis):
         """
@@ -278,6 +298,6 @@ def project_onto_basis(f, basis):
         # Regularize the projection
         Q = 1*np.eye(B)
         
-        beta = np.dot(np.dot(scipy.linalg.inv(np.dot(obasis.T,obasis)+Q), obasis.T),f)
+        beta = np.dot(np.dot(scipy.linalg.inv(np.dot(basis.T,basis)+Q), basis.T),f)
                
         return beta

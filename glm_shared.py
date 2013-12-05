@@ -74,9 +74,7 @@ class NetworkGlm:
         """
         Sample parameters of the GLM from the prior
         """
-        vars = []
-
-        vars.append(self.network.sample())
+        vars = [self.network.sample()]
 
         for n in np.arange(self.N):
             vars.append(self.glm.sample())
@@ -111,6 +109,8 @@ class NetworkGlm:
         for n in np.arange(N):
             X[:,n] += self.glm.bkgd_model.f_I_stim(*vars[n+1])[t_ind]
 
+        print "Max background rate: %f" % np.exp(np.max(X))
+
         # Get the impulse response functions
         imps = []
         for n_pre in np.arange(N):
@@ -118,6 +118,13 @@ class NetworkGlm:
                             np.arange(N)))
         imps = np.array(imps)
         T_imp = imps.shape[2]
+        
+        # Debug: compute effective weights
+        tt_imp = dt*np.arange(T_imp)
+        Weff = np.trapz(imps,tt_imp,axis=2)
+        print "Effective impulse weights: "
+        print Weff
+        
 
         # Iterate over each time step and generate spikes
         S = np.zeros((nT,N))
@@ -126,7 +133,7 @@ class NetworkGlm:
             
         for t in np.arange(nT):
             # Update accumulator
-            if np.mod(t,1000)==0: 
+            if np.mod(t,10000)==0: 
                 print "Iteration %d" % t
             lam = np.array(map(lambda n: self.glm.nlin_model.f_nlin(X[t,n]),
                            np.arange(N)))
@@ -163,22 +170,26 @@ class NetworkGlm:
                 n_spk = np.sum(i_spk)
                 
                 if np.any(S[t,:]>10):
+                    import pdb
+                    pdb.set_trace()
                     raise Exception("More than 10 spikes in a bin!")
         # DEBUG:
         tt = dt * np.arange(nT)
         lam = np.zeros_like(X)
         for n in np.arange(N):
             lam[:,n] = self.glm.nlin_model.f_nlin(X[:,n])
-
+        
+        print "Max firing rate (post sim): %f" % np.max(lam)
         E_nS = np.trapz(lam,tt,axis=0)
         nS = np.sum(S,0)
 
         print "Sampled %s spikes." % str(nS)
+        print "Expected %s spikes." % str(E_nS)
     
         if np.any(np.abs(nS-E_nS) > 3*np.sqrt(E_nS)):
             print "ERROR: Actual num spikes (%d) differs from expected (%d) by >3 std." % (E_nS,nS)
-            import pdb
-            pdb.set_trace()
+        
+        
     
         return S,X
     
@@ -300,6 +311,7 @@ class Glm:
             self.S.set_value(data["S"])
         else:
             self.S.set_value(np.zeros_like(data["stim"]))
+        
         self.dt.set_value(data["dt"])
         
         self.bkgd_model.set_data(data)
@@ -333,7 +345,7 @@ class Glm:
 
         # Call HMC
         # TODO Automatically tune these parameters
-        epsilon = 0.01
+        epsilon = 0.001
         L = 10
         x_glm = hmc(nll, g_nll, epsilon, L, x_glm_0)
 

@@ -16,7 +16,7 @@ StandardGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : -2,
+            'mu' : 2,
             'sigma' : 0.1
         },
 
@@ -25,9 +25,9 @@ StandardGlm = \
         {
             'type' : 'basis',
             'D_stim' : 1,       # Dimensionality of the stimulus
-            'dt_max' : 500,
-            'mu' : 0,
-            'sigma' : 0.5,
+            'dt_max' : 0.3,
+            'mu' : 0.0,
+            'sigma' : 0.1,
             'basis' :
                 {
                     'type' : 'cosine',
@@ -35,8 +35,8 @@ StandardGlm = \
                     'n_cos' : 3,
                     'a': 1.0/120,
                     'b': 0.5,
-                    'orth' : False,
-                    'norm' : True
+                    'orth' : True,
+                    'norm' : False
                 }
         },
 
@@ -44,9 +44,9 @@ StandardGlm = \
      'impulse' :
          {
              'type' : 'basis',
-             'dt_max' : 10,
+             'dt_max' : 0.3,
              'mu' : 0.0,
-             'sigma' : 0.33,
+             'sigma' : 0.2,
              'basis' :
                  {
                      'type' : 'cosine',
@@ -54,8 +54,8 @@ StandardGlm = \
                      'n_cos' : 3,
                      'a': 1.0/120,
                      'b': 0.5,
-                     'orth' : False,
-                     'norm' : True
+                     'orth' : True,
+                     'norm' : False
                  }
          },
     # Parameters of the network

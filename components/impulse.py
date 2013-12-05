@@ -140,7 +140,8 @@ class BasisImpulse:
         # Interpolate basis at the resolution of the data
         dt = data['dt']
         (L,B) = self.basis.shape
-        t_int = np.linspace(0,1,self.prms['dt_max']/dt)
+        Lt_int = self.prms['dt_max']/dt
+        t_int = np.linspace(0,1,Lt_int)
         t_bas = np.linspace(0,1,L)
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
@@ -149,6 +150,9 @@ class BasisImpulse:
         # Normalize so that the interpolated basis has volume 1
         if self.prms['basis']['norm']:
             ibasis = ibasis / self.prms['dt_max']
+        # Normalize so that the interpolated basis has unit L1 norm
+#         if self.prms['basis']['norm']:
+#             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
         self.ibasis.set_value(ibasis)
 
         # Project the presynaptic spiking onto the basis

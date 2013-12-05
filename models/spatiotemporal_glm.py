@@ -16,8 +16,8 @@ SpatiotemporalGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : -2,
-            'sigma' : 0.1
+            'mu' : 1.0,
+            'sigma' : 1.0
         },
 
     # Parameters of the background model
@@ -25,14 +25,14 @@ SpatiotemporalGlm = \
         {
             'type' : 'spatiotemporal',
             'D_stim' : 3,       # Dimensionality of the stimulus
-            'dt_max' : 50,
-            'mu' : 0,
-            'sigma' : 0.3,
+            'dt_max' : 0.3,
+            'mu' : 0.0,
+            'sigma' : 1.5,
             'temporal_basis' :
                 {
                     'type' : 'cosine',
                     'n_eye' : 0,
-                    'n_cos' : 3,
+                    'n_cos' : 1,
                     'a': 1.0/120,
                     'b': 0.5,
                     'orth' : False,
@@ -57,9 +57,9 @@ SpatiotemporalGlm = \
      'impulse' :
          {
              'type' : 'basis',
-             'dt_max' : 10,
-             'mu' : 0.0,
-             'sigma' : 0.3,
+             'dt_max' : 0.3,
+             'mu' : 0,
+             'sigma' : 0.001,
              'basis' :
                  {
                      'type' : 'cosine',

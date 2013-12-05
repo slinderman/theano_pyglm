@@ -76,7 +76,8 @@ class BasisStimulus:
 
         # Interpolate basis at the resolution of the data
         (L,B) = self.basis.shape
-        t_int = np.linspace(0,1,self.prms['dt_max']/dt)
+        Lt_int = self.prms['dt_max']/dt
+        t_int = np.linspace(0,1,Lt_int)
         t_bas = np.linspace(0,1,L)
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
@@ -85,7 +86,8 @@ class BasisStimulus:
             #ibasis[:,b] /= (np.sum(ibasis[:,b])/np.sum(self.basis[:,b]))
 
         # Normalize so that the interpolated basis has volume 1
-        ibasis = ibasis / self.prms['dt_max']
+        if self.prms['basis']['norm']:
+            ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
         self.ibasis.set_value(ibasis)
 
         # Project the stimulus onto the basis
@@ -189,7 +191,8 @@ class SpatiotemporalStimulus:
         dt_stim = data['dt_stim']
         t = np.arange(0, data['T'], dt)
         nt = len(t)
-        t_stim = np.arange(0, data['T'], dt_stim)
+#         t_stim = np.arange(0, data['T'], dt_stim)
+        t_stim = dt_stim * np.arange(data['stim'].shape[0])
         stim = np.zeros((nt, self.prms['D_stim']))
         for d in np.arange(self.prms['D_stim']):
             stim[:, d] = np.interp(t,
@@ -214,10 +217,13 @@ class SpatiotemporalStimulus:
         ibasis_x = np.zeros((len(x_int), Bx))
         for b in np.arange(Bx):
             ibasis_x[:,b] = np.interp(x_int, x_bas, self.spatial_basis[:,b])
-        
+
         # Normalize so that the interpolated basis has volume 1
+#         if self.prms['temporal_basis']['norm']:
+#             ibasis_t = ibasis_t / self.prms['dt_max']
+        # Normalize so that the interpolated basis has unit L1 norm
         if self.prms['temporal_basis']['norm']:
-            ibasis_t = ibasis_t / self.prms['dt_max']
+            ibasis_t = ibasis_t / np.tile(np.sum(ibasis_t,0),[Lt_int,1])
 
         # Save the interpolated bases
         self.ibasis_t.set_value(ibasis_t)
@@ -226,7 +232,6 @@ class SpatiotemporalStimulus:
         # Take all pairs of temporal and spatial basis vectors
         (_,Bt) = ibasis_t.shape
         (_,Bx) = ibasis_x.shape
-
 
         # Filter the stimulus with each spatiotemporal filter combo
         fstim = np.empty((nt,Bt,Bx))
@@ -242,9 +247,10 @@ class SpatiotemporalStimulus:
 
         self.stim.set_value(fstim2)
 
-    def sample(self):
+    def sample(self, n=None):
         """
         return a sample of the variables
         """
+
         w_stim = self.mu + self.sigma * np.random.randn(self.n_vars)
         return w_stim

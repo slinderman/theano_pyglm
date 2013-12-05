@@ -94,9 +94,12 @@ def plot_results(network_glm, x_trues, x_inf):
         plt.plot(true_state[n]['lam'],'b')
         plt.hold(True)
         plt.plot(inf_state[n]['lam'],'r')
-
+        
         # TODO Plot the spike times
+        St = np.nonzero(network_glm.glm.S.get_value()[:,n])[0]
+        plt.plot(St,0.1*np.ones_like(St),'kx')
         plt.title('Firing rate %d' % n)
+        plt.xlim(10000,12000)
     f.savefig('firing_rate.pdf')
 
 def generate_synth_data(glm,
@@ -137,7 +140,8 @@ def generate_synth_data(glm,
 
 
     # Package data into dict
-    data = {"S": np.zeros((T_stop/dt,N)),
+    data = {"S": S,
+            "X": X,
             "N": N,
             "dt": dt,
             "T": np.float(T_stop),
@@ -191,7 +195,9 @@ if __name__ == "__main__":
     (options, args) = parse_cmd_line_args()
 
     print "Initializing GLM"
-    model = make_model('spatiotemporal_glm', N=2)
+    N=2
+#     model = make_model('spatiotemporal_glm', N=N)
+    model = make_model('standard_glm', N=N)
     glm = NetworkGlm(model)
 
     # Load data
@@ -231,7 +237,7 @@ if __name__ == "__main__":
     ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-    x_smpls = gibbs_sample(glm, x0, N_samples=100)
+    x_smpls = gibbs_sample(glm, x0, N_samples=1000)
     ll_trace = np.zeros(len(x_smpls))
     for (i,x_smpl) in enumerate(x_smpls):
         ll_trace[i] = glm.compute_log_p(x_smpl)
