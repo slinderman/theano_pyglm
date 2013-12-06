@@ -1,13 +1,15 @@
-# Run as script using 'python -m test.synth'
-from glm_shared import *
-from models.model_factory import *
-from inference.coord_descent import coord_descent
-
+# Run as script using 'python -m test.synth_map'
 import cPickle
 import scipy.io
 import numpy as np
 
-def plot_results(network_glm, x_trues, x_opts):
+from glm_shared import *
+from models.model_factory import *
+from inference.coord_descent import coord_descent
+
+from utils.theano_func_wrapper import seval
+
+def plot_results(network_glm, x_trues, x_infs):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     import matplotlib
@@ -15,7 +17,7 @@ def plot_results(network_glm, x_trues, x_opts):
     import matplotlib.pyplot as plt
 
     true_state = network_glm.get_state(x_trues)
-    opt_state = network_glm.get_state(x_opts)
+    opt_state = network_glm.get_state(x_infs)
 
     N = network_glm.N
     
@@ -129,14 +131,6 @@ def generate_synth_data(glm,
     # Simulate spikes
     S,X = glm.simulate(x_true, (T_start, T_stop), dt)
 
-    # TODO Fix this hack
-    # Put vars into a dict
-    var_dict = {}
-    var_dict['net'] = x_true[0]
-    for (n,glm_var) in enumerate(x_true[1:]):
-        var_dict['glm%d'%n] = glm_var
-
-
     # Package data into dict
     data = {"S": S,
             "X": X,
@@ -145,7 +139,7 @@ def generate_synth_data(glm,
             "T": np.float(T_stop),
             "stim": stim,
             'dt_stim': dt_stim,
-            'vars': var_dict}
+            'vars': x_true}
 
     # Save the data so we don't have to continually simulate!
     import os
@@ -195,9 +189,8 @@ if __name__ == "__main__":
     print "Initializing GLM"
     N=2
 #     model = make_model('spatiotemporal_glm', N=N)
-    model = make_model('spatiotemporal_glm', N=N)
+    model = make_model('standard_glm', N=N)
     glm = NetworkGlm(model)
-
     # Load data
     if not options.dataFile is None:
         if options.dataFile.endswith('.mat'):
@@ -215,46 +208,43 @@ if __name__ == "__main__":
     else:
         print "Generating synthetic data"
         data = generate_synth_data(glm, options.resultsDir)
-
-    # TODO Fix this hack
-    var_dict = data['vars']
-    x_true = []
-    x_true.append(var_dict['net'])
-    for n in range(len(var_dict.keys())-1):
-        x_true.append(var_dict['glm%d'%n])
+        
 
     # Initialize the GLM with the data
-    #x_true = data['vars']
+    x_true = data['vars']
     glm.set_data(data)
 
-    # Debug: Compare f_lam and np.exp(X) from sim
+    # DEBUG Compare rate from model and np.exp(X) from sim
     for n in np.arange(N):
-        if not np.allclose(glm.glm.f_lam(*([n] + x_true[0] + x_true[n+1])), 
+        syms = glm.get_variables()
+        nvars = glm.extract_vars(x_true,n)
+        if not np.allclose(seval(glm.glm.lam,
+                                 syms,
+                                 nvars),
                            np.exp(data['X'][:,n])):
             import pdb
             pdb.set_trace()
             raise Exception("Model and simulated firing rates do not match for neuron %d!" % n)
-                
-                           
+    # END DEBUG
 
     ll_true = glm.compute_log_p(x_true)
     print "true LL: %f" % ll_true
 
     # Sample random initial state
     x0 = glm.sample()
-     # DBG Set x0 to zero
-    for xi in x0:
-        for xj in xi:
-            xj *= 0
-    print x0
+    # # DBG Set x0 to zero
+    #for xi in x0:
+    #    for xj in xi:
+    #        xj *= 0
+    #print x0
 
     ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-#    x_opt = map_estimate(glm, x0)
-    x_opt = coord_descent(glm, x0)
-    ll_opt = glm.compute_log_p(x_opt)
-    
-    print "LL_opt: %f" % ll_opt
+#    x_inf = map_estimate(glm, x0)
+    x_inf = coord_descent(glm, x0)
+    ll_inf = glm.compute_log_p(x_inf)
+    print "LL_inf: %f" % ll_inf
 
-    plot_results(glm, x_true, x_opt)
+    # Plot results
+    plot_results(glm, x_true, x_inf)

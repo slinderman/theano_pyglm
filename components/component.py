@@ -2,11 +2,16 @@ class Component:
     """
     """
     
-    def __init__(self, model, vars, offset):
-        """ Initialize the component with the parameters from the given model,
-        the vector of symbolic variables, vars, and the offset into that vector, offset.
+    def __init__(self, model):
+        """ Initialize the component with the parameters from the given model.
         """
         pass
+    
+    def get_variables(self):
+        """ Get a dictionary of (name : Theano variable) items for all the
+            symbolic variables associated with this component.
+        """
+        return {}
     
     def get_state(self, vars):
         return {}

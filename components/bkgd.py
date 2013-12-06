@@ -2,12 +2,12 @@ import theano
 import theano.tensor as T
 from utils.basis import *
 
-def create_bkgd_component(model, vars, offset):
+def create_bkgd_component(model):
     type = model['bkgd']['type'].lower()
     if type == 'basis':
-        bkgd = BasisStimulus(model, vars, offset)
+        bkgd = BasisStimulus(model)
     elif type == 'spatiotemporal':
-        bkgd = SpatiotemporalStimulus(model, vars, offset)
+        bkgd = SpatiotemporalStimulus(model)
     else:
         raise Exception("Unrecognized backgound model: %s" % type)
     return bkgd
@@ -17,7 +17,7 @@ class BasisStimulus:
     """ Filter the stimulus and expose the filtered stimulus
     """
 
-    def __init__(self, model, vars, v_offset):
+    def __init__(self, model):
         """ Initialize the filtered stim model
         """
 
@@ -40,7 +40,7 @@ class BasisStimulus:
                                   value=np.zeros((1,self.n_vars)))
 
 
-        self.w_stim = vars[v_offset:v_offset+self.n_vars]
+        self.w_stim = T.dvector('w_stim')
         
         # Log probability
         self.log_p = -0.5/self.sigma**2 *T.sum((self.w_stim-self.mu)**2)
@@ -49,12 +49,17 @@ class BasisStimulus:
         self.I_stim = T.dot(self.stim,self.w_stim)
 
         # Create callable functions to compute firing rate, log likelihood, and gradients
-        self.f_I_stim  = theano.function([vars],self.I_stim)
+#         self.f_I_stim  = theano.function([vars],self.I_stim)
         
         # A function handle for the stimulus response
         stim_resp = T.dot(self.ibasis,self.w_stim)
-        self.f_stim_resp = theano.function([vars],stim_resp)
-        
+#         self.f_stim_resp = theano.function([vars],stim_resp)
+    
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.w_stim): self.w_stim}
+    
     def get_state(self, vars):
         """ Get the stimulus response
         """
@@ -105,8 +110,8 @@ class BasisStimulus:
         """
         return a sample of the variables
         """
-        w_stim = self.mu + self.sigma * np.random.randn(self.n_vars)
-        return w_stim
+        w = self.mu + self.sigma * np.random.randn(self.n_vars)
+        return {str(self.w_stim): w}
 
 
 class SpatiotemporalStimulus:
@@ -169,6 +174,12 @@ class SpatiotemporalStimulus:
         
         stim_resp_x = T.dot(self.ibasis_x,self.w_x)
         self.f_stim_resp_x = theano.function([vars],stim_resp_x)
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.w_x), self.w_x,
+                str(self.w_t), self.w_t}
 
     def get_state(self, vars):
         """ Get the stimulus response

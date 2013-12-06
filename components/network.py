@@ -29,18 +29,21 @@ class Network(Component):
 
         # Compute log probability
         self.log_p = self.graph.log_p + self.weights.log_p
-
-        # Concatenate the variables into a single list of variables
-        self.vars = self.graph.vars + self.weights.vars
         
         # Create function to evaluate W
-        self.f_A = theano.function(self.vars, self.graph.A,
-                                   on_unused_input='ignore')
-        self.f_W = theano.function(self.vars, self.weights.W,
-                                   on_unused_input='ignore')
-
-        self.f_lp = theano.function(self.vars, self.log_p,
-                                    on_unused_input='ignore')
+#         self.f_A = theano.function(self.vars, self.graph.A,
+#                                    on_unused_input='ignore')
+#         self.f_W = theano.function(self.vars, self.weights.W,
+#                                    on_unused_input='ignore')
+# 
+#         self.f_lp = theano.function(self.vars, self.log_p,
+#                                     on_unused_input='ignore')
+    
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {'graph' : self.graph.get_variables(),
+                'weights' : self.weights.get_variables()}
         
     def get_state(self, net_vars):
         """ Get the effective weights (A*W)
@@ -60,12 +63,8 @@ class Network(Component):
         """
         return a sample of the variables
         """
-        # Sample adjacency and weight matrices
-        A_vars = self.graph.sample()
-        W_vars = self.weights.sample()
-        
-        vars = A_vars + W_vars
-        return vars
+        return {'graph' : self.graph.sample(),
+                'weights' : self.weights.sample()}
     
     def gibbs_step(self, state, network_glm):
         """ Sample network given the GLM state variables.

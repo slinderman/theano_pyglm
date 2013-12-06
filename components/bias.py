@@ -1,11 +1,13 @@
 import theano
+import theano.tensor as T
 import numpy as np
+
 from component import Component
 
-def create_bias_component(model, vars, offset):
+def create_bias_component(model):
     type = model['bias']['type'].lower()
     if type == 'constant':
-        bias = ConstantBias(model, vars, offset)
+        bias = ConstantBias(model)
     else:
         raise Exception("Unrecognized bias model: %s" % type)
     return bias
@@ -14,7 +16,7 @@ class ConstantBias(Component):
     """
     """
     
-    def __init__(self, model, vars, offset):
+    def __init__(self, model):
         """ Initialize a simple scalara bias. This is only in a class
             for consistency with the other model components
         """
@@ -24,13 +26,18 @@ class ConstantBias(Component):
         self.sig_bias = prms['sigma']
 
         # Define a bias to the membrane potential
-        bias = vars[offset]
+        # TODO: Figure out if we can get around the vector requirement for grads
+        self.bias = T.dvector('bias')
 
-        self.n_vars = 1
-        self.I_bias = bias
-        self.log_p = -0.5/self.sig_bias**2 * (bias - self.mu_bias)**2
+        self.I_bias = self.bias[0]
+        self.log_p = -0.5/self.sig_bias**2 * (self.bias[0] - self.mu_bias)**2
 
-        self.f_I_bias = theano.function([vars],bias)
+#         self.f_I_bias = theano.function(self.bias,self.bias)
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.bias) : self.bias}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
@@ -41,5 +48,5 @@ class ConstantBias(Component):
         """
         return a sample of the variables
         """
-        bias = self.mu_bias + self.sig_bias * np.random.randn()
-        return bias
+        b = self.mu_bias + self.sig_bias * np.random.randn(1,)
+        return {str(self.bias) : b}
