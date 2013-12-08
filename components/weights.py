@@ -23,6 +23,9 @@ class WeightModel(Component):
     """ GraphModel extends component with graph specific functions assumed
         by the parent network.
     """
+    def get_state(self):
+        return {'W': self.W}
+    
     def sample_W(self, state, network_glm, n_pre, n_post):
         """
         Sample a specific entry in W

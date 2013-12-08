@@ -58,6 +58,39 @@ class NetworkGlm:
 
         return lp
 
+    def compute_state(self, vars):
+        """ Compute the population state variables
+        """
+        # Get set of symbolic variables
+        syms = self.get_variables()
+
+        # Get the state variables to evaluate
+        state_vars = self.get_state()
+        state = {}
+        state['net'] = self._compute_state_helper(syms['net'], 
+                                                  state_vars['net'], 
+                                                  vars['net'])
+
+        glm_states = []
+        for n in np.arange(self.N):
+            nvars = self.extract_vars(vars, n)
+            glm_states.append(self._compute_state_helper(syms,
+                                                         state_vars['glm'], 
+                                                         nvars))
+        state['glms'] = glm_states
+        return state
+
+    def _compute_state_helper(self, syms, d, vars):
+        """ Helper function to recursively evaluate state variables
+        """
+        state = {}
+        for (k,v) in d.items():
+            if isinstance(v,dict):
+                state[k] = self._compute_state_helper(syms, v, vars)
+            else:
+                state[k] = seval(v, syms, vars)
+        return state
+        
     def get_variables(self):
         """ Get a list of all variables
         """
@@ -93,16 +126,12 @@ class NetworkGlm:
                 newvals[k] = v
         return newvals
 
-    def get_state(self, vars):
-        """ Get the 'state' of the system
+    def get_state(self):
+        """ Get the 'state' of the system in symbolic Theano variables
         """
-        net_vars = vars[0]
-        glm_vars = vars[1:]
         state = {}
-        state.update(self.network.get_state(net_vars))
-
-        for n in np.arange(self.N):
-            state.update(self.glm.get_state(n, net_vars, glm_vars[n]))
+        state['net'] = self.network.get_state()
+        state['glm'] = self.glm.get_state()
 
         return state
 
@@ -330,19 +359,19 @@ class Glm:
         v['nlin'] = self.nlin_model.get_variables()
         return v
 
-    def get_state(self, n, net_vars, glm_vars):
+    def get_state(self):
         """ Get the state of this GLM
         """
         state = {}
 
         # Save the firing rate
-#         state['lam'] = self.f_lam(*([n] + net_vars + glm_vars))
-        # Get state from each component
-        state.update(self.bias_model.get_state(glm_vars))
-        state.update(self.bkgd_model.get_state(glm_vars))
-        state.update(self.imp_model.get_state(glm_vars))
-        return {n : state}
-
+        state['lam'] = self.lam
+        state['bias'] = self.bias_model.get_state()
+        state['bkgd'] = self.bkgd_model.get_state()
+        state['imp']  = self.imp_model.get_state()
+        state['nlin'] = self.nlin_model.get_state()
+        return state
+    
     #def compute_gradients(self):
     #    """ Compute gradients of this GLM's log prob wrt its variables.
     #    """

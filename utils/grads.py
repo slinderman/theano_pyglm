@@ -32,8 +32,6 @@ def hessian_wrt_list(cost, wrt_list, g_list=None):
     Compute gradient of cost wrt the variables in wrt_list.
     Return a concatenated vector of the results
     """
-    import pdb
-    pdb.set_trace()
     if wrt_list == []:
         return T.constant(0.)
     

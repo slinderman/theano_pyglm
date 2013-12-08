@@ -52,7 +52,7 @@ class BasisStimulus:
 #         self.f_I_stim  = theano.function([vars],self.I_stim)
         
         # A function handle for the stimulus response
-        stim_resp = T.dot(self.ibasis,self.w_stim)
+        self.stim_resp = T.dot(self.ibasis,self.w_stim)
 #         self.f_stim_resp = theano.function([vars],stim_resp)
     
     def get_variables(self):
@@ -60,10 +60,10 @@ class BasisStimulus:
         """
         return {str(self.w_stim): self.w_stim}
     
-    def get_state(self, vars):
+    def get_state(self):
         """ Get the stimulus response
         """
-        return {'stim' : self.f_stim_resp(*vars)}
+        return {'stim_response' : self.stim_resp}
         
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

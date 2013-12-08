@@ -22,6 +22,9 @@ class GraphModel(Component):
     """ GraphModel extends component with graph specific functions assumed
         by the parent network.
     """
+    def get_state(self):
+        return {'A': self.A}
+    
     def sample_A(self, state, network_glm, n_pre, n_post):
         """
         Sample a specific entry in A
@@ -47,7 +50,7 @@ class CompleteGraphModel(GraphModel):
         # Define log probability
         self.log_p = T.constant(0.0)
         self.vars = []
-
+        
     def sample_A(self, state, network_glm, n_pre, n_post):
         """
         Sample a specific entry in A

@@ -44,6 +44,9 @@ class ConstantBias(Component):
         """
         pass
 
+    def get_state(self):
+        return {'bias': self.bias}
+    
     def sample(self):
         """
         return a sample of the variables

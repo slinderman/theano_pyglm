@@ -45,13 +45,12 @@ class Network(Component):
         return {'graph' : self.graph.get_variables(),
                 'weights' : self.weights.get_variables()}
         
-    def get_state(self, net_vars):
+    def get_state(self):
         """ Get the effective weights (A*W)
         """
-        W = self.f_W(*net_vars)
-        A = self.f_A(*net_vars)
-        
-        return {'net' : A*W}
+        state = {'graph' : self.graph.get_state(),
+                 'weights' : self.weights.get_state()}
+        return state
     
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

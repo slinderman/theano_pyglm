@@ -16,16 +16,19 @@ def plot_results(network_glm, x_trues, x_infs):
     matplotlib.use('Agg')       # To enable saving remotely
     import matplotlib.pyplot as plt
 
-    true_state = network_glm.get_state(x_trues)
-    opt_state = network_glm.get_state(x_infs)
+    # Get the state associated with the inferred parameters
+    import pdb
+    pdb.set_trace()
+    true_state = network_glm.compute_state(x_trues)
+    opt_state = network_glm.compute_state(x_infs)
 
     N = network_glm.N
     
     # Plot the inferred connectivity matrix
     f = plt.figure()
     plt.subplot(1,2,1)
-    W_true = true_state['net']
-    W_inf = opt_state['net']
+    W_true = true_state['net']['weights']['W'] * true_state['net']['graph']['A']
+    W_inf = opt_state['net']['weights']['W'] * opt_state['net']['graph']['A']
     W_max = np.amax(np.maximum(np.abs(W_true),np.abs(W_inf)))
     px_per_node = 10
     plt.imshow(np.kron(W_true,np.ones((px_per_node,px_per_node))),
@@ -48,36 +51,49 @@ def plot_results(network_glm, x_trues, x_infs):
     # Plot the stimulus tuning curve
     for n in np.arange(N):
         f = plt.figure()
-        if 'stim_t' in true_state[n].keys() and \
-            'stim_x' in true_state[n].keys():
+        true_state_n = true_state['glms'][n]
+        opt_state_n = opt_state['glms'][n]
+        if 'stim_response_t' in true_state_n['bkgd'].keys() and \
+            'stim_responsex' in true_state_n['bkgd'].keys():
+            # Get the stimulus responses
+            true_stim_x = true_state_n['bkgd']['stim_response_x']
+            true_stim_t = true_state_n['bkgd']['stim_response_t']
+            opt_stim_x = opt_state_n['bkgd']['stim_response_x']
+            opt_stim_t = opt_state_n['bkgd']['stim_response_t']
+            
             plt.subplot(1,2,1)
-            plt.plot(true_state[n]['stim_x'],'b')
+            plt.plot(true_stim_x,'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim_x'],'--r')
+            plt.plot(opt_stim_x,'--r')
             plt.title('GLM[%d]: Spatial stimulus filter' % n)
 
             plt.subplot(1,2,2)
-            plt.plot(true_state[n]['stim_t'],'b')
+            plt.plot(true_stim_t,'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim_t'],'--r')
+            plt.plot(opt_stim_t,'--r')
             plt.title('GLM[%d]: Temporal stimulus filter' % n)
-        elif 'stim' in true_state[n].keys():
-            plt.plot(true_state[n]['stim'],'b')
+        elif 'stim_response' in true_state_n['bkgd'].keys():
+            true_stim_t = true_state_n['bkgd']['stim_response']
+            opt_stim_t = opt_state_n['bkgd']['stim_response']
+            plt.plot(true_stim_t,'b')
             plt.hold(True)
-            plt.plot(opt_state[n]['stim'],'--r')
+            plt.plot(opt_stim_t,'--r')
             plt.title('GLM[%d]: stimulus filter' % n)
         f.savefig('stim_resp_%d.pdf' % n)
 
     # Plot the impulse responses
-    W_true = true_state['net']
-    W_opt = opt_state['net']
     f = plt.figure()
-    for n_pre in np.arange(N):
-        for n_post in np.arange(N):
+    for n_post in np.arange(N):
+        true_state_n = true_state['glms'][n_post]
+        opt_state_n = opt_state['glms'][n_post]
+        
+        true_imp = true_state_n['imp']['impulse']
+        opt_imp = opt_state_n['imp']['impulse']
+        for n_pre in np.arange(N):
             plt.subplot(N,N,n_pre*N+n_post + 1)
-            plt.plot(W_true[n_pre,n_post]*true_state[n_post]['ir'][n_pre,:],'b')
+            plt.plot(W_true[n_pre,n_post]*true_imp[n_pre,:],'b')
             plt.hold(True)
-            plt.plot(W_opt[n_pre,n_post]*opt_state[n_post]['ir'][n_pre,:],'r')
+            plt.plot(W_inf[n_pre,n_post]*opt_imp[n_pre,:],'r')
             #plt.title('Imp Response %d->%d' % (n_pre,n_post))
             plt.xlabel("")
             plt.ylabel("")
@@ -87,12 +103,15 @@ def plot_results(network_glm, x_trues, x_infs):
     # Infer the firing rates
     f = plt.figure()
     for n in np.arange(N):
+        true_state_n = true_state['glms'][n]
+        opt_state_n = opt_state['glms'][n]
+        
         plt.subplot(1,N,n+1)
-        plt.plot(true_state[n]['lam'],'b')
+        plt.plot(true_state_n['lam'],'b')
         plt.hold(True)
-        plt.plot(opt_state[n]['lam'],'r')
+        plt.plot(opt_state_n['lam'],'r')
 
-        # TODO Plot the spike times
+        # Plot the spike times
         St = np.nonzero(network_glm.glm.S.get_value()[:,n])[0]
         plt.plot(St,0.1*np.ones_like(St),'kx')
         plt.title('Firing rate %d' % n)
@@ -115,7 +134,7 @@ def generate_synth_data(glm,
 
     # Sample random parameters from the model
     x_true = glm.sample()
-
+    
     # Generate random stimulus
     stim = np.random.randn(T_stop/dt_stim,D_stim)
 

@@ -34,34 +34,13 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
     if x0 is None:
         x0 = network_glm.sample()
 
-    # TODO Check whether the number of network variables is greater than zero,
-    #      and, if so, fit the network
-    #fit_network = (not network.vars == [])
+    # TODO Remove this temporary hack 
     fit_network = False
 
     # Compute the log prob, gradient, and Hessian wrt to the network
     if fit_network:
-        # If the network is deterministic then there are no params to optimize
-        # Otherwise compute the joint log probability
-
-        # Compute the prior
-        #net_prior = theano.function(network.vars, network.log_p)
-        ## Compute the gradient of the joint log prob wrt the network
-        #g_prior, g_list = grad_wrt_list(network.log_p, network.vars)
-        #net_g_prior = theano.function(network.vars, g_prior)
-        ## Compute the Hessian of the joint log prob wrt the network
-        #H_prior = hessian_wrt_list(network.log_p, network.vars, g_list)
-        #net_H_prior = theano.function(network.vars, H_prior)
-        #
-        #all_vars = [network_glm.glm.n] + network.vars + [network_glm.glm.vars]
-        #net_lp = theano.function(all_vars, network_glm.glm.log_p)
-        ## Compute the gradient of the joint log prob wrt the network
-        #g, g_list = grad_wrt_list(network_glm.glm.log_p, network.vars)
-        #net_g = theano.function(all_vars, g)
-        ## Compute the Hessian of the joint log prob wrt the network
-        #H = hessian_wrt_list(network_glm.glm.log_p, network.vars, g_list)
-        #net_H = theano.function(all_vars, H)
-
+        # TODO Determine the differentiable network parameters in the same way
+        # we do for the GLM parameters
         print "Computing log probabilities, gradients, and Hessians for network variables"
         net_prior = network.log_p
         g_net_prior = grad_wrt_list(net_prior, syms['net'])
@@ -78,7 +57,7 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
             """ Compute the negative log probability (or gradients and Hessians thereof)
             of the given network variables
             """
-            x_net = pack(x_net_vec, net_shapes)
+            x_net = unpack(x_net_vec, net_shapes)
             lp = seval(net_expr,
                        syms['net'],
                        x_net)
@@ -99,39 +78,22 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
 
     # Compute gradients of the log prob wrt the GLM parameters
     print "Computing log probabilities, gradients, and Hessians for GLM variables"
-    import pdb
-    pdb.set_trace()
     glm_syms = differentiable(syms['glm'])
     glm_logp = glm.log_p
     g_glm_logp_wrt_glm, g_list = grad_wrt_list(glm_logp, _flatten(glm_syms))
-
-    ## DEBUG
-    #g = T.grad(glm.log_p,_flatten(syms['glm']['imp']))
-    #
-    #xx = _flatten(syms['glm']['imp'])
-    #H = T.hessian(glm.log_p,xx)
-    ##H =  T.grad(g[0],_flatten(syms['glm']['imp']['ir0']))
-    #theano.scan(lambda i, gy, x: T.grad(gy[i], x),
-    #            sequences=T.arange(g[0].shape[0]),
-    #            non_sequences=[g[0], _flatten(syms['glm']['imp'])])
-    ## END DEBUG
-
     H_glm_logp_wrt_glm = hessian_wrt_list(glm_logp, _flatten(glm_syms), g_list)
+
+    # Alternatively, we could just use an Rop to compute Hessian-vector prods
     #v = T.dvector()
     #H_glm_logp_wrt_glm = hessian_rop_wrt_list(glm_logp,
     #                                          _flatten(glm_syms),
     #                                          v,
     #                                          g_vec=g_glm_logp_wrt_glm)
 
-    # Augment the syms with v
-    #symsH = copy.deepcopy(syms)
-    #symsH['v'] = v
-    # Test
+    # TODO: Replace this with a function that just gets the shapes?
     nvars = network_glm.extract_vars(x0, 0)
-    print seval(H_glm_logp_wrt_glm, syms, nvars)
-
-    # TODO Replace this hack with a function that evaluates shapes
-    _,glm_shapes = pack(_flatten(x0['glms'][0]))
+    dnvars = get_vars(glm_syms, nvars['glm'])
+    _,glm_shapes = packdict(dnvars)
 
     # Private function to compute the log probability (or grads and Hessians thereof)
     # of the log probability given new network variables
@@ -139,11 +101,12 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
         """ Compute the negative log probability (or gradients and Hessians thereof)
         of the given glm variables
         """
-        x_glm = pack(x_glm_vec, glm_shapes)
-        x['glm'] = x_glm
+        x_glm = unpackdict(x_glm_vec, glm_shapes)
+        #x['glm'] = x_glm
+        set_vars(glm_syms, x['glm'], x_glm)
         lp = seval(glm_expr,
-                   syms,
-                   x)
+                    syms,
+                    x)
         return -1.0*lp
 
     # Alternate fitting the network and fitting the GLMs
@@ -157,26 +120,8 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
         print "Coordinate descent iteration %d." % iter
         if fit_network:
             # Fit the network
-            x_net_0, shapes = pack(_flatten(x['net']))
-            #x_glms = x[1:]
-            #nll = lambda x_net: -1.0 * reduce(lambda lp_acc,n: lp_acc +
-            #                                                   net_lp(*([n] +
-            #                                                            unpack(x_net,shapes) +
-            #                                                            x_glms[n])),
-            #                                  np.arange(N),
-            #                                  net_prior(x_net))
-            #grad_nll = lambda x_net: -1.0 * reduce(lambda g_acc,n: g_acc +
-            #                                                       net_g(*([n] +
-            #                                                               unpack(x_net,shapes) +
-            #                                                               x_glms[n])),
-            #                                       np.arange(N),
-            #                                       net_g_prior(x_net))
-            #hess_nll = lambda x_net: -1.0 * reduce(lambda H_acc,n: H_acc +
-            #                                                       net_H(*([n] +
-            #                                                               unpack(x_net,shapes) +
-            #                                                               x_glms[n])),
-            #                                       np.arange(N),
-            #                                       net_H_prior(x_net))
+            x_net_0, shapes = packdict(x['net'])
+
             nll = lambda x_net_vec: net_helper(x_net_vec, x, net_prior, glm_logp)
             grad_nll = lambda x_net_vec: net_helper(x_net_vec, x, g_net_prior, g_glm_logp_wrt_net)
             hess_nll = lambda x_net_vec: net_helper(x_net_vec, x, H_net_prior, H_glm_logp_wrt_net)
@@ -185,41 +130,41 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
                                      fprime=grad_nll,
                                      fhess=hess_nll,
                                      disp=True)
-            x['net'] = unpack(x_net_opt, shapes)
+            x['net'] = unpackdict(x_net_opt, shapes)
 
         # Fit the GLMs.
         # TODO Parallelize this!
         for n in np.arange(N):
-            #x_net = x['net']
-            #x_glm_0, shapes = pack(x[n + 1])
-            #nll = lambda xn: -1.0 * network_glm.glm.f_lp(*([n] + x_net + unpack(xn, shapes)))
-            #grad_nll = lambda xn: -1.0 * network_glm.glm.g_lp(*([n] + x_net + unpack(xn, shapes)))
-            #hess_nll = lambda xn: -1.0 * network_glm.glm.H_lp(*([n] + x_net + unpack(xn, shapes)))
-
+            # Get the differentiable variables for the n-th GLM
             nvars = network_glm.extract_vars(x, n)
-            x_glm_0, shapes = pack(_flatten(nvars['glm']))
+            dnvars = get_vars(glm_syms, nvars['glm'])
+            x_glm_0, shapes = packdict(dnvars)
 
-            #try:
+            # Create lambda functions to compute the nll and its gradient and Hessian
+            nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, glm_logp)
+            grad_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, g_glm_logp_wrt_glm)
+            hess_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, H_glm_logp_wrt_glm)
+
             xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                   fprime=grad_nll,
                                   fhess=hess_nll,
                                   disp=True)
-            #except Exception as e:
-            #    import pdb
-            #    pdb.set_trace()
-            #    raise e
-            #x[n + 1] = unpack(xn_opt, shapes)
-            x['glms'][n] = unpack(xn_opt, shapes)
 
-        diffs = np.zeros(len(x))
-        for i in range(len(x)):
-            xi, _ = pack(x[i])
-            xip, _ = pack(x_prev[i])
-            if len(xi) == 0:
-                dxi = 0.0
-            else:
-                dxi = np.mean((xi - xip) ** 2)
-            diffs[i] = dxi
+            x_glm_n = unpackdict(xn_opt, shapes)
+            set_vars(glm_syms, x['glms'][n], x_glm_n)
+            
+        diffs = np.zeros(N)
+        for n in np.arange(N):
+            nvars = network_glm.extract_vars(x, n)
+            dnvars = get_vars(glm_syms, nvars['glm'])
+            xn_curr, shapes = packdict(dnvars)
+
+            nvars = network_glm.extract_vars(x_prev, n)
+            dnvars = get_vars(glm_syms, nvars['glm'])
+            xn_prev, shapes = packdict(dnvars)
+            
+            
+            diffs[n] = np.mean((xn_curr - xn_prev) ** 2)
         maxdiff = np.max(diffs)
 
         print diffs

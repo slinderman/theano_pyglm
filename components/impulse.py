@@ -62,13 +62,10 @@ class LinearBasisImpulses(Component):
         w = self.mu + self.sigma*np.random.randn(self.N*self.B)
         return {str(self.w_ir): w}
 
-    def get_state(self, vars):
+    def get_state(self):
         """ Get the impulse responses
         """
-        imps = map(lambda im: im.f_impulse(*vars), self.imp_models)
-        imps = np.array(imps)
-        return {'w_ir' : imps}
-
+        return {'impulse' : self.impulse}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

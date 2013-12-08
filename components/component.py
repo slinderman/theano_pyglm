@@ -13,7 +13,7 @@ class Component:
         """
         return {}
     
-    def get_state(self, vars):
+    def get_state(self):
         return {}
 
     def set_data(self, data):
