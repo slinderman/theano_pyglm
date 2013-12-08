@@ -231,6 +231,43 @@ def convolve_with_basis(stim, basis):
     
     return fstim
 
+def convolve_with_low_rank_2d_basis(stim, basis_x, basis_t):
+    """ Convolution with a low-rank 2D basis can be performed 
+        by first convolving with the spatial basis (basis_x) 
+        and then convolving with the temporal basis (basis_t)
+    """
+    (T,D) = stim.shape
+    (Rx,Bx) = basis_x.shape
+    (Rt,Bt) = basis_t.shape
+
+    # Rx is the spatial "width" of the tuning curve. This should
+    # be equal to the "width" of the stimulus.
+    assert Rx==D, "ERROR: Spatial basis must be the same size as the stimulus"
+
+    import scipy.signal as sig
+    
+    # First convolve with each stimulus filter
+    # Since the spatial stimulus filters are the same width as the spatial
+    # stimulus, we can just take the dot product to get the valid portion
+    fstimx = np.dot(stim, basis_x)
+
+    # Now convolve with the temporal basis.  
+    # By convention, the impulse responses are apply to times
+    # (t-R:t-1). That means we need to prepend a row of zeros to make
+    # sure the basis remains causal
+    basis_t = np.vstack((np.zeros((1,Bt)),basis_t))
+
+    # Initialize array for the completely filtered stimulus
+    fstim = np.empty((T,Bx,Bt))
+    
+    # Compute convolutions of the TxBx fstimx with each of the temporal bases
+    for b in np.arange(Bt):
+        fstim[:,:,b] = sig.fftconvolve(fstimx, 
+                                       np.reshape(basis_t[:,b],[Rt+1,1]), 
+                                       'full')[:T,:]
+    
+    return fstim
+
 _fft_cache = []
 
 def convolve_with_2d_basis(stim, basis):

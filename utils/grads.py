@@ -15,7 +15,7 @@ def grad_wrt_list(cost, wrt_list):
         return T.constant(0.),[]
 
     g_list = T.grad(cost, wrt_list)
-    
+
     for (n,g) in enumerate(g_list):
         if g.ndim < 1:
             g_list[n] = T.shape_padright(g, n_ones=1)
@@ -42,6 +42,12 @@ def hessian_wrt_list(cost, wrt_list, g_list=None):
     for gv1 in g_list:
         H_v1 = []
         for v2 in wrt_list:
+            # Ensure v2 is a vector
+            if v2.ndim < 1:
+                v2 = T.shape_padright(v2, n_ones=1)
+            elif v2.ndim > 1:
+                v2 = T.flatten(v2)
+            
             # Compute dgv1/dv2
             H_v1v2,_ = theano.scan(lambda i, gy, x: T.grad(gy[i], x),
                                    sequences=T.arange(gv1.shape[0]),

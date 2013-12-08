@@ -14,16 +14,28 @@ from utils.packvec import *
 from utils.grads import *
 from components.graph import CompleteGraphModel
 
-def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
+def coord_descent(network_glm, 
+                  x0=None, 
+                  maxiter=50, 
+                  atol=1e-5,
+                  use_hessian=False,
+                  use_rop=False):
     """
     Compute the maximum a posterior parameter estimate using Theano to compute
     gradients of the log probability.
     """
+    import pdb
+    pdb.set_trace()
+    
     N = network_glm.model['N']
     network = network_glm.network
     glm = network_glm.glm
     syms = network_glm.get_variables()
 
+    # Parameter checking
+    # We only use Rops if use_hessian is False
+    use_rop = use_rop and not use_hessian
+    
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
     if not isinstance(network.graph, CompleteGraphModel):
@@ -81,14 +93,16 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
     glm_syms = differentiable(syms['glm'])
     glm_logp = glm.log_p
     g_glm_logp_wrt_glm, g_list = grad_wrt_list(glm_logp, _flatten(glm_syms))
-    H_glm_logp_wrt_glm = hessian_wrt_list(glm_logp, _flatten(glm_syms), g_list)
+    if not use_rop:
+        H_glm_logp_wrt_glm = hessian_wrt_list(glm_logp, _flatten(glm_syms), g_list)
 
-    # Alternatively, we could just use an Rop to compute Hessian-vector prods
-    #v = T.dvector()
-    #H_glm_logp_wrt_glm = hessian_rop_wrt_list(glm_logp,
-    #                                          _flatten(glm_syms),
-    #                                          v,
-    #                                          g_vec=g_glm_logp_wrt_glm)
+    else:
+        # Alternatively, we could just use an Rop to compute Hessian-vector prod       
+        v = T.dvector()
+        H_glm_logp_wrt_glm = hessian_rop_wrt_list(glm_logp,
+                                                  _flatten(glm_syms),
+                                                  v,
+                                                  g_vec=g_glm_logp_wrt_glm)
 
     # TODO: Replace this with a function that just gets the shapes?
     nvars = network_glm.extract_vars(x0, 0)
@@ -109,6 +123,24 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
                     x)
         return -1.0*lp
 
+    if use_rop:
+        rop_syms = copy.copy(syms)
+        rop_syms['v'] = v
+        def glm_rop_helper(x_glm_vec, v_vec, x, glm_expr):
+            """ Compute the Hessian vector product for the GLM
+            """
+            import pdb
+            pdb.set_trace()
+            x_glm = unpackdict(x_glm_vec, glm_shapes)
+            #x['glm'] = x_glm
+            set_vars(glm_syms, x['glm'], x_glm)
+            defaults = {'v' : v_vec}
+            Hv = seval(glm_expr,
+                       rop_syms,
+                       x,
+                       defaults)
+            return -1.0*Hv
+    
     # Alternate fitting the network and fitting the GLMs
     x = x0
     x_prev = copy.deepcopy(x0)
@@ -143,13 +175,33 @@ def coord_descent(network_glm, x0=None, maxiter=50, atol=1e-5):
             # Create lambda functions to compute the nll and its gradient and Hessian
             nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, glm_logp)
             grad_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, g_glm_logp_wrt_glm)
-            hess_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, H_glm_logp_wrt_glm)
+            if use_hessian:
+                hess_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, H_glm_logp_wrt_glm)
+            elif use_rop:
+                hess_nll = lambda x_glm_vec, v_vec: glm_rop_helper(x_glm_vec, v_vec, nvars, H_glm_logp_wrt_glm)
 
-            xn_opt = opt.fmin_ncg(nll, x_glm_0,
+            # Callback to print progress
+            def progress_report(x_curr):
+                ll = -1.0*nll(x_curr)
+                print "Iter %d.\tNeuron %d. LL: %.1f" % (iter,n,ll) 
+                
+            if use_hessian:
+                xn_opt = opt.fmin_ncg(nll, x_glm_0,
+                                      fprime=grad_nll,
+                                      fhess=hess_nll,
+                                      disp=True,
+                                      callback=progress_report)
+            elif use_rop:
+                xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                   fprime=grad_nll,
-                                  fhess=hess_nll,
-                                  disp=True)
-
+                                  fhess_p=hess_nll,
+                                  disp=True,
+                                  callback=progress_report)
+            else:
+                xn_opt = opt.fmin_ncg(nll, x_glm_0,
+                                  fprime=grad_nll,
+                                  disp=True,
+                                  callback=progress_report)
             x_glm_n = unpackdict(xn_opt, shapes)
             set_vars(glm_syms, x['glms'][n], x_glm_n)
             

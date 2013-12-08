@@ -120,7 +120,7 @@ class SpatiotemporalStimulus:
 
     """
 
-    def __init__(self, model, vars, v_offset):
+    def __init__(self, model):
         """ Initialize the filtered stim model
         """
 
@@ -135,6 +135,10 @@ class SpatiotemporalStimulus:
         self.temporal_basis = create_basis(self.prms['temporal_basis'])
         (_,Bt) = self.temporal_basis.shape
 
+        # Save the filter sizes
+        self.Bx = Bx
+        self.Bt = Bt
+
         # The basis is interpolated once the data is specified
         self.ibasis_x = theano.shared(value=np.zeros((2,Bx)))
         self.ibasis_t = theano.shared(value=np.zeros((2,Bt)))
@@ -147,15 +151,16 @@ class SpatiotemporalStimulus:
                                   value=np.zeros((1,Bx*Bt)))
 
         # Get the two factors of the stimulus response
-        self.w_x = vars[v_offset:v_offset+Bx]
-        v_offset += Bx
-        self.w_t = vars[v_offset:v_offset+Bt]
-        # Compute the number of parameters
-        self.n_vars = Bx+Bt
+        self.w_x = T.dvector('w_x')
+        self.w_t = T.dvector('w_t')
 
         # The weights are an outer product of the two factors
         w_op = T.dot(T.shape_padright(self.w_t, n_ones=1),
                      T.shape_padleft(self.w_x, n_ones=1))
+        # w_op = T.dot(self.w_x, T.transpose(self.w_t))
+
+        # Flatten the outer product to get a combined weight for each
+        # pair of spatial and temporal basis functions.
         self.w_stim = T.reshape(w_op, (Bt*Bx,))
 
         # Log probability
@@ -165,22 +170,27 @@ class SpatiotemporalStimulus:
         # Expose outputs to the Glm class
         self.I_stim = T.dot(self.stim, self.w_stim)
 
-        # Create callable functions to compute firing rate, log likelihood, and gradients
-        self.f_I_stim  = theano.function([vars],self.I_stim)
 
         # Create function handles for the stimulus responses
-        stim_resp_t = T.dot(self.ibasis_t,self.w_t)
-        self.f_stim_resp_t = theano.function([vars],stim_resp_t)
-        
-        stim_resp_x = T.dot(self.ibasis_x,self.w_x)
-        self.f_stim_resp_x = theano.function([vars],stim_resp_x)
+        self.stim_resp_t = T.dot(self.ibasis_t,self.w_t)        
+        self.stim_resp_x = T.dot(self.ibasis_x,self.w_x)
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
         """
-        return {str(self.w_x), self.w_x,
-                str(self.w_t), self.w_t}
+        return {str(self.w_x): self.w_x,
+                str(self.w_t): self.w_t}
+    
+    def sample(self, n=None):
+        """
+        return a sample of the variables
+        """
 
+        w_x = self.mu + self.sigma * np.random.randn(self.Bx)
+        w_t = self.mu + self.sigma * np.random.randn(self.Bt)
+        return {str(self.w_x) : w_x,
+                str(self.w_t) : w_t}
+    
     def get_state(self, vars):
         """ Get the stimulus response
         """
@@ -188,11 +198,9 @@ class SpatiotemporalStimulus:
         # temporal and the spatial filters and get the same net effect.
         # By convention, choose the sign that results in the most
         # positive temporal filter.
-        stim_t = self.f_stim_resp_t(*vars)
-        stim_x = self.f_stim_resp_x(*vars)
-        sign = np.sign(np.sum(stim_t))
-        return {'stim_x' : sign*stim_x,
-                'stim_t' : sign*stim_t}
+        sign = T.sgn(T.sum(self.stim_resp_t))
+        return {'stim_response_x' : sign*self.stim_resp_x,
+                'stim_response_t' : sign*self.stim_resp_t}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
@@ -245,23 +253,24 @@ class SpatiotemporalStimulus:
         (_,Bx) = ibasis_x.shape
 
         # Filter the stimulus with each spatiotemporal filter combo
-        fstim = np.empty((nt,Bt,Bx))
-        for bt in np.arange(Bt):
-            for bx in np.arange(Bx):
-                # atleast_2d gives row vectors
-                bas = np.dot(np.atleast_2d(ibasis_t[:,bt]).T,
-                             np.atleast_2d(ibasis_x[:,bx]))
-                fstim[:,bt,bx] = convolve_with_2d_basis(stim, bas)
-                
-        # Flatten the filtered stimulus
+        # fstim = np.empty((nt,Bt,Bx))
+        # for bt in np.arange(Bt):
+        #     for bx in np.arange(Bx):
+        #         # atleast_2d gives row vectors
+        #         bas = np.dot(np.atleast_2d(ibasis_t[:,bt]).T,
+        #                      np.atleast_2d(ibasis_x[:,bx]))
+        #         fstim[:,bt,bx] = convolve_with_2d_basis(stim, bas)
+
+        # Leverage low rank to speed up convolutions
+        print "Convolving the stimulus with the low rank filters"
+        fstim = convolve_with_low_rank_2d_basis(stim, ibasis_x, ibasis_t)
+
+        # Permute output to get shape(T,Bt,Bx)
+        assert fstim.shape == (nt,Bx,Bt)
+        fstim = np.transpose(fstim, axes=[0,2,1])
+        
+        # Flatten the filtered stimulus 
         fstim2 = np.reshape(fstim,(nt,Bt*Bx))
 
         self.stim.set_value(fstim2)
 
-    def sample(self, n=None):
-        """
-        return a sample of the variables
-        """
-
-        w_stim = self.mu + self.sigma * np.random.randn(self.n_vars)
-        return w_stim

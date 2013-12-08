@@ -95,8 +95,8 @@ if __name__ == "__main__":
 
     print "Initializing GLM"
     N=2
-#     model = make_model('spatiotemporal_glm', N=N)
-    model = make_model('standard_glm', N=N)
+    model = make_model('spatiotemporal_glm', N=N)
+    # model = make_model('standard_glm', N=N)
     glm = NetworkGlm(model)
     # Load data
     if not options.dataFile is None:
@@ -114,7 +114,8 @@ if __name__ == "__main__":
 
     else:
         print "Generating synthetic data"
-        data = generate_synth_data(glm, options.resultsDir)
+        data = generate_synth_data(glm, options.resultsDir,
+                                   T_stop=120)
         
 
     # Initialize the GLM with the data
