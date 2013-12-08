@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 import cPickle
 
-def plot_results(network_glm, x_inf, resdir=None):
+def plot_results(network_glm, x_inf, x_true=None, resdir=None):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     if not resdir:
@@ -19,72 +19,136 @@ def plot_results(network_glm, x_inf, resdir=None):
     import matplotlib.cm as cm
     cmap = cm.get_cmap('RdGy')
 
-    inf_state = network_glm.get_state(x_inf)
+    true_given = x_true is not None
+    if true_given:
+        true_state = network_glm.compute_state(x_true)
+    opt_state = network_glm.compute_state(x_inf)
 
     N = network_glm.N
-
+    
     # Plot the inferred connectivity matrix
     f = plt.figure()
-    W_inf = inf_state['net']
-    W_max = np.amax(np.abs(W_inf))
+    W_inf = opt_state['net']['weights']['W'] * opt_state['net']['graph']['A']
+    
+    if true_given:
+        plt.subplot(1,2,1)
+        W_true = true_state['net']['weights']['W'] * true_state['net']['graph']['A']
+        W_max = np.amax(np.maximum(np.abs(W_true),np.abs(W_inf)))
+    else:
+        W_max = np.amax(np.abs(W_inf))
+        
     px_per_node = 10
+
+    if true_given:
+        plt.imshow(np.kron(W_true,np.ones((px_per_node,px_per_node))),
+                   vmin=-W_max,vmax=W_max,
+                   extent=[0,1,0,1],
+                   interpolation='nearest')
+        plt.colorbar()
+        plt.title('True Network')
+        plt.subplot(1,2,2)
+
+    # Plot the inferred network
     plt.imshow(np.kron(W_inf,np.ones((px_per_node,px_per_node))),
                vmin=-W_max,vmax=W_max,
                extent=[0,1,0,1],
-               cmap=cmap,
                interpolation='nearest')
     plt.colorbar()
     plt.title('Inferred Network')
-
     f.savefig(os.path.join(resdir,'conn.pdf'))
 
     # Plot the stimulus tuning curve
     for n in np.arange(N):
         f = plt.figure()
-        if 'stim_t' in inf_state[n].keys() and \
-            'stim_x' in inf_state[n].keys():
-            plt.subplot(1,2,1)
+        opt_state_n = opt_state['glms'][n]
+        if true_given:
+            true_state_n = true_state['glms'][n]
+        if 'stim_response_t' in opt_state_n['bkgd'].keys() and \
+            'stim_responsex' in opt_state_n['bkgd'].keys():
+            
+            # Get the stimulus responses
+            opt_stim_x = opt_state_n['bkgd']['stim_response_x']
+            opt_stim_t = opt_state_n['bkgd']['stim_response_t']
+            if true_given:
+                true_stim_x = true_state_n['bkgd']['stim_response_x']
+                true_stim_t = true_state_n['bkgd']['stim_response_t']
 
-            # Spatial tuning curve is 2D
-            stim_x = np.reshape(inf_state[n]['stim_x'],[10,10])
-            plt.imshow(np.kron(stim_x,np.ones((px_per_node,px_per_node))),
-                       extent=[0,10,0,10],
-                       interpolation='nearest')
-            plt.colorbar()
+            plt.subplot(1,2,1)
+            plt.plot(opt_stim_x,'--r')
+            plt.hold(True)
+            if true_state:
+                plt.plot(true_stim_x,'b')
             plt.title('GLM[%d]: Spatial stimulus filter' % n)
 
             plt.subplot(1,2,2)
-            plt.plot(inf_state[n]['stim_t'],'--r')
+            plt.plot(opt_stim_t,'--r')
+            plt.hold(True)
+            if true_given: 
+                plt.plot(true_stim_t,'b')
             plt.title('GLM[%d]: Temporal stimulus filter' % n)
-        elif 'stim' in inf_state[n].keys():
-            plt.plot(inf_state[n]['stim'],'--r')
+        elif 'stim_response' in true_state_n['bkgd'].keys():
+            opt_stim_t = opt_state_n['bkgd']['stim_response']
+            plt.plot(opt_stim_t,'--r')
+            plt.hold(True)
+            if true_given:
+                true_stim_t = true_state_n['bkgd']['stim_response']
+                plt.plot(true_stim_t,'b')
             plt.title('GLM[%d]: stimulus filter' % n)
         f.savefig(os.path.join(resdir,'stim_resp_%d.pdf' % n))
 
     # Plot the impulse responses
-    imps = []
-    W_inf = inf_state['net']
+    true_imps = []
+    opt_imps = []
     f = plt.figure()
-    for n_pre in np.arange(N):
-        imp_row = []
-        for n_post in np.arange(N):
-            imp_row.append(W_inf[n_pre,n_post]*inf_state[n_post]['ir'][n_pre,:])
-        imps.append(imp_row)
-    imps = np.array(imps)
+    for n_post in np.arange(N):
+        true_imp_row = []
+        opt_imp_row = []
+        
+        opt_state_n = opt_state['glms'][n_post]
+        opt_imp = opt_state_n['imp']['impulse']
+        if true_given:
+            true_state_n = true_state['glms'][n_post]
+            true_imp = true_state_n['imp']['impulse']
+        
+        for n_pre in np.arange(N):
+            opt_imp_row.append(W_inf[n_pre,n_post]*opt_imp[n_pre,:])
+            if true_given:
+                true_imp_row.append(W_true[n_pre,n_post]*true_imp[n_pre,:])
+        
+        opt_imps.append(opt_imp_row)
+        if true_given:
+            true_imps.append(true_imp_row)
+    opt_imps = np.array(opt_imps)
+    if true_given:
+        true_imps = np.array(true_imps)
 
-    imp_max = np.amax(np.abs(imps))
-    W_imp = np.sum(imps,2)
-    W_imp_max = np.amax(W_imp)
+
+    if true_given:
+        imp_max = np.amax(np.maximum(np.abs(opt_imps), np.abs(true_imps)))
+    else:
+        imp_max = np.amax(np.abs(opt_imps))
+        
+    W_opt_imp = np.sum(opt_imps,2)
+    if true_given:
+        W_true_imp = np.sum(true_imps,2)
+        W_imp_max = np.amax(np.maximum(W_opt_imp, W_true_imp))
+    else:
+        W_imp_max = np.amax(W_opt_imp)
     for n_pre in np.arange(N):
         for n_post in np.arange(N):
             # Set background color based on weight of impulse
-            color = cmap((W_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
+            color = cmap((W_opt_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
             # Set it slightly transparent
             tcolor = list(color)
             tcolor[3] = 0.5
             tcolor = tuple(tcolor)
             plt.subplot(N,N,n_pre*N+n_post + 1, axisbg=tcolor)
-            plt.plot(np.squeeze(imps[n_pre,n_post,:]),'k')
+
+            # Plot the inferred impulse response
+            plt.plot(np.squeeze(opt_imps[n_pre,n_post,:]),'--k')
+            if true_given:
+                plt.plot(np.squeeze(true_imps[n_pre,n_post,:]),'k')
+            
             plt.xlabel("")
             plt.xticks([])
             plt.yticks([])
@@ -96,9 +160,16 @@ def plot_results(network_glm, x_inf, resdir=None):
     # Infer the firing rates
 
     for n in np.arange(N):
+        opt_state_n = opt_state['glms'][n]
+        if true_given:
+            true_state_n = true_state['glms'][n]
+        
         f = plt.figure()
-        plt.plot(inf_state[n]['lam'],'r')
-
+        plt.plot(opt_state_n['lam'],'r')
+        if true_given:
+            plt.hold(True)
+            plt.plot(true_state_n['lam'],'b')
+            
         # Plot the spike times
         St = np.nonzero(network_glm.glm.S.get_value()[:,n])[0]
         plt.plot(St,0.1*np.ones_like(St),'kx')

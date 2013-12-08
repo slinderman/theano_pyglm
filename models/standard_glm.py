@@ -27,7 +27,7 @@ StandardGlm = \
             'D_stim' : 1,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
             'mu' : 0.0,
-            'sigma' : 0.1,
+            'sigma' : 0.0001,
             'basis' :
                 {
                     'type' : 'cosine',
@@ -46,7 +46,7 @@ StandardGlm = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0.0,
-             'sigma' : 0.2,
+             'sigma' : 0.3,
              'basis' :
                  {
                      'type' : 'cosine',
