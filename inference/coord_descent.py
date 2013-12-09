@@ -1,3 +1,5 @@
+
+
 """ Fit a Network GLM with MAP estimation. For some models, the log posterior
     is concave and has a unique maximum.
 """
@@ -24,9 +26,6 @@ def coord_descent(network_glm,
     Compute the maximum a posterior parameter estimate using Theano to compute
     gradients of the log probability.
     """
-    import pdb
-    pdb.set_trace()
-    
     N = network_glm.model['N']
     network = network_glm.network
     glm = network_glm.glm
@@ -93,10 +92,10 @@ def coord_descent(network_glm,
     glm_syms = differentiable(syms['glm'])
     glm_logp = glm.log_p
     g_glm_logp_wrt_glm, g_list = grad_wrt_list(glm_logp, _flatten(glm_syms))
-    if not use_rop:
+    if use_hessian:
         H_glm_logp_wrt_glm = hessian_wrt_list(glm_logp, _flatten(glm_syms), g_list)
 
-    else:
+    elif use_rop:
         # Alternatively, we could just use an Rop to compute Hessian-vector prod       
         v = T.dvector()
         H_glm_logp_wrt_glm = hessian_rop_wrt_list(glm_logp,
@@ -180,28 +179,32 @@ def coord_descent(network_glm,
             elif use_rop:
                 hess_nll = lambda x_glm_vec, v_vec: glm_rop_helper(x_glm_vec, v_vec, nvars, H_glm_logp_wrt_glm)
 
-            # Callback to print progress
-            def progress_report(x_curr):
+            # Callback to print progress. In order to count iters, we need to
+            # pass the current iteration via a list
+            ncg_iter = 0
+            def progress_report(x_curr, ncg_iter_ls):
                 ll = -1.0*nll(x_curr)
-                print "Iter %d.\tNeuron %d. LL: %.1f" % (iter,n,ll) 
-                
+                print "Iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
+                ncg_iter_ls[0] += 1
+            cbk = lambda x_curr: progress_report(x_curr, [ncg_iter])
+ 
             if use_hessian:
                 xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                       fprime=grad_nll,
                                       fhess=hess_nll,
                                       disp=True,
-                                      callback=progress_report)
+                                      callback=cbk)
             elif use_rop:
                 xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                   fprime=grad_nll,
                                   fhess_p=hess_nll,
                                   disp=True,
-                                  callback=progress_report)
+                                  callback=cbk)
             else:
                 xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                   fprime=grad_nll,
                                   disp=True,
-                                  callback=progress_report)
+                                  callback=cbk)
             x_glm_n = unpackdict(xn_opt, shapes)
             set_vars(glm_syms, x['glms'][n], x_glm_n)
             

@@ -27,6 +27,7 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
     N = network_glm.N
     
     # Plot the inferred connectivity matrix
+    print "Plotting connectivity matrix"
     f = plt.figure()
     W_inf = opt_state['net']['weights']['W'] * opt_state['net']['graph']['A']
     
@@ -57,26 +58,29 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
     plt.title('Inferred Network')
     f.savefig(os.path.join(resdir,'conn.pdf'))
 
+
     # Plot the stimulus tuning curve
+    print "Plotting stimulus response curves"
     for n in np.arange(N):
         f = plt.figure()
         opt_state_n = opt_state['glms'][n]
         if true_given:
             true_state_n = true_state['glms'][n]
         if 'stim_response_t' in opt_state_n['bkgd'].keys() and \
-            'stim_responsex' in opt_state_n['bkgd'].keys():
+            'stim_response_x' in opt_state_n['bkgd'].keys():
             
             # Get the stimulus responses
             opt_stim_x = opt_state_n['bkgd']['stim_response_x']
             opt_stim_t = opt_state_n['bkgd']['stim_response_t']
             if true_given:
+                true_state_n = true_state['glms'][n]
                 true_stim_x = true_state_n['bkgd']['stim_response_x']
                 true_stim_t = true_state_n['bkgd']['stim_response_t']
 
             plt.subplot(1,2,1)
             plt.plot(opt_stim_x,'--r')
             plt.hold(True)
-            if true_state:
+            if true_given:
                 plt.plot(true_stim_x,'b')
             plt.title('GLM[%d]: Spatial stimulus filter' % n)
 
@@ -86,7 +90,7 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
             if true_given: 
                 plt.plot(true_stim_t,'b')
             plt.title('GLM[%d]: Temporal stimulus filter' % n)
-        elif 'stim_response' in true_state_n['bkgd'].keys():
+        elif 'stim_response' in opt_state_n['bkgd'].keys():
             opt_stim_t = opt_state_n['bkgd']['stim_response']
             plt.plot(opt_stim_t,'--r')
             plt.hold(True)
@@ -97,6 +101,7 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
         f.savefig(os.path.join(resdir,'stim_resp_%d.pdf' % n))
 
     # Plot the impulse responses
+    print "Plotting impulse responses"
     true_imps = []
     opt_imps = []
     f = plt.figure()
@@ -140,14 +145,14 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
             color = cmap((W_opt_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
             # Set it slightly transparent
             tcolor = list(color)
-            tcolor[3] = 0.5
+            tcolor[3] = 0.75
             tcolor = tuple(tcolor)
             plt.subplot(N,N,n_pre*N+n_post + 1, axisbg=tcolor)
 
             # Plot the inferred impulse response
-            plt.plot(np.squeeze(opt_imps[n_pre,n_post,:]),'--k')
+            plt.plot(np.squeeze(opt_imps[n_pre,n_post,:]),'-k')
             if true_given:
-                plt.plot(np.squeeze(true_imps[n_pre,n_post,:]),'k')
+                plt.plot(np.squeeze(true_imps[n_pre,n_post,:]),'-b')
             
             plt.xlabel("")
             plt.xticks([])
@@ -157,8 +162,8 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
 
     f.savefig(os.path.join(resdir,'imp_resp.pdf'))
 
-    # Infer the firing rates
-
+    # Plot the firing rates
+    print "Plotting firing rates"
     for n in np.arange(N):
         opt_state_n = opt_state['glms'][n]
         if true_given:
@@ -187,6 +192,9 @@ def parse_cmd_line_args():
     from optparse import OptionParser
 
     parser = OptionParser()
+    
+    parser.add_option("-d", "--dataFile", dest="dataFile",
+                      help="Data file to load")
 
     parser.add_option("-r", "--resultsFile", dest="resultsFile", default='.',
                       help="Results file to plot.")
@@ -204,13 +212,35 @@ if __name__ == "__main__":
     # Parse command line args
     (options, args) = parse_cmd_line_args()
 
-    # Load results
-    if options.dataFile.endswith('.pkl'):
-        print "Loading results from %s" % options.resultsFile
+    # Load data                                                              
+    if options.dataFile.endswith('.mat'):
+        print "Loading data from %s" % options.dataFile
+        import scipy.io
+        data = scipy.io.loadmat(options.dataFile, squeeze_me=True, mat_dtype=True)
+        data['N'] = np.int(data['N'])
+    elif options.dataFile.endswith('.pkl'):
+        print "Loading data from %s" % options.dataFile
+        import cPickle
         with open(options.dataFile,'r') as f:
-            (glm,x_inf) = cPickle.load(f)
+            data = cPickle.load(f)
+    else:
+        raise Exception("Unrecognized file type: %s" % options.dataFile)
+
+    # Load results
+    if options.resultsFile.endswith('.pkl'):
+        print "Loading results from %s" % options.resultsFile
+        with open(options.resultsFile,'r') as f:
+            x_inf = cPickle.load(f)
     else:
         raise Exception("Unrecognized file type: %s" % options.resultsFile)
+
+    print "Initializing GLM"
+    from glm_shared import NetworkGlm
+    from models.rgc import Rgc
+    model = Rgc
+    glm = NetworkGlm(model)
+    print "Conditioning on the data"
+    glm.set_data(data)
 
     print "Plotting results"
     plot_results(glm, x_inf)

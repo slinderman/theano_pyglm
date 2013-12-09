@@ -191,7 +191,7 @@ class SpatiotemporalStimulus:
         return {str(self.w_x) : w_x,
                 str(self.w_t) : w_t}
     
-    def get_state(self, vars):
+    def get_state(self):
         """ Get the stimulus response
         """
         # The filters are non-identifiable as we can negate both the
