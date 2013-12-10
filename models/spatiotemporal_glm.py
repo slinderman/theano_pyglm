@@ -32,7 +32,7 @@ SpatiotemporalGlm = \
                 {
                     'type' : 'cosine',
                     'n_eye' : 0,
-                    'n_cos' : 1,
+                    'n_cos' : 3,
                     'a': 1.0/120,
                     'b': 0.5,
                     'orth' : False,
@@ -59,7 +59,7 @@ SpatiotemporalGlm = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0,
-             'sigma' : 0.001,
+             'sigma' : 0.0025,
              'basis' :
                  {
                      'type' : 'cosine',

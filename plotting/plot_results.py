@@ -21,8 +21,8 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
 
     true_given = x_true is not None
     if true_given:
-        true_state = network_glm.compute_state(x_true)
-    opt_state = network_glm.compute_state(x_inf)
+        true_state = network_glm.eval_state(x_true)
+    opt_state = network_glm.eval_state(x_inf)
 
     N = network_glm.N
     
