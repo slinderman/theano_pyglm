@@ -150,7 +150,7 @@ if __name__ == "__main__":
     print "LL0: %f" % ll0
 
 #    x_inf = map_estimate(glm, x0)
-    x_inf = coord_descent(glm, x0)
+    x_inf = coord_descent(glm, data, x0=x0, maxiter=0)
     ll_inf = glm.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf
 

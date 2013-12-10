@@ -320,21 +320,24 @@ def convolve_with_2d_basis(stim, basis):
     # This is the only vector for which the filter and stimulus completely overlap
     return fstim[:T,D-1]
 
-def project_onto_basis(f, basis):
+def project_onto_basis(f, basis, lam=0):
         """
         Project the function f onto the basis.
         :param f     Rx1 function
         :param basis RxB basis
+        :param lam   Optional ridge regresion penalty
         :rtype Bx1 vector of basis coefficients 
         """
         (R,B) = basis.shape
-        assert np.size(f)==R, "Function is not the same size as the basis!"
-        
-        f = np.reshape(f,[R,1])
+
+        assert f.shape[0]==R, "Function is not the same length as the basis!"
+
+        # Make sure at least 2D
+        if f.ndim==1:
+            f = np.reshape(f,[R,1])
         
         # Regularize the projection
-        Q = 1*np.eye(B)
+        Q = lam*np.eye(B)
         
         beta = np.dot(np.dot(scipy.linalg.inv(np.dot(basis.T,basis)+Q), basis.T),f)
-               
         return beta
