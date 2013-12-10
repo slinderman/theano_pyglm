@@ -26,7 +26,7 @@ def generate_synth_data(glm,
     # Generate random stimulus
     stim = np.random.randn(T_stop/dt_stim,D_stim)
 
-    # Initialize the GLMs with the stimulus
+    # Initialize the GLMs with just the stimulus
     temp_data = {"S": np.zeros((T_stop/dt,N)),
             "N": N,
             "dt": dt,
@@ -121,35 +121,16 @@ if __name__ == "__main__":
     # Initialize the GLM with the data
     x_true = data['vars']
     glm.set_data(data)
-
-    # DEBUG Compare rate from model and np.exp(X) from sim
-    for n in np.arange(N):
-        syms = glm.get_variables()
-        nvars = glm.extract_vars(x_true,n)
-        if not np.allclose(seval(glm.glm.lam,
-                                 syms,
-                                 nvars),
-                           np.exp(data['X'][:,n])):
-            import pdb
-            pdb.set_trace()
-            raise Exception("Model and simulated firing rates do not match for neuron %d!" % n)
-    # END DEBUG
-
     ll_true = glm.compute_log_p(x_true)
     print "true LL: %f" % ll_true
 
     # Sample random initial state
     x0 = glm.sample()
-    # # DBG Set x0 to zero
-    #for xi in x0:
-    #    for xj in xi:
-    #        xj *= 0
-    #print x0
 
     ll0 = glm.compute_log_p(x0)
     print "LL0: %f" % ll0
 
-#    x_inf = map_estimate(glm, x0)
+    # Perform inference
     x_inf = coord_descent(glm, data, x0=x0, maxiter=3)
     ll_inf = glm.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf

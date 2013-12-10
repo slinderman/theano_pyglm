@@ -116,7 +116,8 @@ def differentiable(syms):
             diff[k] = v
 
     # Check if the dict is empty
-    if not any(diff):
-        return None
-    else:
-        return diff
+    # if not any(diff):
+    #     return []
+    # else:
+        # return diff
+    return diff

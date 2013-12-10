@@ -14,73 +14,11 @@ import scipy.optimize as opt
 from utils.theano_func_wrapper import seval, _flatten
 from utils.packvec import *
 from utils.grads import *
-from utils.sta import sta
-from utils.basis import project_onto_basis
 
 from components.graph import CompleteGraphModel
-from components.bkgd import BasisStimulus, SpatiotemporalStimulus
 
-def initialize_stim_with_sta(network_glm, data, x0):
-    """ Initialize the stimulus response parameters with the STA
-        TODO: Move this to the bkgd model once we have handled the
-        correct function signature
-    """
-    N = network_glm.N
-    temporal = isinstance(network_glm.glm.bkgd_model, BasisStimulus)
-    spatiotemporal = isinstance(network_glm.glm.bkgd_model, SpatiotemporalStimulus)
+from smart_init import initialize_with_data
 
-    # Compute the STA
-    # TODO Fix these super hacky calls
-    if temporal:
-        s = sta(data['stim'],
-                data,
-                network_glm.glm.bkgd_model.ibasis.get_value().shape[0])
-    elif spatiotemporal:
-        s = sta(data['stim'],
-                data,
-                network_glm.glm.bkgd_model.ibasis_t.get_value().shape[0])
-        
-    else:
-       # We're only initializing the basis function stim models now
-       return
-
-    print "Initializing with the STA"
-    # Compute the initial weights for each neuron
-    for n in np.arange(N):
-        sn = np.squeeze(s[n,:,:])
-        if sn.ndim == 1:
-            sn = np.reshape(sn, [sn.size, 1])
-
-        if spatiotemporal:
-           # Factorize the STA into a spatiotemporal filter using SVD
-           U,Sig,V = np.linalg.svd(sn)
-           f_t = U[:,0] * np.sqrt(Sig[0])
-           f_x = V[:,0] * np.sqrt(Sig[0])
-
-           # Project this onto the spatial and temporal bases
-           w_t = project_onto_basis(f_t, network_glm.glm.bkgd_model.ibasis_t.get_value())
-           w_x = project_onto_basis(f_x, network_glm.glm.bkgd_model.ibasis_x.get_value())
-
-           # Flatten into 1D vectors
-           w_t = np.ravel(w_t)
-           w_x = np.ravel(w_x)
-           
-           x0['glms'][n]['bkgd']['w_x'] = w_x
-           x0['glms'][n]['bkgd']['w_t'] = w_t
-        elif temporal:
-            # Only using a temporal filter
-            D_stim = sn.shape[1]
-            B = network_glm.glm.bkgd_model.ibasis.get_value().shape[1]
-            
-            # Project this onto the spatial and temporal bases
-            w_t = np.zeros((B*D_stim,1))
-            for d in np.arange(D_stim):
-                w_t[d*B:(d+1)*B] = project_onto_basis(sn[:,d], 
-                                                      network_glm.glm.bkgd_model.ibasis.get_value())
-            # Flatten into a 1D vector 
-            w_t = np.ravel(w_t)
-            x0['glms'][n]['bkgd']['w_stim'] = w_t    
-           
 def coord_descent(network_glm, 
                   data,
                   x0=None, 
@@ -111,35 +49,43 @@ def coord_descent(network_glm,
     if x0 is None:
         x0 = network_glm.sample()
 
-    initialize_stim_with_sta(network_glm, data, x0)
+    # Also initialize with intelligent parameters from the data
+    initialize_with_data(network_glm, data, x0)
 
     # TODO Remove this temporary hack 
     fit_network = False
 
     # Compute the log prob, gradient, and Hessian wrt to the network
     if fit_network:
-        # TODO Determine the differentiable network parameters in the same way
-        # we do for the GLM parameters
+        # Determine the differentiable network parameters
         print "Computing log probabilities, gradients, and Hessians for network variables"
+        net_syms = differentiable(syms['net'])
         net_prior = network.log_p
-        g_net_prior = grad_wrt_list(net_prior, syms['net'])
-        H_net_prior = hessian_wrt_list(net_prior, syms['net'])
-        _,net_shapes = pack(x0['net'])
+        g_net_prior = grad_wrt_list(net_prior, _flatten(net_syms))
+        H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms))
 
+        # TODO: Replace this with a function that just gets the shapes?
+        net_vars = get_vars(net_syms, x0['net'])
+        _,net_shapes = packdict(net_vars)
+
+        # Get the likelihood of the GLM wrt the net variables
         glm_logp = glm.log_p
-        g_glm_logp_wrt_net = grad_wrt_list(glm_logp, syms['net'])
-        H_glm_logp_wrt_net = hessian_wrt_list(glm_logp, syms['net'])
+        g_glm_logp_wrt_net = grad_wrt_list(glm_logp, net_syms)
 
+        if use_hessian:
+            H_glm_logp_wrt_net = hessian_wrt_list(glm_logp, net_syms)
+        
         # Private function to compute the log probability (or grads and Hessians thereof)
         # of the log probability given new network variables
         def net_helper(x_net_vec, x, net_expr, glm_expr):
             """ Compute the negative log probability (or gradients and Hessians thereof)
             of the given network variables
             """
-            x_net = unpack(x_net_vec, net_shapes)
+            x_net = unpackdict(x_net_vec, net_shapes)
+            set_vars(net_syms, x['net'], x_net)
             lp = seval(net_expr,
-                       syms['net'],
-                       x_net)
+                       syms,
+                       x)
 
             # Reduce the log prob, gradient, and Hessian across all GLM nodes.
             # We can do this because the log prob is a sum of log probs from each GLM,
@@ -149,7 +95,7 @@ def coord_descent(network_glm,
                 # Get the variables associated with the n-th GLM
                 nvars = network_glm.extract_vars(x, n)
                 # Override the network vars
-                nvars['net'] = x_net
+                set_vars(net_syms, nvars['net'], x_net)
                 lp += seval(glm_expr,
                             syms,
                             nvars)
