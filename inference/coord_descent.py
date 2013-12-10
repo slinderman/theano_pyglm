@@ -19,88 +19,96 @@ from components.graph import CompleteGraphModel
 
 from smart_init import initialize_with_data
 
-def coord_descent(network_glm, 
-                  data,
-                  x0=None, 
-                  maxiter=50, 
-                  atol=1e-5,
-                  use_hessian=False,
-                  use_rop=False):
+def prep_network_inference(population,
+                           use_hessian=False,
+                           use_rop=False):
+    """ Initialize functions that compute the gradient and Hessian of 
+        the log probability with respect to the differentiable network 
+        parameters, e.g. the weight matrix if it exists.
     """
-    Compute the maximum a posterior parameter estimate using Theano to compute
-    gradients of the log probability.
-    """
-    N = network_glm.model['N']
-    network = network_glm.network
-    glm = network_glm.glm
-    syms = network_glm.get_variables()
-
-    # Parameter checking
-    # We only use Rops if use_hessian is False
-    use_rop = use_rop and not use_hessian
+    N = population.model['N']
+    network = population.network
+    glm = population.glm
+    syms = population.get_variables()
     
-    # Make sure the network is a complete adjacency matrix because we
-    # do not do integer programming
-    if not isinstance(network.graph, CompleteGraphModel):
-        raise Exception("MAP inference via coordinate descent can only be performed \
-                        with the complete graph model.")
+    # Determine the differentiable network parameters
+    print "Computing log probabilities, gradients, and Hessians for network variables"
+    net_syms = differentiable(syms['net'])
+    net_prior = network.log_p
+    g_net_prior = grad_wrt_list(net_prior, _flatten(net_syms))
+    H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms))
     
-    # Draw initial state from prior if not given
-    if x0 is None:
-        x0 = network_glm.sample()
-
-    # Also initialize with intelligent parameters from the data
-    initialize_with_data(network_glm, data, x0)
-
-    # TODO Remove this temporary hack 
-    fit_network = False
-
-    # Compute the log prob, gradient, and Hessian wrt to the network
-    if fit_network:
-        # Determine the differentiable network parameters
-        print "Computing log probabilities, gradients, and Hessians for network variables"
-        net_syms = differentiable(syms['net'])
-        net_prior = network.log_p
-        g_net_prior = grad_wrt_list(net_prior, _flatten(net_syms))
-        H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms))
-
-        # TODO: Replace this with a function that just gets the shapes?
-        net_vars = get_vars(net_syms, x0['net'])
-        _,net_shapes = packdict(net_vars)
-
-        # Get the likelihood of the GLM wrt the net variables
-        glm_logp = glm.log_p
-        g_glm_logp_wrt_net = grad_wrt_list(glm_logp, net_syms)
-
-        if use_hessian:
-            H_glm_logp_wrt_net = hessian_wrt_list(glm_logp, net_syms)
+    # TODO: Replace this with a function that just gets the shapes?
+    x0 = population.sample()
+    net_vars = get_vars(net_syms, x0['net'])
+    _,net_shapes = packdict(net_vars)
+    
+    # Get the likelihood of the GLM wrt the net variables
+    glm_logp = glm.log_p
+    g_glm_logp = grad_wrt_list(glm_logp, _flatten(net_syms))
+    
+    if use_hessian:
+        H_glm_logp = hessian_wrt_list(glm_logp, _flatten(net_syms))
         
-        # Private function to compute the log probability (or grads and Hessians thereof)
-        # of the log probability given new network variables
-        def net_helper(x_net_vec, x, net_expr, glm_expr):
-            """ Compute the negative log probability (or gradients and Hessians thereof)
-            of the given network variables
-            """
-            x_net = unpackdict(x_net_vec, net_shapes)
-            set_vars(net_syms, x['net'], x_net)
-            lp = seval(net_expr,
-                       syms,
-                       x)
-
-            # Reduce the log prob, gradient, and Hessian across all GLM nodes.
-            # We can do this because the log prob is a sum of log probs from each GLM,
-            # plus the log prior from the network model.
-            # TODO Parallelize this loop!
-            for n in np.arange(N):
-                # Get the variables associated with the n-th GLM
-                nvars = network_glm.extract_vars(x, n)
-                # Override the network vars
-                set_vars(net_syms, nvars['net'], x_net)
-                lp += seval(glm_expr,
-                            syms,
-                            nvars)
+    # Private function to compute the log probability (or grads and Hessians thereof)
+    # of the log probability given new network variables
+    def net_helper(x_net_vec, x, net_expr, glm_expr):
+        """ Compute the negative log probability (or gradients and Hessians thereof)
+        of the given network variables
+        """
+        x_net = unpackdict(x_net_vec, net_shapes)
+        set_vars(net_syms, x['net'], x_net)
+        lp = seval(net_expr,
+                   syms['net'],
+                   x['net'])
+        
+        # Reduce the log prob, gradient, and Hessian across all GLM nodes.
+        # We can do this because the log prob is a sum of log probs from each GLM,
+        # plus the log prior from the network model.
+        # TODO Parallelize this loop!
+        for n in np.arange(N):
+            # Get the variables associated with the n-th GLM
+            nvars = population.extract_vars(x, n)
+            # Override the network vars
+            set_vars(net_syms, nvars['net'], x_net)
+            lp += seval(glm_expr,
+                        syms,
+                        nvars)
             return -1.0*lp
 
+    # Create simple functions that take in a vector representing only the 
+    # flattened network parameters, and a dictionary x representing the 
+    # state of the population.
+    nll = lambda x_net_vec, x: net_helper(x_net_vec, 
+                                          x, 
+                                          net_prior, 
+                                          glm_logp)
+    grad_nll = lambda x_net_vec, x: net_helper(x_net_vec, 
+                                               x, 
+                                               g_net_prior, 
+                                               g_glm_logp)
+    hess_nll = lambda x_net_vec, x: net_helper(x_net_vec, 
+                                               x, 
+                                               H_net_prior, 
+                                               H_glm_logp)
+        
+    # Return the symbolic expressions and a function that evaluates them
+    # for given vector.
+    return net_syms, nll, grad_nll, hess_nll
+
+def prep_glm_inference(population,
+                       use_hessian=False,
+                       use_rop=False):
+    """ Initialize functions that compute the gradient and Hessian of 
+        the log probability with respect to the differentiable GLM 
+        parameters, e.g. the weight matrix if it exists.
+    """
+    
+    N = population.model['N']
+    network = population.network
+    glm = population.glm
+    syms = population.get_variables()
+    
     # Compute gradients of the log prob wrt the GLM parameters
     print "Computing log probabilities, gradients, and Hessians for GLM variables"
     glm_syms = differentiable(syms['glm'])
@@ -118,7 +126,8 @@ def coord_descent(network_glm,
                                                   g_vec=g_glm_logp_wrt_glm)
 
     # TODO: Replace this with a function that just gets the shapes?
-    nvars = network_glm.extract_vars(x0, 0)
+    x0 = population.sample()
+    nvars = population.extract_vars(x0, 0)
     dnvars = get_vars(glm_syms, nvars['glm'])
     _,glm_shapes = packdict(dnvars)
 
@@ -129,7 +138,6 @@ def coord_descent(network_glm,
         of the given glm variables
         """
         x_glm = unpackdict(x_glm_vec, glm_shapes)
-        #x['glm'] = x_glm
         set_vars(glm_syms, x['glm'], x_glm)
         lp = seval(glm_expr,
                     syms,
@@ -145,7 +153,6 @@ def coord_descent(network_glm,
             import pdb
             pdb.set_trace()
             x_glm = unpackdict(x_glm_vec, glm_shapes)
-            #x['glm'] = x_glm
             set_vars(glm_syms, x['glm'], x_glm)
             defaults = {'v' : v_vec}
             Hv = seval(glm_expr,
@@ -154,6 +161,62 @@ def coord_descent(network_glm,
                        defaults)
             return -1.0*Hv
     
+    nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
+                                          x, 
+                                          glm_logp)
+    grad_nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
+                                               x, 
+                                               g_glm_logp_wrt_glm)
+    if use_rop:
+        hess_nll = lambda x_glm_vec, v_vec, x: glm_rop_helper(x_glm_vec, 
+                                                              v_vec, 
+                                                              x, 
+                                                              H_glm_logp_wrt_glm)
+    else:
+        hess_nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
+                                                   x, 
+                                                   H_glm_logp_wrt_glm)        
+    return glm_syms, nll, grad_nll, hess_nll
+
+def coord_descent(population, 
+                  data,
+                  x0=None, 
+                  maxiter=50, 
+                  atol=1e-5,
+                  use_hessian=False,
+                  use_rop=False):
+    """
+    Compute the maximum a posterior parameter estimate using Theano to compute
+    gradients of the log probability.
+    """
+    N = population.model['N']
+    network = population.network
+    glm = population.glm
+    syms = population.get_variables()
+
+    # Parameter checking
+    # We only use Rops if use_hessian is False
+    use_rop = use_rop and not use_hessian
+    
+    # Make sure the network is a complete adjacency matrix because we
+    # do not do integer programming
+    if not isinstance(network.graph, CompleteGraphModel):
+        raise Exception("MAP inference via coordinate descent can only be performed \
+                        with the complete graph model.")
+    
+    # Draw initial state from prior if not given
+    if x0 is None:
+        x0 = population.sample()
+
+    # Also initialize with intelligent parameters from the data
+    initialize_with_data(population, data, x0)
+
+    # Compute log prob, gradient, and hessian wrt network parameters
+    net_syms, net_nll, g_net_nll, H_net_nll = prep_network_inference(population)
+    
+    # Compute gradients of the log prob wrt the GLM parameters
+    glm_syms, glm_nll, g_glm_nll, H_glm_nll = prep_glm_inference(population)
+    
     # Alternate fitting the network and fitting the GLMs
     x = x0
     x_prev = copy.deepcopy(x0)
@@ -161,47 +224,46 @@ def coord_descent(network_glm,
     iter = 0
     while not converged and iter < maxiter:
         iter += 1
-
         print "Coordinate descent iteration %d." % iter
-        if fit_network:
-            # Fit the network
-            x_net_0, shapes = packdict(x['net'])
+        
+        # Fit the network
+        x_net_0, shapes = packdict(x['net'])
 
-            nll = lambda x_net_vec: net_helper(x_net_vec, x, net_prior, glm_logp)
-            grad_nll = lambda x_net_vec: net_helper(x_net_vec, x, g_net_prior, g_glm_logp_wrt_net)
-            hess_nll = lambda x_net_vec: net_helper(x_net_vec, x, H_net_prior, H_glm_logp_wrt_net)
-
+        if x_net_0.size > 0:
+            nll = lambda x_net_vec: net_nll(x_net_vec, x)
+            grad_nll = lambda x_net_vec: g_net_nll(x_net_vec, x)
+            hess_nll = lambda x_net_vec: H_net_nll(x_net_vec, x)
+            
             x_net_opt = opt.fmin_ncg(nll, x_net_0,
                                      fprime=grad_nll,
                                      fhess=hess_nll,
                                      disp=True)
-            x['net'] = unpackdict(x_net_opt, shapes)
+            x_net = unpackdict(x_net_opt, shapes)
+            set_vars(net_syms, x['net'], x_net)
 
         # Fit the GLMs.
         # TODO Parallelize this!
         for n in np.arange(N):
             # Get the differentiable variables for the n-th GLM
-            nvars = network_glm.extract_vars(x, n)
+            nvars = population.extract_vars(x, n)
             dnvars = get_vars(glm_syms, nvars['glm'])
             x_glm_0, shapes = packdict(dnvars)
 
             # Create lambda functions to compute the nll and its gradient and Hessian
-            nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, glm_logp)
-            grad_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, g_glm_logp_wrt_glm)
-            if use_hessian:
-                hess_nll = lambda x_glm_vec: glm_helper(x_glm_vec, nvars, H_glm_logp_wrt_glm)
-            elif use_rop:
-                hess_nll = lambda x_glm_vec, v_vec: glm_rop_helper(x_glm_vec, v_vec, nvars, H_glm_logp_wrt_glm)
+            nll = lambda x_glm_vec: glm_nll(x_glm_vec, nvars)
+            grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, nvars)
+            hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, nvars)
 
             # Callback to print progress. In order to count iters, we need to
             # pass the current iteration via a list
-            ncg_iter = 0
+            ncg_iter_ls = [0]
             def progress_report(x_curr, ncg_iter_ls):
                 ll = -1.0*nll(x_curr)
-                print "Iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
+                print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
                 ncg_iter_ls[0] += 1
-            cbk = lambda x_curr: progress_report(x_curr, [ncg_iter])
- 
+            cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
+
+            # Call the appropriate scipy optimization function
             if use_hessian:
                 xn_opt = opt.fmin_ncg(nll, x_glm_0,
                                       fprime=grad_nll,
@@ -221,21 +283,22 @@ def coord_descent(network_glm,
                                   callback=cbk)
             x_glm_n = unpackdict(xn_opt, shapes)
             set_vars(glm_syms, x['glms'][n], x_glm_n)
-            
+
+        # Check for convergence 
         diffs = np.zeros(N)
         for n in np.arange(N):
-            nvars = network_glm.extract_vars(x, n)
+            nvars = population.extract_vars(x, n)
             dnvars = get_vars(glm_syms, nvars['glm'])
-            xn_curr, shapes = packdict(dnvars)
+            xn_curr, _ = packdict(dnvars)
 
-            nvars = network_glm.extract_vars(x_prev, n)
+            nvars = population.extract_vars(x_prev, n)
             dnvars = get_vars(glm_syms, nvars['glm'])
-            xn_prev, shapes = packdict(dnvars)
-            
+            xn_prev, _ = packdict(dnvars)
             
             diffs[n] = np.mean((xn_curr - xn_prev) ** 2)
         maxdiff = np.max(diffs)
 
+        print "Difference in parameters from previous iteration:"
         print diffs
         converged = maxdiff < atol
         x_prev = copy.deepcopy(x)

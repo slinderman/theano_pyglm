@@ -14,6 +14,8 @@ def gibbs_sample(network_glm, x0=None, N_samples=1000):
     Compute the maximum a posterior parameter estimate using Theano to compute
     gradients of the log probability.
     """
+    raise Exception("This is temporarily not working after converting to dictionary-based parameter storage")
+
     N = network_glm.model['N']
     network = network_glm.network
 

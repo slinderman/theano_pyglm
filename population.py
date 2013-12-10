@@ -1,4 +1,4 @@
-from glm_shared import *
+from glm import *
 from components.network import *
 
 class Population:

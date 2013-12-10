@@ -59,7 +59,7 @@ SpatiotemporalGlm = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0,
-             'sigma' : 0.0025,
+             'sigma' : 0.001,
              'basis' :
                  {
                      'type' : 'cosine',

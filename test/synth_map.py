@@ -94,11 +94,13 @@ if __name__ == "__main__":
     # Parse command line args
     (options, args) = parse_cmd_line_args()
 
+    # Initialize a model with N neurons
     print "Initializing GLM"
-    N=2
+    N=10
     model = make_model('spatiotemporal_glm', N=N)
     # model = make_model('standard_glm', N=N)
     population = Population(model)
+    
     # Load data
     if not options.dataFile is None:
         if options.dataFile.endswith('.mat'):

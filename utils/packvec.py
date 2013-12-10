@@ -26,6 +26,8 @@ def packdict(var_dict, on_unpackable_type='raise'):
             svec, sshapes = packdict(val)
             vec = np.concatenate((vec,svec))
             shapes[var] = sshapes
+        elif val == []:
+            continue
         else:
             if not isinstance(val, np.ndarray):
                 if on_unpackable_type.lower() == 'raise':

@@ -57,7 +57,7 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
     plt.colorbar()
     plt.title('Inferred Network')
     f.savefig(os.path.join(resdir,'conn.pdf'))
-
+    plt.close(f)
 
     # Plot the stimulus tuning curve
     print "Plotting stimulus response curves"
@@ -99,7 +99,8 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
                 plt.plot(true_stim_t,'b')
             plt.title('GLM[%d]: stimulus filter' % n)
         f.savefig(os.path.join(resdir,'stim_resp_%d.pdf' % n))
-
+        plt.close(f)
+        
     # Plot the impulse responses
     print "Plotting impulse responses"
     true_imps = []
@@ -161,7 +162,8 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
             plt.ylim(-imp_max,imp_max)
 
     f.savefig(os.path.join(resdir,'imp_resp.pdf'))
-
+    plt.close(f)
+    
     # Plot the firing rates
     print "Plotting firing rates"
     for n in np.arange(N):
@@ -183,7 +185,7 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
         # Zoom in on a small fraction
         plt.xlim(10000,12000)
         f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
-
+        plt.close(f)
 
 def parse_cmd_line_args():
     """
