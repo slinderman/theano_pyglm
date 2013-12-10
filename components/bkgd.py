@@ -197,10 +197,13 @@ class SpatiotemporalStimulus:
         # The filters are non-identifiable as we can negate both the
         # temporal and the spatial filters and get the same net effect.
         # By convention, choose the sign that results in the most
-        # positive temporal filter.
+        # positive temporal filter. 
         sign = T.sgn(T.sum(self.stim_resp_t))
-        return {'stim_response_x' : sign*self.stim_resp_x,
-                'stim_response_t' : sign*self.stim_resp_t}
+        # Similarly, we can trade a constant between the spatial and temporal
+        # pieces. By convention, set the temporal filter to norm 1.
+        Z = self.stim_resp_t.norm(2)
+        return {'stim_response_x' : sign*Z*self.stim_resp_x,
+                'stim_response_t' : sign*(1.0/Z)*self.stim_resp_t}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

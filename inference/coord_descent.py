@@ -25,28 +25,37 @@ def initialize_stim_with_sta(network_glm, data, x0):
         TODO: Move this to the bkgd model once we have handled the
         correct function signature
     """
-    import pdb
-    pdb.set_trace()
     N = network_glm.N
-    if not isinstance(network_glm.glm.bkgd_model, BasisStimulus) and \
-       not isinstance(network_glm.glm.bkgd_model, SpatiotemporalStimulus):
+    temporal = isinstance(network_glm.glm.bkgd_model, BasisStimulus)
+    spatiotemporal = isinstance(network_glm.glm.bkgd_model, SpatiotemporalStimulus)
+
+    # Compute the STA
+    # TODO Fix these super hacky calls
+    if temporal:
+        s = sta(data['stim'],
+                data,
+                network_glm.glm.bkgd_model.ibasis.get_value().shape[0])
+    elif spatiotemporal:
+        s = sta(data['stim'],
+                data,
+                network_glm.glm.bkgd_model.ibasis_t.get_value().shape[0])
+        
+    else:
        # We're only initializing the basis function stim models now
        return
 
-    # TODO Fix this super hacky call
-    s = sta(network_glm.glm.bkgd_model.stim.get_value(),
-            data,
-            network_glm.glm.bkgd_model.ibasis_t.get_value().shape[0])
-    
+    print "Initializing with the STA"
+    # Compute the initial weights for each neuron
     for n in np.arange(N):
         sn = np.squeeze(s[n,:,:])
+        if sn.ndim == 1:
+            sn = np.reshape(sn, [sn.size, 1])
 
-        if 'w_x' in x0['glms'][n]['bkgd'] and \
-           'w_t' in x0['glms'][n]['bkgd']:           
-           # Factorize this into a spatiotemporal filter using SVD
-           U,S,V = np.linalg.svd(sn)
-           f_t = U[:,0] * np.sqrt(S[0])
-           f_x = V[:,0] * np.sqrt(S[0])
+        if spatiotemporal:
+           # Factorize the STA into a spatiotemporal filter using SVD
+           U,Sig,V = np.linalg.svd(sn)
+           f_t = U[:,0] * np.sqrt(Sig[0])
+           f_x = V[:,0] * np.sqrt(Sig[0])
 
            # Project this onto the spatial and temporal bases
            w_t = project_onto_basis(f_t, network_glm.glm.bkgd_model.ibasis_t.get_value())
@@ -58,16 +67,18 @@ def initialize_stim_with_sta(network_glm, data, x0):
            
            x0['glms'][n]['bkgd']['w_x'] = w_x
            x0['glms'][n]['bkgd']['w_t'] = w_t
-        elif 'w_stim' in x0['glms'][n]['bkgd']:
+        elif temporal:
             # Only using a temporal filter
             D_stim = sn.shape[1]
-            B = network_glm.glm.bkgd_model.ibasis_t.shape[1]
+            B = network_glm.glm.bkgd_model.ibasis.get_value().shape[1]
             
             # Project this onto the spatial and temporal bases
-            w_t = np.zeros(B*D)
-            for b in np.arange(B):
-                w_t[b*D:(b+1)*D] = project_onto_basis(sn[:,b], 
-                                                      network_glm.glm.bkgd_model.ibasis_t)
+            w_t = np.zeros((B*D_stim,1))
+            for d in np.arange(D_stim):
+                w_t[d*B:(d+1)*B] = project_onto_basis(sn[:,d], 
+                                                      network_glm.glm.bkgd_model.ibasis.get_value())
+            # Flatten into a 1D vector 
+            w_t = np.ravel(w_t)
             x0['glms'][n]['bkgd']['w_stim'] = w_t    
            
 def coord_descent(network_glm, 

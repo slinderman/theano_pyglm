@@ -19,7 +19,7 @@ def sta(stim, data, L):
     (nt,N) = S.shape
     dt = data['dt']
     dt_stim = data['dt_stim']
-    t = dt_stim * np.arange(nt)
+    t = dt * np.arange(nt)
     t_stim = dt_stim * np.arange(stim.shape[0])
     istim = np.zeros((nt, D_stim))
     for d in np.arange(D_stim):
@@ -27,9 +27,18 @@ def sta(stim, data, L):
                                 t_stim,
                                 stim[:, d])
 
-    # Initialize sta
+        # Correct for bias introduced by interpolating the stimulus
+        # Assuming the original stimulus was Gaussian white noise!
+        # Each stimulus frame is repeated (dt_stim/dt) times, so 
+        # divide by this to keep the stimulus * weight dot product the same
+        istim[:,d] /= (dt_stim/dt)
+        
+    # TODO Make lagged stim matrix to compute STA
+    # Initialize STA
     A = np.zeros((N,L,D_stim))
     for ti in np.arange(nt):
+        # if ti % 1000 == 0:
+            # print "STA iter %d:" % ti
         if ti<L-1:
             stim_pad = np.concatenate((np.zeros((L-ti-1,D_stim)),istim[:ti+1,:]))
         else:
@@ -37,10 +46,14 @@ def sta(stim, data, L):
 
         assert stim_pad.shape == (L,D_stim)
 
-        for n in np.arange(N):
-            A[n,:,:] += S[ti,n] * stim_pad
+        A += np.tensordot(np.reshape(S[ti,:],(N,1)), 
+                          np.reshape(stim_pad, (1,L,D_stim)),
+                          axes=[1,0])
 
     # Normalize
     for n in np.arange(N):
         A[n,:,:] /= np.sum(S[:,n])
+
+    # Flip the result so that the first column is the most recent stimulus frame
+    A = A[:,::-1,:]
     return A
