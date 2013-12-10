@@ -31,9 +31,10 @@ def sta(stim, data, L):
     A = np.zeros((N,L,D_stim))
     for ti in np.arange(nt):
         if ti<L-1:
-            stim_pad = np.concatenate((np.zeros(L-ti-1,D_stim),istim[:ti,:]))
+            stim_pad = np.concatenate((np.zeros((L-ti-1,D_stim)),istim[:ti+1,:]))
         else:
-            stim_pad = istim[ti-L+1:ti,:]
+            stim_pad = istim[ti-L+1:ti+1,:]
+
         assert stim_pad.shape == (L,D_stim)
 
         for n in np.arange(N):
