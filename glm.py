@@ -2,7 +2,6 @@ import theano.tensor as T
 import theano
 
 import numpy as np
-import scipy.linalg as linalg
 
 from components.network import *
 from components.bkgd import *
