@@ -18,25 +18,7 @@ def create_graph_component(model):
             raise Exception("Unrecognized graph model: %s" % type)
         return graph
 
-class GraphModel(Component):
-    """ GraphModel extends component with graph specific functions assumed
-        by the parent network.
-    """
-    def get_state(self):
-        return {'A': self.A}
-    
-    def sample_A(self, state, network_glm, n_pre, n_post):
-        """
-        Sample a specific entry in A
-        """
-        raise Exception('sample_A has not been implemented!')
-
-    def gibbs_sample_parameters(self, state):
-        """ Gibbs sample any hyperparameters of the graph
-        """
-        raise Exception('gibbs_sample_parameters has not been implemented!')
-
-class CompleteGraphModel(GraphModel):
+class CompleteGraphModel(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -45,11 +27,9 @@ class CompleteGraphModel(GraphModel):
 
         # Define complete adjacency matrix
         self.A = T.ones((N,N))
-        self.n_vars = 0
 
         # Define log probability
         self.log_p = T.constant(0.0)
-        self.vars = []
         
     def sample_A(self, state, network_glm, n_pre, n_post):
         """
@@ -62,7 +42,7 @@ class CompleteGraphModel(GraphModel):
         """
         return state[0]
 
-class ErdosRenyiGraphModel(GraphModel):
+class ErdosRenyiGraphModel(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -77,7 +57,6 @@ class ErdosRenyiGraphModel(GraphModel):
 
         # Define log probability
         self.log_p = T.sum(self.A*np.log(rho) + (1-self.A)*np.log(1.0-rho))
-        self.vars = [self.A]
 
     def sample(self):
         N = self.model['N']
@@ -85,26 +64,3 @@ class ErdosRenyiGraphModel(GraphModel):
         
         A = np.random.rand(N,N) < rho
         return A
-    
-    def sample_A(self, state, network_glm, n_pre, n_post):
-        """
-        Sample a specific entry in A
-        """
-        # Compute the log prob with and without this connection
-        x_net = state[0]
-        x_glm = state[n_post+1]
-
-        x_net['A'][n_pre,n_post] = 0
-        log_pr_noA = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(1.0-self.rho)
-        
-        x_net['A'][n_pre,n_post] = 1
-        log_pr_A = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(self.rho)
-
-        # Sample A[n_pre,n_post]
-        x_net['A'][n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
-        
-        return x_net
-    
-    def gibbs_sample_parameters(self, state):
-        x_net = state[0]
-        return x_net
