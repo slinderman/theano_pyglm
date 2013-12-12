@@ -31,17 +31,9 @@ class CompleteGraphModel(Component):
         # Define log probability
         self.log_p = T.constant(0.0)
         
-    def sample_A(self, state, network_glm, n_pre, n_post):
-        """
-        Sample a specific entry in A
-        """
-        return state[0]
-
-    def gibbs_sample_parameters(self, state):
-        """ Gibbs sample any hyperparameters of the graph
-        """
-        return state[0]
-
+    def get_state(self):
+        return {'A': self.A}
+    
 class ErdosRenyiGraphModel(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
@@ -53,7 +45,6 @@ class ErdosRenyiGraphModel(Component):
         
         # Define complete adjacency matrix
         self.A = T.dmatrix('A')
-        self.n_vars = N**2
 
         # Define log probability
         self.log_p = T.sum(self.A*np.log(rho) + (1-self.A)*np.log(1.0-rho))
@@ -64,3 +55,6 @@ class ErdosRenyiGraphModel(Component):
         
         A = np.random.rand(N,N) < rho
         return A
+
+    def get_state(self):
+        return {'A': self.A}

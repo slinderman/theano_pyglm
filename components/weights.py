@@ -35,6 +35,9 @@ class ConstantWeightModel(Component):
         # Define log probability
         self.log_p = T.constant(0.0)
 
+    def get_state(self):
+        return {'W': self.W}
+    
 class GaussianWeightModel(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
@@ -62,3 +65,5 @@ class GaussianWeightModel(Component):
         W_flat = np.reshape(W,(N**2,))
         return [W_flat]
 
+    def get_state(self):
+        return {'W': self.W}

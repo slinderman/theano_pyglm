@@ -176,6 +176,26 @@ def prep_glm_inference(population,
                                                    H_glm_logp_wrt_glm)        
     return glm_syms, nll, grad_nll, hess_nll
 
+def sample_A(self, state, network_glm, n_pre, n_post):
+        """
+        Sample a specific entry in A
+        """
+        # Compute the log prob with and without this connection
+        x_net = state[0]
+        x_glm = state[n_post+1]
+
+        x_net['A'][n_pre,n_post] = 0
+        log_pr_noA = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(1.0-self.rho)
+        
+        x_net['A'][n_pre,n_post] = 1
+        log_pr_A = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(self.rho)
+
+        # Sample A[n_pre,n_post]
+        x_net['A'][n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+        
+        return x_net
+    
+
 def network_gibbs_step(x, 
                        (net_syms, net_nll, g_net_nll, H_net_nll)):
     """ Gibbs sample the network by collapsing out the weights to 
@@ -227,7 +247,7 @@ def gibbs_sample(population,
     if x0 is None:
         if init_from_mle:
             print "Initializing with coordinate descent"
-            x0 = coord_descent(population, data)
+            x0 = coord_descent(population, data, maxiter=1)
         else:
             x0 = network_glm.sample()
     
