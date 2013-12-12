@@ -10,11 +10,6 @@ from components.bias import *
 from components.impulse import *
 from components.nlin import *
 
-
-from utils.theano_func_wrapper import seval
-from utils.packvec import *
-from utils.grads import *
-
 class Glm:
     def __init__(self, model, network):
         """

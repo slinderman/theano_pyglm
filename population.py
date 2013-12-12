@@ -1,5 +1,9 @@
-from glm import *
-from components.network import *
+import numpy as np
+
+from glm import Glm
+from components.network import Network
+
+from utils.theano_func_wrapper import seval
 
 class Population:
     """
@@ -35,7 +39,7 @@ class Population:
         lp += seval(self.network.log_p,
                     syms['net'],
                     vars['net'])
-        for n in np.arange(self.N):
+        for n in range(self.N):
             nvars = self.extract_vars(vars, n)
             lp += seval(self.glm.log_p,
                         syms,
@@ -58,7 +62,7 @@ class Population:
                                                   vars['net'])
 
         glm_states = []
-        for n in np.arange(self.N):
+        for n in range(self.N):
             nvars = self.extract_vars(vars, n)
             glm_states.append(self._eval_state_helper(syms,
                                                       state_vars['glm'], 
