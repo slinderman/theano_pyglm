@@ -1,10 +1,16 @@
 import theano
 import theano.tensor as T
+
+from component import Component
 from utils.basis import *
 
 def create_bkgd_component(model):
     type = model['bkgd']['type'].lower()
-    if type == 'basis':
+    if type == 'no_stimulus' or \
+       type == 'none' or \
+       type == 'nostimulus':
+       bkgd = NoStimulus(model)
+    elif type == 'basis':
         bkgd = BasisStimulus(model)
     elif type == 'spatiotemporal':
         bkgd = SpatiotemporalStimulus(model)
@@ -12,8 +18,21 @@ def create_bkgd_component(model):
         raise Exception("Unrecognized backgound model: %s" % type)
     return bkgd
 
+class NoStimulus(Component):
+    """ No stimulus dependence. Constant biases are handled by the 
+        bias component. 
+    """
 
-class BasisStimulus:
+    def __init__(self, model):
+        """ No stimulus.
+        """        
+        # Log probability
+        self.log_p = T.constant(0.0)
+        
+        # Expose outputs to the Glm class
+        self.I_stim = T.constant(0.0)
+    
+class BasisStimulus(Component):
     """ Filter the stimulus and expose the filtered stimulus
     """
 
@@ -48,12 +67,8 @@ class BasisStimulus:
         # Expose outputs to the Glm class
         self.I_stim = T.dot(self.stim,self.w_stim)
 
-        # Create callable functions to compute firing rate, log likelihood, and gradients
-#         self.f_I_stim  = theano.function([vars],self.I_stim)
-        
-        # A function handle for the stimulus response
+        # A symbolic variable for the for the stimulus response
         self.stim_resp = T.dot(self.ibasis,self.w_stim)
-#         self.f_stim_resp = theano.function([vars],stim_resp)
     
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -114,7 +129,7 @@ class BasisStimulus:
         return {str(self.w_stim): w}
 
 
-class SpatiotemporalStimulus:
+class SpatiotemporalStimulus(Component):
     """ Filter the stimulus with a 2D spatiotemporal filter. Approximate the
         spatiotemporal filter with a rank-2 approximation, namely f(t,x) = f(t)*f(x)'.
 

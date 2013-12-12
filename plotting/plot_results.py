@@ -152,6 +152,8 @@ def plot_results(network_glm, x_inf, x_true=None, resdir=None):
 
             # Plot the inferred impulse response
             plt.plot(np.squeeze(opt_imps[n_pre,n_post,:]),'-k')
+            plt.hold(True)
+            plt.plot(np.zeros_like(np.squeeze(opt_imps[n_pre,n_post,:])), 'k:')
             if true_given:
                 plt.plot(np.squeeze(true_imps[n_pre,n_post,:]),'-b')
             

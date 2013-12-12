@@ -47,7 +47,7 @@ def generate_synth_data(population,
             'dt_stim': dt_stim,
             'vars': x_true}
 
-    # Save the data so we don't have to continually simulate!
+    # Save the data so we don't have to continually simulate
     import os
     scipy.io.savemat(os.path.join(resultsDir, 'data.mat'), data)
 
@@ -99,8 +99,8 @@ def initialize_test_harness(N=2):
 
     # Initialize a model with N neurons
     print "Initializing GLM"
-    model = make_model('spatiotemporal_glm', N=N)
-    # model = make_model('standard_glm', N=N)
+    # model = make_model('spatiotemporal_glm', N=N)
+    model = make_model('standard_glm', N=N)
     population = Population(model)
     
     # Load data
@@ -121,7 +121,7 @@ def initialize_test_harness(N=2):
         print "Generating synthetic data"
         data = generate_synth_data(population,
                                    options.resultsDir,
-                                   T_stop=60)
+                                   T_stop=180)
         
 
     # Initialize the GLM with the data

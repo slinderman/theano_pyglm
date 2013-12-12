@@ -16,18 +16,19 @@ StandardGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : 0,
+            'mu' : 2,
             'sigma' : 0.1
         },
 
     # Parameters of the background model
     'bkgd' :
         {
-            'type' : 'basis',
+            # 'type' : 'basis',
+            'type' : 'none',
             'D_stim' : 1,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
             'mu' : 0.0,
-            'sigma' : 0.1,
+            'sigma' : 0.01,
             'basis' :
                 {
                     'type' : 'cosine',
@@ -46,7 +47,7 @@ StandardGlm = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0.0,
-             'sigma' : 0.3,
+             'sigma' : 1.0,
              'basis' :
                  {
                      'type' : 'cosine',

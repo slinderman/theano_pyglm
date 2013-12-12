@@ -178,6 +178,73 @@ def prep_glm_inference(population,
                                                    H_glm_logp_wrt_glm)        
     return glm_syms, nll, grad_nll, hess_nll
 
+def fit_network(x, 
+                (net_syms, net_nll, g_net_nll, H_net_nll),
+                use_hessian,
+                use_rop):
+    """ Fit the GLM parameters in state dict x
+    """
+    x_net_0, shapes = packdict(x['net'])
+    
+    if x_net_0.size > 0:
+        nll = lambda x_net_vec: net_nll(x_net_vec, x)
+        grad_nll = lambda x_net_vec: g_net_nll(x_net_vec, x)
+        hess_nll = lambda x_net_vec: H_net_nll(x_net_vec, x)
+        
+        x_net_opt = opt.fmin_ncg(nll, x_net_0,
+                                 fprime=grad_nll,
+                                 fhess=hess_nll,
+                                 disp=True)
+        x_net = unpackdict(x_net_opt, shapes)
+        set_vars(net_syms, x['net'], x_net)
+
+def fit_glm(xn, n, 
+            (glm_syms, glm_nll, g_glm_nll, H_glm_nll),
+            use_hessian,
+            use_rop):
+    """ Fit the GLM parameters in state dict x
+    """
+    # Get the differentiable variables for the n-th GLM
+    dnvars = get_vars(glm_syms, xn['glm'])
+    x_glm_0, shapes = packdict(dnvars)
+    
+    # Create lambda functions to compute the nll and its gradient and Hessian
+    nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
+    grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
+    hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
+    
+    # Callback to print progress. In order to count iters, we need to
+    # pass the current iteration via a list
+    ncg_iter_ls = [0]
+    def progress_report(x_curr, ncg_iter_ls):
+        ll = -1.0*nll(x_curr)
+        print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
+        ncg_iter_ls[0] += 1
+    cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
+        
+    # Call the appropriate scipy optimization function
+    if use_hessian:
+        xn_opt = opt.fmin_ncg(nll, x_glm_0,
+                              fprime=grad_nll,
+                              fhess=hess_nll,
+                              disp=True,
+                              callback=cbk)
+    elif use_rop:
+        xn_opt = opt.fmin_ncg(nll, x_glm_0,
+                              fprime=grad_nll,
+                              fhess_p=hess_nll,
+                              disp=True,
+                              callback=cbk)
+    else:
+        xn_opt = opt.fmin_ncg(nll, x_glm_0,
+                              fprime=grad_nll,
+                              disp=True,
+                              callback=cbk)
+    
+    # Unpack the optimized parameters back into the state dict
+    x_glm_n = unpackdict(xn_opt, shapes)
+    set_vars(glm_syms, xn['glm'], x_glm_n)
+
 def coord_descent(population, 
                   data,
                   x0=None, 
@@ -212,14 +279,15 @@ def coord_descent(population,
     initialize_with_data(population, data, x0)
 
     # Compute log prob, gradient, and hessian wrt network parameters
-    net_syms, net_nll, g_net_nll, H_net_nll = prep_network_inference(population)
+    net_inf_prms = prep_network_inference(population)
     
     # Compute gradients of the log prob wrt the GLM parameters
-    glm_syms, glm_nll, g_glm_nll, H_glm_nll = prep_glm_inference(population)
+    glm_inf_prms = prep_glm_inference(population)
     
     # Alternate fitting the network and fitting the GLMs
     x = x0
     x_prev = copy.deepcopy(x0)
+    lp_prev = population.compute_log_p(x)
     converged = False
     iter = 0
     while not converged and iter < maxiter:
@@ -227,80 +295,20 @@ def coord_descent(population,
         print "Coordinate descent iteration %d." % iter
         
         # Fit the network
-        x_net_0, shapes = packdict(x['net'])
-
-        if x_net_0.size > 0:
-            nll = lambda x_net_vec: net_nll(x_net_vec, x)
-            grad_nll = lambda x_net_vec: g_net_nll(x_net_vec, x)
-            hess_nll = lambda x_net_vec: H_net_nll(x_net_vec, x)
-            
-            x_net_opt = opt.fmin_ncg(nll, x_net_0,
-                                     fprime=grad_nll,
-                                     fhess=hess_nll,
-                                     disp=True)
-            x_net = unpackdict(x_net_opt, shapes)
-            set_vars(net_syms, x['net'], x_net)
-
+        fit_network(x, net_inf_prms, use_hessian, use_rop)
+        
         # Fit the GLMs.
         # TODO Parallelize this!
         for n in np.arange(N):
-            # Get the differentiable variables for the n-th GLM
             nvars = population.extract_vars(x, n)
-            dnvars = get_vars(glm_syms, nvars['glm'])
-            x_glm_0, shapes = packdict(dnvars)
-
-            # Create lambda functions to compute the nll and its gradient and Hessian
-            nll = lambda x_glm_vec: glm_nll(x_glm_vec, nvars)
-            grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, nvars)
-            hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, nvars)
-
-            # Callback to print progress. In order to count iters, we need to
-            # pass the current iteration via a list
-            ncg_iter_ls = [0]
-            def progress_report(x_curr, ncg_iter_ls):
-                ll = -1.0*nll(x_curr)
-                print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
-                ncg_iter_ls[0] += 1
-            cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
-
-            # Call the appropriate scipy optimization function
-            if use_hessian:
-                xn_opt = opt.fmin_ncg(nll, x_glm_0,
-                                      fprime=grad_nll,
-                                      fhess=hess_nll,
-                                      disp=True,
-                                      callback=cbk)
-            elif use_rop:
-                xn_opt = opt.fmin_ncg(nll, x_glm_0,
-                                  fprime=grad_nll,
-                                  fhess_p=hess_nll,
-                                  disp=True,
-                                  callback=cbk)
-            else:
-                xn_opt = opt.fmin_ncg(nll, x_glm_0,
-                                  fprime=grad_nll,
-                                  disp=True,
-                                  callback=cbk)
-            x_glm_n = unpackdict(xn_opt, shapes)
-            set_vars(glm_syms, x['glms'][n], x_glm_n)
-
-        # Check for convergence 
-        diffs = np.zeros(N)
-        for n in np.arange(N):
-            nvars = population.extract_vars(x, n)
-            dnvars = get_vars(glm_syms, nvars['glm'])
-            xn_curr, _ = packdict(dnvars)
-
-            nvars = population.extract_vars(x_prev, n)
-            dnvars = get_vars(glm_syms, nvars['glm'])
-            xn_prev, _ = packdict(dnvars)
+            fit_glm(nvars, n, glm_inf_prms, use_hessian, use_rop)
+            x['glms'][n] = nvars['glm']
             
-            diffs[n] = np.mean((xn_curr - xn_prev) ** 2)
-        maxdiff = np.max(diffs)
-
-        print "Difference in parameters from previous iteration:"
-        print diffs
-        converged = maxdiff < atol
-        x_prev = copy.deepcopy(x)
+        # Check for convergence 
+        lp = population.compute_log_p(x)
+        print "Iteration %d: LP=%.2f. Change in LP: %f" % (iter, lp, lp-lp_prev)
+        
+        converged = lp-lp_prev < atol
+        lp_prev = lp
     return x
 

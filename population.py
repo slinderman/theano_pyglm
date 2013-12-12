@@ -7,11 +7,14 @@ class Population:
     """
     def __init__(self, model):
         """
-        Initialize the network GLM with given model. What needs to be set?
+        Initialize the population of GLMs connected by a network.
         """
         self.model = model
         self.N = model['N']
 
+        # TODO: Go through every key in the model and initialize the 
+        # top level components.
+        
         # Create a network model to connect the GLMs
         self.network = Network(model)
 
@@ -127,8 +130,6 @@ class Population:
 
     def simulate(self, vars,  (T_start,T_stop), dt):
         """ Simulate spikes from a network of coupled GLMs
-        :param glms - the GLMs to sample, one for each neuron
-        :type glms    list of N GLMs
         :param vars - the variables corresponding to each GLM
         :type vars    list of N variable vectors
         :param dt    - time steps to simulate
@@ -137,20 +138,17 @@ class Population:
         """
         # Initialize the background rates
         N = self.model['N']
-        assert np.mod(T_start,dt) < 1**-16, "T_start must be divisble by dt"
-        assert np.mod(T_stop,dt) < 1**-16, "T_stop must be divisble by dt"
         t = np.arange(T_start, T_stop, dt)
         t_ind = np.arange(int(T_start/dt), int(T_stop/dt))
         assert len(t) == len(t_ind)
         nT = len(t)
 
         # Get set of symbolic variables
-        syms = self.get_variables()\
+        syms = self.get_variables()
 
         # Initialize the background rate
         X = np.zeros((nT,N))
         for n in np.arange(N):
-#             X[:,n] = self.glm.bias_model.f_I_bias(*vars[n+1])
             nvars = self.extract_vars(vars, n)
             X[:,n] = seval(self.glm.bias_model.I_bias,
                            syms,
@@ -177,10 +175,10 @@ class Population:
         T_imp = imps.shape[2]
 
         # Debug: compute effective weights
-        tt_imp = dt*np.arange(T_imp)
-        Weff = np.trapz(imps, tt_imp, axis=2)
-        print "Effective impulse weights: "
-        print Weff
+        # tt_imp = dt*np.arange(T_imp)
+        # Weff = np.trapz(imps, tt_imp, axis=2)
+        # print "Effective impulse weights: "
+        # print Weff
 
 
         # Iterate over each time step and generate spikes
@@ -237,8 +235,6 @@ class Population:
                 n_spk = np.sum(i_spk)
 
                 if np.any(S[t,:]>10):
-                    import pdb
-                    pdb.set_trace()
                     raise Exception("More than 10 spikes in a bin! Decrease variance on impulse weights or decrease simulation bin width.")
         # DEBUG:
         tt = dt * np.arange(nT)
