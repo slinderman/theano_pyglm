@@ -306,9 +306,9 @@ def coord_descent(population,
             
         # Check for convergence 
         lp = population.compute_log_p(x)
-        print "Iteration %d: LP=%.2f. Change in LP: %f" % (iter, lp, lp-lp_prev)
+        print "Iteration %d: LP=%.2f. Change in LP: %.2f" % (iter, lp, lp-lp_prev)
         
-        converged = lp-lp_prev < atol
+        converged = np.abs(lp-lp_prev) < atol
         lp_prev = lp
     return x
 
