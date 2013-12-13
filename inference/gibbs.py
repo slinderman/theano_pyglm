@@ -15,6 +15,7 @@ from components.graph import CompleteGraphModel
 
 from hmc import hmc
 from coord_descent import coord_descent
+from log_sum_exp import log_sum_exp_sample
 from smart_init import initialize_with_data
 
 def prep_network_inference(population,
@@ -28,71 +29,67 @@ def prep_network_inference(population,
     network = population.network
     glm = population.glm
     syms = population.get_variables()
-    
-    # Determine the differentiable network parameters
-    print "Computing log probabilities, gradients, and Hessians for network variables"
-    net_syms = differentiable(syms['net'])
-    net_prior = network.log_p
-    g_net_prior = grad_wrt_list(net_prior, _flatten(net_syms))
-    H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms))
-    
-    # TODO: Replace this with a function that just gets the shapes?
-    x0 = population.sample()
-    net_vars = get_vars(net_syms, x0['net'])
-    _,net_shapes = packdict(net_vars)
-    
-    # Get the likelihood of the GLM wrt the net variables
-    glm_logp = glm.log_p
-    g_glm_logp = grad_wrt_list(glm_logp, _flatten(net_syms))
-    
-    if use_hessian:
-        H_glm_logp = hessian_wrt_list(glm_logp, _flatten(net_syms))
-        
-    # Private function to compute the log probability (or grads and Hessians thereof)
-    # of the log probability given new network variables
-    def net_helper(x_net_vec, x, net_expr, glm_expr):
-        """ Compute the negative log probability (or gradients and Hessians thereof)
-        of the given network variables
+
+    # Helper functions to sample A
+    def lp_A(A, x, n_post):
+        """ Compute the log probability for a given column A[:,n_post] 
         """
-        x_net = unpackdict(x_net_vec, net_shapes)
-        set_vars(net_syms, x['net'], x_net)
-        lp = seval(net_expr,
+        # Set A in state dict x
+        set_vars('A', x['net']['graph'], A)
+
+        # Get the prior probability of A
+        lp = seval(network.log_p,
                    syms['net'],
                    x['net'])
-        
-        # Reduce the log prob, gradient, and Hessian across all GLM nodes.
-        # We can do this because the log prob is a sum of log probs from each GLM,
-        # plus the log prior from the network model.
-        # TODO Parallelize this loop!
-        for n in np.arange(N):
-            # Get the variables associated with the n-th GLM
-            nvars = population.extract_vars(x, n)
-            # Override the network vars
-            set_vars(net_syms, nvars['net'], x_net)
-            lp += seval(glm_expr,
-                        syms,
-                        nvars)
-            return -1.0*lp
 
-    # Create simple functions that take in a vector representing only the 
-    # flattened network parameters, and a dictionary x representing the 
-    # state of the population.
-    nll = lambda x_net_vec, x: net_helper(x_net_vec, 
-                                          x, 
-                                          net_prior, 
-                                          glm_logp)
-    grad_nll = lambda x_net_vec, x: net_helper(x_net_vec, 
-                                               x, 
-                                               g_net_prior, 
-                                               g_glm_logp)
-    hess_nll = lambda x_net_vec, x: net_helper(x_net_vec, 
-                                               x, 
-                                               H_net_prior, 
-                                               H_glm_logp)
-        
-    # Return the symbolic expressions and a function that evaluates them
-    # for given vector.
-    return net_syms, nll, grad_nll, hess_nll
+        # Get the likelihood of the GLM under A
+        nvars = population.extract_vars(x, n_post)
+        lp += seval(glm.log_p,
+                    syms,
+                    nvars)
+
+        return lp
+
+    # Helper functions to sample W
+    def lp_W(W, x, n_post):
+        """ Compute the log probability for a given column W[:,n_post] 
+        """
+        # Set A in state dict x
+        set_vars('W', x['net']['weights'], W)
+
+        # Get the prior probability of A
+        lp = seval(network.log_p,
+                   syms['net'],
+                   x['net'])
+
+        # Get the likelihood of the GLM under W
+        nvars = population.extract_vars(x, n_post)
+        lp += seval(glm.log_p,
+                    syms,
+                    nvars)
+
+        return lp
+
+    def grad_lp_W(W, x, n_post):
+        """ Compute the log probability for a given column W[:,n_post] 
+        """
+        # Set A in state dict x
+        set_vars('W', x['net']['weights'], W)
+
+        # Get the prior probability of A
+        g_lp = seval(T.grad(network.log_p, syms['net']['weights']['W']),
+                   syms['net'],
+                   x['net'])
+
+        # Get the likelihood of the GLM under W
+        nvars = population.extract_vars(x, n_post)
+        g_lp += seval(T.grad(glm.log_p, syms['net']['weights']['W']),
+                      syms,
+                      nvars)
+
+        return g_lp
+
+    return lp_A, lp_W, grad_lp_W
 
 def prep_glm_inference(population,
                        use_hessian=False,
@@ -176,36 +173,40 @@ def prep_glm_inference(population,
                                                    H_glm_logp_wrt_glm)        
     return glm_syms, nll, grad_nll, hess_nll
 
-def sample_A(self, state, network_glm, n_pre, n_post):
-        """
-        Sample a specific entry in A
-        """
-        # Compute the log prob with and without this connection
-        x_net = state[0]
-        x_glm = state[n_post+1]
-
-        x_net['A'][n_pre,n_post] = 0
-        log_pr_noA = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(1.0-self.rho)
-        
-        x_net['A'][n_pre,n_post] = 1
-        log_pr_A = network_glm.glm.f_lp(*([n_post]+x_net+x_glm)) + np.log(self.rho)
-
-        # Sample A[n_pre,n_post]
-        x_net['A'][n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
-        
-        return x_net
-    
-
 def network_gibbs_step(x, 
-                       (net_syms, net_nll, g_net_nll, H_net_nll)):
+                       (lp_A, lp_W, g_lp_W)):
     """ Gibbs sample the network by collapsing out the weights to 
         sample the binary adjacency matrix and then sampling the 
         weights using HMC or slice sampling. 
 
         We must also sample the parameters of the network prior.
     """
-    pass
+    # TODO Check for Gaussian weights with Bernoulli A and do 
+    #      collapsed Gibbs.
+    
+    # Sample the adjacency matrix if it exists
+    if 'A' in x['net']['graph']:
+        A = x['net']['graph']['A']
+        N = A.shape[0]
 
+        # TODO Parallelize this!
+        for n_post in np.arange(N):
+            # Sample coupling filters from other neurons
+            for n_pre in np.arange(N):
+                # WARNING Setting A is somewhat of a hack. It only works 
+                # because nvars copies x's pointer to A rather than making 
+                # a deep copy of the adjacency matrix.
+                A[n_pre,n_post] = 0
+                log_pr_noA = lp_A(A, x, n_post)
+
+                A[n_pre,n_post] = 1
+                log_pr_A = lp_A(A, x, n_post)
+                
+                # Sample A[n_pre,n_post]
+                A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+
+    # TODO Sample W
+                
 def glm_gibbs_step(xn, n,
                    (glm_syms, glm_nll, g_glm_nll, H_glm_nll)):
     """ Gibbs sample the GLM parameters. These are mostly differentiable
@@ -245,14 +246,21 @@ def gibbs_sample(population,
 
     # Draw initial state from prior if not given
     if x0 is None:
+        x0 = population.sample()
+        
         if init_from_mle:
             print "Initializing with coordinate descent"
-            x0 = coord_descent(population, data, maxiter=1)
-        else:
-            x0 = network_glm.sample()
-    
+            
             # Also initialize with intelligent parameters from the data
             initialize_with_data(population, data, x0)
+            
+            # If we are using a sparse network, set it to complete 
+            # before computing the initial state
+            if 'A' in x0['net']['graph']:
+                x0['net']['graph']['A'] = np.ones((N,N), dtype=np.bool)
+            
+            x0 = coord_descent(population, data, x0=x0, maxiter=1)
+    
 
     # Compute log prob, gradient, and hessian wrt network parameters
     net_inf_prms = prep_network_inference(population)

@@ -44,17 +44,23 @@ class ErdosRenyiGraphModel(Component):
         rho = self.prms['rho']
         
         # Define complete adjacency matrix
-        self.A = T.dmatrix('A')
+        self.A = T.bmatrix('A')
 
         # Define log probability
         self.log_p = T.sum(self.A*np.log(rho) + (1-self.A)*np.log(1.0-rho))
 
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.A): self.A}
+
+    
     def sample(self):
         N = self.model['N']
         rho = self.prms['rho']
         
         A = np.random.rand(N,N) < rho
-        return A
-
+        return {str(self.A) : A}
+    
     def get_state(self):
         return {'A': self.A}

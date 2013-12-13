@@ -12,19 +12,21 @@ def run_synth_test():
     """ Run a test with synthetic data and MCMC inference
     """
     # Make a population with N neurons
+    model = 'simple_sparse_model'
     N = 2
-    population, data, x_true = initialize_test_harness(N)
+    population, data, x_true = initialize_test_harness(N, model)
 
     # Perform inference
-    N_samples = 20
+    N_samples = 10
     x_smpls = gibbs_sample(population, data, N_samples=N_samples)
 
     # TODO Save results
     
     # Plot average of last 20% of samples
     smpl_frac = 0.2
-    x_mean = average_list_of_dicts(x_smpls[-1*int(smpl_frac*N_samples):])
-    plot_results(population, x_true, x_mean)
+    plot_results(population, 
+                 x_smpls[-1*int(smpl_frac*N_samples):],
+                 x_true )
 
 if __name__ == "__main__":
     run_synth_test()

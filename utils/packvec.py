@@ -96,12 +96,18 @@ def get_vars(syms, vars):
     return ve
 
 def set_vars(syms, vars, vals):
-    for (k,v) in syms.items():
-        assert k in vars.keys(), "ERROR: syms key %s not found in vars!" % k
-        assert k in vals.keys(), "ERROR: syms key %s not found in vals!" % k
-        if isinstance(v,dict):
-            vars[k] = set_vars(v, vars[k], vals[k])
-        else:
-            vars[k] = vals[k]
-
+    if isinstance(syms, dict):
+        for (k,v) in syms.items():
+            assert k in vars.keys(), "ERROR: syms key %s not found in vars!" % k
+            assert k in vals.keys(), "ERROR: syms key %s not found in vals!" % k
+            if isinstance(v,dict):
+                vars[k] = set_vars(v, vars[k], vals[k])
+            else:
+                vars[k] = vals[k]
+    elif syms in vars:
+        vars[syms] = vals
+    else:
+        raise Exception("Can only set variables for a dictionary of symbolic vars" \
+                        "or a specific key in vars")
+        
     return vars

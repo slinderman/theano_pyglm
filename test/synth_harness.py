@@ -21,6 +21,8 @@ def generate_synth_data(population,
 
     # Sample random parameters from the model
     x_true = population.sample()
+    # DEBUG print x_true
+    print x_true
     
     # Generate random stimulus
     stim = np.random.randn(T_stop/dt_stim,D_stim)
@@ -88,7 +90,8 @@ def parse_cmd_line_args():
     return (options, args)
 
 
-def initialize_test_harness(N=2):
+def initialize_test_harness(N=2,
+                            model_type='standard_glm'):
     """ Initialize a model with N neurons. Use the data if specified on the
         command line, otherwise sample new data from the model.
         Return a population object, the data, and a set of true parameters
@@ -99,8 +102,7 @@ def initialize_test_harness(N=2):
 
     # Initialize a model with N neurons
     print "Initializing GLM"
-    # model = make_model('spatiotemporal_glm', N=N)
-    model = make_model('standard_glm', N=N)
+    model = make_model(model_type, N=N)
     population = Population(model)
     
     # Load data

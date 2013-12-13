@@ -184,7 +184,8 @@ def fit_network(x,
                 use_rop):
     """ Fit the GLM parameters in state dict x
     """
-    x_net_0, shapes = packdict(x['net'])
+    dx_net = get_vars(net_syms, x['net'])
+    x_net_0, shapes = packdict(dx_net)
     
     if x_net_0.size > 0:
         nll = lambda x_net_vec: net_nll(x_net_vec, x)
@@ -268,9 +269,9 @@ def coord_descent(population,
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
     if not isinstance(network.graph, CompleteGraphModel):
-        raise Exception("MAP inference via coordinate descent can only be performed \
-                        with the complete graph model.")
-    
+        print " WARNING: MAP inference via coordinate descent can only be performed "\
+              "with the complete graph model."
+              
     # Draw initial state from prior if not given
     if x0 is None:
         x0 = population.sample()

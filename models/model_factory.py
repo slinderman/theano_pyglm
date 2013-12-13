@@ -1,9 +1,12 @@
 """
 Make models from a template
 """
-from simple_weighted_model import SimpleWeightedModel
 from standard_glm import StandardGlm
 from spatiotemporal_glm import SpatiotemporalGlm
+from simple_weighted_model import SimpleWeightedModel
+from simple_sparse_model import SimpleSparseModel
+
+
 import copy
 
 def make_model(template, N=None):
@@ -19,6 +22,10 @@ def make_model(template, N=None):
         elif template.lower() == 'simple_weighted_model' or \
              template.lower() == 'simpleweightedmodel':
             model = copy.deepcopy(SimpleWeightedModel)
+        elif template.lower() == 'simple_sparse_model' or \
+             template.lower() == 'simplesparsemodel':
+            model = copy.deepcopy(SimpleSparseModel)
+
 
     elif isinstance(template, dict):
         model = copy.deepcopy(template)

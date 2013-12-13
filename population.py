@@ -160,7 +160,6 @@ class Population:
 
         # Add stimulus induced currents if given
         for n in np.arange(N):
-            #X[:,n] += self.glm.bkgd_model.f_I_stim(*vars[n+1])[t_ind]
             nvars = self.extract_vars(vars, n)
             X[:,n] += seval(self.glm.bkgd_model.I_stim,
                             syms,

@@ -100,7 +100,7 @@ def differentiable(syms):
     """
     diff = {}
     for (k,v) in syms.items():
-        vnew = None
+        vnew = {}
         if isinstance(v,dict):
             # Recurse on the sub dictionary
             vnew  = differentiable(v)
@@ -112,12 +112,6 @@ def differentiable(syms):
             pdb.set_trace()
             raise Exception('Unrecognized value: %s' % str(v))
 
-        if vnew is not None:
-            diff[k] = v
+        diff[k] = vnew
 
-    # Check if the dict is empty
-    # if not any(diff):
-    #     return []
-    # else:
-        # return diff
     return diff

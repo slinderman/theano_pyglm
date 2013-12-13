@@ -65,5 +65,10 @@ class GaussianWeightModel(Component):
         W_flat = np.reshape(W,(N**2,))
         return [W_flat]
 
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.W_flat): self.W_flat}
+    
     def get_state(self):
         return {'W': self.W}
