@@ -79,7 +79,7 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
             plt.plot(stim_t + 2*stim_t_std, color=color, linestyle='--') 
             plt.plot(stim_t - 2*stim_t_std, color=color, linestyle='--')
 
-def plot_imp_responses(s_inf, s_std=None, color=None):
+def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-'):
     """ Plot the impulse responses plus or minus two standard devs
     """ 
     # Get a red-gray cmap
@@ -121,40 +121,50 @@ def plot_imp_responses(s_inf, s_std=None, color=None):
         
     W_imp = np.sum(s_imps,2)
     W_imp_max = np.amax(W_imp)
+
+    # Create a figure if necessary
+    if fig is None:
+        fig = plt.figure()
+
     for n_pre in np.arange(N):
         for n_post in np.arange(N):
-            # Set background color based on weight of impulse
-            bkgd_color = cmap((W_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
-            # Set it slightly transparent
-            tcolor = list(bkgd_color)
-            tcolor[3] = 0.75
-            tcolor = tuple(tcolor)
-            plt.subplot(N,N,n_pre*N+n_post + 1, axisbg=tcolor)
+            ax = fig.add_subplot(N,N,n_pre*N+n_post + 1)
+            if use_bgcolor:
+                # Set background color based on weight of impulse
+                bkgd_color = cmap((W_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
+                # Set it slightly transparent
+                tcolor = list(bkgd_color)
+                tcolor[3] = 0.75
+                tcolor = tuple(tcolor)
+                ax.set_axis_bgcolor(tcolor)
+
 
             # Plot the inferred impulse response
-            plt.plot(np.squeeze(s_imps[n_pre,n_post,:]),color=color, linestyle='-')
-            plt.hold(True)
-            
+            ax.hold(True)
+            ax.plot(np.squeeze(s_imps[n_pre,n_post,:]),color=color, linestyle=linestyle)
+
             # Plot plus or minus 2 stds
             if s_std is not None:
-                plt.plot(np.squeeze(s_imps[n_pre,n_post,:] +\
+                ax.plot(np.squeeze(s_imps[n_pre,n_post,:] +
                                     2*s_imps_std[n_pre,n_post,:]),
                                     color=color, 
                                     linestyle='--')
-                plt.plot(np.squeeze(s_imps[n_pre,n_post,:] -\
+                ax.plot(np.squeeze(s_imps[n_pre,n_post,:] -
                                     2*s_imps_std[n_pre,n_post,:]),
                                     color=color, 
                                     linestyle='--')
 
-            plt.plot(np.zeros_like(np.squeeze(s_imps[n_pre,n_post,:])),
+            ax.plot(np.zeros_like(np.squeeze(s_imps[n_pre,n_post,:])),
                      color='k', linestyle=':')
 
             # Set labels 
-            plt.xlabel("")
-            plt.xticks([])
-            plt.yticks([])
-            plt.ylabel("")
-            plt.ylim(-imp_max,imp_max)
+            ax.set_xlabel("")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_ylabel("")
+            ax.set_ylim(-imp_max,imp_max)
+
+    return fig
 
 def plot_firing_rate(s_glm, s_glm_std=None, color=None):
     plt.plot(s_glm['lam'],
@@ -221,12 +231,19 @@ def plot_results(population, x_inf, x_true=None, resdir=None):
         plt.close(f)
         
     # Plot the impulse responses
+    print "Plotting impulse response functions"
     f = plt.figure()
     plot_imp_responses(s_avg,
                        s_std,
-                       color='r')
+                       fig=f,
+                       color='r',
+                       use_bgcolor=True)
     if true_given:
-        plot_imp_responses(s_true, color='k')
+        plot_imp_responses(s_true,
+                           fig=f,
+                           color='k',
+                           linestyle='--',
+                           use_bgcolor=False)
 
     f.savefig(os.path.join(resdir,'imp_resp.pdf'))
     plt.close(f)
