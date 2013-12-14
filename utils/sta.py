@@ -34,26 +34,43 @@ def sta(stim, data, L):
         istim[:,d] /= (dt_stim/dt)
         
     # TODO Make lagged stim matrix to compute STA
+    stim_lag = np.zeros((nt,L*D_stim))
+    for l in np.arange(L):
+        stim_lag[:,(l*D_stim):((l+1)*D_stim)] = \
+            np.concatenate((np.zeros((l,D_stim)),istim[l:,:]))
+
     # Initialize STA
+    #A = np.zeros((N,L,D_stim))
+    #for ti in np.arange(nt):
+    #    # if ti % 1000 == 0:
+    #        # print "STA iter %d:" % ti
+    #    if ti<L-1:
+    #        stim_pad = np.concatenate((np.zeros((L-ti-1,D_stim)),istim[:ti+1,:]))
+    #    else:
+    #        stim_pad = istim[ti-L+1:ti+1,:]
+    #
+    #    assert stim_pad.shape == (L,D_stim)
+    #
+    #    A += np.tensordot(np.reshape(S[ti,:],(N,1)),
+    #                      np.reshape(stim_pad, (1,L,D_stim)),
+    #                      axes=[1,0])
+
+
     A = np.zeros((N,L,D_stim))
-    for ti in np.arange(nt):
-        # if ti % 1000 == 0:
-            # print "STA iter %d:" % ti
-        if ti<L-1:
-            stim_pad = np.concatenate((np.zeros((L-ti-1,D_stim)),istim[:ti+1,:]))
-        else:
-            stim_pad = istim[ti-L+1:ti+1,:]
+    for n in np.arange(N):
+        Sn = S[:,n] > 0
+        Aflat = np.sum(stim_lag[Sn,:],axis=0)
 
-        assert stim_pad.shape == (L,D_stim)
-
-        A += np.tensordot(np.reshape(S[ti,:],(N,1)), 
-                          np.reshape(stim_pad, (1,L,D_stim)),
-                          axes=[1,0])
+        # Reshape into L x D_stim array
+        # (this is more readable and safer than using Numpy reshape)
+        for l in np.arange(L):
+            A[n,l,:] = Aflat[(l*D_stim):((l+1)*D_stim)]
 
     # Normalize
     for n in np.arange(N):
-        A[n,:,:] /= np.sum(S[:,n])
+        #A[n,:,:] /= np.sum(S[:,n])
+        A[n,:,:] /= np.sum(S[:,n]>0)
 
     # Flip the result so that the first column is the most recent stimulus frame
-    A = A[:,::-1,:]
+    #A = A[:,::-1,:]
     return A

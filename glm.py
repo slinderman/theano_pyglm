@@ -16,7 +16,7 @@ class Glm:
         This corresponds to the spikes in the n-th column of data["S"]
         """
         # Define the Poisson regression model
-        self.n = T.iscalar('n')
+        self.n = T.lscalar('n')
         self.dt = theano.shared(name='dt',
                                 value=1.0)
         self.S = theano.shared(name='S',

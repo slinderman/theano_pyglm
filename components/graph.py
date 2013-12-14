@@ -60,6 +60,13 @@ class ErdosRenyiGraphModel(Component):
         rho = self.prms['rho']
         
         A = np.random.rand(N,N) < rho
+
+        # DEBUG: Make sure we're sampling A properly
+        #nnz = np.sum(A)
+        #Ennz = rho*N**2
+        #std_nnz = np.sqrt(N**2 * rho * (1.0-rho))
+        #assert np.abs(nnz-Ennz) < 3*std_nnz, "ERROR: Number of nonzeros in A outside 3 std of mean!"
+
         return {str(self.A) : A}
     
     def get_state(self):

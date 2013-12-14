@@ -212,7 +212,10 @@ def fit_glm(xn, n,
     # Create lambda functions to compute the nll and its gradient and Hessian
     nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
     grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
-    hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
+    if use_rop:
+        hess_nll = lambda x_glm_vec, v_vec: H_glm_nll(x_glm_vec, v_vec, xn)
+    elif use_hessian:
+        hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
     
     # Callback to print progress. In order to count iters, we need to
     # pass the current iteration via a list
@@ -251,7 +254,7 @@ def coord_descent(population,
                   x0=None, 
                   maxiter=50, 
                   atol=1e-5,
-                  use_hessian=False,
+                  use_hessian=True,
                   use_rop=False):
     """
     Compute the maximum a posterior parameter estimate using Theano to compute
@@ -280,10 +283,14 @@ def coord_descent(population,
     initialize_with_data(population, data, x0)
 
     # Compute log prob, gradient, and hessian wrt network parameters
-    net_inf_prms = prep_network_inference(population)
+    net_inf_prms = prep_network_inference(population,
+                                          use_hessian=use_hessian,
+                                          use_rop=use_rop)
     
     # Compute gradients of the log prob wrt the GLM parameters
-    glm_inf_prms = prep_glm_inference(population)
+    glm_inf_prms = prep_glm_inference(population,
+                                      use_hessian=use_hessian,
+                                      use_rop=use_rop)
     
     # Alternate fitting the network and fitting the GLMs
     x = x0

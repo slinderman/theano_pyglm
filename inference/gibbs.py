@@ -44,6 +44,18 @@ def prep_network_inference(population,
 
         # Get the likelihood of the GLM under A
         nvars = population.extract_vars(x, n_post)
+
+        # At some point it may become beneficial to cache a function
+        # with the GLM parameters as given. This requires us to pay once to
+        # compile an optimized function that should precompute the unweighted currents
+        # and then benefit from increased performance on subsequent calls.
+
+        #givens = zip(_flatten(syms['glm']),
+        #             _flatten(get_vars(syms['glm'],nvars['glm'])))
+        #lp += seval(glm.log_p,
+        #            syms['net'],
+        #            nvars['net'],
+        #            givens=givens)
         lp += seval(glm.log_p,
                     syms,
                     nvars)
@@ -193,6 +205,7 @@ def network_gibbs_step(x,
         for n_post in np.arange(N):
             # Sample coupling filters from other neurons
             for n_pre in np.arange(N):
+                print "Sampling A[%d,%d]" % (n_pre,n_post)
                 # WARNING Setting A is somewhat of a hack. It only works 
                 # because nvars copies x's pointer to A rather than making 
                 # a deep copy of the adjacency matrix.
@@ -267,25 +280,43 @@ def gibbs_sample(population,
     
     # Compute gradients of the log prob wrt the GLM parameters
     glm_inf_prms = prep_glm_inference(population)
-    
+
+    # DEBUG Profile the Gibbs sampling loop
+    import cProfile, pstats, StringIO
+    pr = cProfile.Profile()
+    pr.enable()
+
     # Alternate fitting the network and fitting the GLMs
     x_smpls = []
     x = x0
-    for smpl in np.arange(N_samples):
-        # Go through variables, sampling one at a time, in parallel where possible
-        network_gibbs_step(x, net_inf_prms)
-        
-        # Sample the GLM parameters
-        # TODO Parallelize this!
-        for n in np.arange(N):
-            nvars = population.extract_vars(x, n)
-            glm_gibbs_step(nvars, n, glm_inf_prms)
-            x['glms'][n] = nvars['glm']
-            
-        x_smpls.append(copy.deepcopy(x))
 
+    for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = population.compute_log_p(x)
         print "Iter %d: Log prob: %.3f" % (smpl,lp)
+
+        # Go through variables, sampling one at a time, in parallel where possible
+        network_gibbs_step(x, net_inf_prms)
+
+        # Sample the GLM parameters
+        # TODO Parallelize this!
+        for n in np.arange(N):
+            print "Gibbs step for GLM %d" % n
+            nvars = population.extract_vars(x, n)
+            glm_gibbs_step(nvars, n, glm_inf_prms)
+            x['glms'][n] = nvars['glm']
+
+        x_smpls.append(copy.deepcopy(x))
+
+    pr.disable()
+    s = StringIO.StringIO()
+    sortby = 'cumulative'
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+
+    with open('mcmc.prof.txt', 'w') as f:
+        f.write(s.getvalue())
+        f.close()
+
 
     return x_smpls

@@ -11,8 +11,9 @@ def run_synth_test():
     """ Run a test with synthetic data and MCMC inference
     """
     # Make a population with N neurons
-    N = 2
-    population, data, x_true = initialize_test_harness(N)
+    model = 'simple_sparse_model'
+    N = 10
+    population, data, x_true = initialize_test_harness(N, model)
     
     # Sample random initial state
     x0 = population.sample()
@@ -20,14 +21,16 @@ def run_synth_test():
     print "LL0: %f" % ll0
 
     # Perform inference
-    x_inf = coord_descent(population, data, x0=x0, maxiter=1)
+    x_inf = coord_descent(population, data, x0=x0, maxiter=1,
+                          use_hessian=False,
+                          use_rop=False)
     ll_inf = population.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf
 
     # TODO Save results
     
     # Plot results
-    plot_results(population, x_true, x_inf)
+    plot_results(population, x_inf, x_true)
 
 if __name__ == "__main__":
     run_synth_test()

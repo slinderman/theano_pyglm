@@ -3,12 +3,13 @@
 """
 import theano
 import numpy as np
+import hashlib
 
 # It is expensive to create the Theano functions, so once we've done it
 # we cache the results for future calls
 _func_cache = {}
 
-def seval(expr, syms, vals, defaults=None):
+def seval(expr, syms, vals, defaults=None, givens=[]):
     """
     Evaluate the symbolic expression which depends on a set of symbolic variables,
     given a set of variable bindings.
@@ -20,15 +21,29 @@ def seval(expr, syms, vals, defaults=None):
     defaults : an optional dictionary providing backup values for 
                syms keys not found in vals.
     """
-    # Look for a function handle corresponding to this expression
-    if expr in _func_cache.keys():
-        f = _func_cache[expr]
+    # Look for a function handle corresponding to this expression with these givens
+    hash_value = lambda v: hashlib.sha1(v).hexdigest() if \
+                           isinstance(v, np.ndarray) else v
+    hashable_givens = tuple(map(lambda (k,v): (k, hash_value(v)), givens))
+    key = (expr, hashable_givens)
+    if key in _func_cache.keys():
+        #print "DBG: Found key %s in cache" % str(key)
+        f = _func_cache[key]
+        #print "DBG: Calling expr: %s" % str(expr)
     else:
         # Create a callable theano function and cache it
+        #print "DBG: Compiling expr: %s" % str(expr)
         sargs = _flatten(syms)
-        f = theano.function(sargs, expr,
-                            on_unused_input='ignore')
-        _func_cache[expr] = f
+        if len(givens) == 0:
+            #print "DBG: Compiling expression %s with no givens" % expr
+            f = theano.function(sargs, expr,
+                                on_unused_input='ignore')
+        else:
+            #print "DBG: Compiling expression %s with givens: %s" % (expr, str(givens))
+            f = theano.function(sargs, expr,
+                                givens=givens,
+                                on_unused_input='ignore')
+        _func_cache[key] = f
     
     # Easiest thing to do is call the function with all symbolic variables
     args = _extract_vals(syms,vals,defaults)

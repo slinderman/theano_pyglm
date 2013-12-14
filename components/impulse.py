@@ -35,15 +35,20 @@ class LinearBasisImpulses(Component):
         # Repeat them (in a differentiable manner) to create a 3-tensor
         w_ir2 = T.reshape(self.w_ir, [self.N,self.B])
         w_ir3 = T.reshape(self.w_ir, [1,self.N,self.B])
-        ov = T.ones((self.ir.shape[0],1))
-        w_ir_rep = T.tensordot(ov,w_ir3,axes=[1,0])
+
+        # Make w_ir3 broadcastable in the 1st dim
+        T.addbroadcast(w_ir3,0)
+
+        #ov = T.ones((self.ir.shape[0],1))
+        #w_ir_rep = T.tensordot(ov,w_ir3,axes=[1,0])
 
         # Take the elementwise product of the filtered stimulus and
         # the repeated weights to get the weighted impulse current along each
         # impulse basis dimension. Then sum over bases to get the
         # total coupling current from each presynaptic neurons at
         # all time points
-        self.I_imp = T.sum(self.ir*w_ir_rep, axis=2)
+        #self.I_imp = T.sum(self.ir*w_ir_rep, axis=2)
+        self.I_imp = T.sum(self.ir*w_ir3, axis=2)
         self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
 
         # Define a helper variable for the impulse response

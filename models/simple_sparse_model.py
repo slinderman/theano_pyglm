@@ -47,7 +47,7 @@ SimpleSparseModel = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0.0,
-             'sigma' : 1.0,
+             'sigma' : 0.75,
              'basis' :
                  {
                      'type' : 'cosine',
@@ -71,7 +71,7 @@ SimpleSparseModel = \
             'graph' :
                 {
                     'type' : 'erdos_renyi',
-                    'rho' : 0.5
+                    'rho' : 0.1
                 }
         },
 }
