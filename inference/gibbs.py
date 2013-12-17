@@ -185,8 +185,41 @@ def prep_glm_inference(population,
                                                    H_glm_logp_wrt_glm)        
     return glm_syms, nll, grad_nll, hess_nll
 
+def sample_network_column(n_post,
+                          x,
+                          (lp_A, lp_W, g_lp_W)):
+    """ Sample a single column of the network (all the incoming
+        coupling filters). This is a parallelizable chunk.
+    """
+    # TODO Check for Gaussian weights with Bernoulli A and do
+    #      collapsed Gibbs.
+
+    # Sample the adjacency matrix if it exists
+    if 'A' in x['net']['graph']:
+        A = x['net']['graph']['A']
+        N = A.shape[0]
+
+        # Sample coupling filters from other neurons
+        for n_pre in np.arange(N):
+            print "Sampling A[%d,%d]" % (n_pre,n_post)
+            # WARNING Setting A is somewhat of a hack. It only works
+            # because nvars copies x's pointer to A rather than making
+            # a deep copy of the adjacency matrix.
+            A[n_pre,n_post] = 0
+            log_pr_noA = lp_A(A, x, n_post)
+
+            A[n_pre,n_post] = 1
+            log_pr_A = lp_A(A, x, n_post)
+
+            # Sample A[n_pre,n_post]
+            A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+
+        return A[:,n_post]
+
+    # TODO Sample W
+
 def network_gibbs_step(x, 
-                       (lp_A, lp_W, g_lp_W)):
+                       net_inf_prms):
     """ Gibbs sample the network by collapsing out the weights to 
         sample the binary adjacency matrix and then sampling the 
         weights using HMC or slice sampling. 
@@ -195,29 +228,11 @@ def network_gibbs_step(x,
     """
     # TODO Check for Gaussian weights with Bernoulli A and do 
     #      collapsed Gibbs.
-    
-    # Sample the adjacency matrix if it exists
-    if 'A' in x['net']['graph']:
-        A = x['net']['graph']['A']
-        N = A.shape[0]
-
-        # TODO Parallelize this!
-        for n_post in np.arange(N):
-            # Sample coupling filters from other neurons
-            for n_pre in np.arange(N):
-                print "Sampling A[%d,%d]" % (n_pre,n_post)
-                # WARNING Setting A is somewhat of a hack. It only works 
-                # because nvars copies x's pointer to A rather than making 
-                # a deep copy of the adjacency matrix.
-                A[n_pre,n_post] = 0
-                log_pr_noA = lp_A(A, x, n_post)
-
-                A[n_pre,n_post] = 1
-                log_pr_A = lp_A(A, x, n_post)
-                
-                # Sample A[n_pre,n_post]
-                A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
-
+    for n_post in np.arange(N):
+        # Sample coupling filters from other neurons
+        sample_network_column(n_post,
+                              x,
+                              net_inf_prms)
     # TODO Sample W
                 
 def glm_gibbs_step(xn, n,
@@ -243,6 +258,8 @@ def glm_gibbs_step(xn, n,
     # Unpack the optimized parameters back into the state dict
     x_glm_n = unpackdict(x_glm, shapes)
     set_vars(glm_syms, xn['glm'], x_glm_n)
+
+    return xn['glm']
 
 def gibbs_sample(population, 
                  data, 

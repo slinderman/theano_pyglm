@@ -1,14 +1,12 @@
-# Run as script using 'python -m test.synth_map'
-import cPickle
-import scipy.io
-
+# Run as script using 'python -m test.parallel_coord_descent'
 from inference.parallel_coord_descent import parallel_coord_descent
 from plotting.plot_results import plot_results
 
 from parallel_harness import initialize_parallel_test_harness
 
 def run_synth_test():
-    """ Run a test with synthetic data and MCMC inference
+    """ Run a test with synthetic data and MAP inference via
+        parallel coordinate descent.
     """
     # Make a population with N neurons
     model = 'standard_glm'
@@ -30,4 +28,3 @@ def run_synth_test():
 
 if __name__ == "__main__":
     run_synth_test()
-

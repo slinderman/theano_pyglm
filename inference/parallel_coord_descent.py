@@ -72,6 +72,8 @@ def parallel_coord_descent(client,
               
     # Draw initial state from prior if not given
     if x0 is None:
+        # TODO Initialize with STA
+
         client[0].execute('x0 = popn.sample()', block=True)
         x0 = client[0]['x0']
 

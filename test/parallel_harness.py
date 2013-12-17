@@ -60,8 +60,7 @@ def create_population_on_engines(dview,
     # Initialize a model with N neurons
     print "Initializing GLM"
     N = data['N']
-    model = make_model(model_type, N=N)
-    dview['model'] = model
+    dview['model'] = make_model(model_type, N=N)
 
     # Create a population object on each engine
     dview.execute('popn = Population(model)', block=True)
@@ -90,7 +89,7 @@ def load_data(options):
 
     return data
 
-def initialize_parallel_test_harness(model_type='standard_glm'):
+def initialize_parallel_test_harness(model_type):
     # Parse command line args
     (options, args) = parse_cmd_line_args()
 
@@ -109,7 +108,7 @@ def initialize_parallel_test_harness(model_type='standard_glm'):
     initialize_imports(dview)
 
     print "Creating population objects on each engine"
-    create_population_on_engines(dview, data, model_type='standard_glm')
+    create_population_on_engines(dview, data, model_type=model_type)
 
     return popn, data, client
 
