@@ -2,6 +2,7 @@ import cPickle
 import os
 from IPython.parallel import Client
 
+from population import Population
 from models.model_factory import *
 from inference.parallel_coord_descent import parallel_coord_descent
 
@@ -21,6 +22,9 @@ def parse_cmd_line_args():
 
     parser.add_option("-r", "--resultsDir", dest="resultsDir", default='.',
                       help="Save the results to this directory.")
+
+    parser.add_option("-p", "--profile", dest="profile", default='default',
+                      help="IPython parallel profile to use.")
 
     (options, args) = parser.parse_args()
 
@@ -42,10 +46,7 @@ def initialize_imports(dview):
     """
     dview.execute('from population import Population')
     dview.execute('from models.model_factory import make_model')
-    dview.execute('from utils.theano_func_wrapper import seval')
 
-    # TODO Move this to the parallel inference scripts
-    dview.execute('from inference.parallel_coord_descent import parallel_coord_descent')
 
 def create_population_on_engines(dview,
                                  data,
@@ -67,12 +68,7 @@ def create_population_on_engines(dview,
 
     # Initialize the GLM with the data
     dview['data'] = data
-    dview.execute("x_true = data['vars']; "
-                  "popn.set_data(data)", block=True)
-
-    import pdb
-    pdb.set_trace()
-
+    dview.execute("popn.set_data(data)", block=True)
 
 def load_data(options):
     # Load data
@@ -94,15 +90,20 @@ def load_data(options):
 
     return data
 
-def run_parallel_test():
+def initialize_parallel_test_harness(model_type='standard_glm'):
     # Parse command line args
     (options, args) = parse_cmd_line_args()
 
     data = load_data(options)
 
+    print "Creating master population object"
+    model = make_model(model_type, N=data['N'])
+    popn = Population(model)
+    popn.set_data(data)
+
     # Create a client with direct view to all engines
-    rc = Client()
-    dview = rc[:]
+    client = Client(profile=options.profile)
+    dview = client[:]
 
     print "Initializing imports on each engine"
     initialize_imports(dview)
@@ -110,10 +111,7 @@ def run_parallel_test():
     print "Creating population objects on each engine"
     create_population_on_engines(dview, data, model_type='standard_glm')
 
-    print "Performing parallel inference"
-    parallel_coord_descent(rc)
+    return popn, data, client
 
-if __name__=="__main__":
-    run_parallel_test()
 
 
