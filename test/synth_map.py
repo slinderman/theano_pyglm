@@ -11,8 +11,8 @@ def run_synth_test():
     """ Run a test with synthetic data and MCMC inference
     """
     # Make a population with N neurons
-    model = 'simple_sparse_model'
-    N = 10
+    model = 'standard_glm'
+    N = 2
     population, data, x_true = initialize_test_harness(N, model)
     
     # Sample random initial state
