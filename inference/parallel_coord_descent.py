@@ -62,7 +62,7 @@ def parallel_coord_descent(client,
 
     # Parameter checking
     # We only use Rops if use_hessian is False
-    use_rop = use_rop and not use_hessian
+    use_rop = use_rop and not use_hessipyan
     
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
@@ -73,7 +73,7 @@ def parallel_coord_descent(client,
     # Draw initial state from prior if not given
     if x0 is None:
         # TODO Initialize with STA
-
+        # TODO Don't hardcode client 0
         client[0].execute('x0 = popn.sample()', block=True)
         x0 = client[0]['x0']
 
@@ -115,6 +115,8 @@ def parallel_coord_descent(client,
         x_glms = dview.map_async(_parallel_fit_glm,
                                  range(N),
                                  [x]*N)
+
+        # TODO Do some sort of progress checking...
 
         x['glms'] = x_glms.get()
         x_glms.display_outputs()

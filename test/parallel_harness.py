@@ -1,5 +1,8 @@
 import cPickle
 import os
+
+import numpy as np
+
 from IPython.parallel import Client
 
 from population import Population
@@ -58,7 +61,6 @@ def create_population_on_engines(dview,
         which is expected for synthetic tests 
     """
     # Initialize a model with N neurons
-    print "Initializing GLM"
     N = data['N']
     dview['model'] = make_model(model_type, N=N)
 
@@ -81,6 +83,16 @@ def load_data(options):
             print "Loading data from %s" % options.dataFile
             with open(options.dataFile,'r') as f:
                 data = cPickle.load(f)
+
+                # Print data stats
+                N = data['N']
+                Ns = np.sum(data['S'])
+                T = data['S'].shape[0]
+                fr = 1.0/data['dt']
+                print "Data has %d neurons, %d spikes, " \
+                      "and %d time bins at %.3fHz sample rate" % \
+                      (N,Ns,T,fr)
+
         else:
             raise Exception("Unrecognized file type: %s" % options.dataFile)
 

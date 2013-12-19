@@ -12,7 +12,7 @@ def run_synth_test():
     """
     # Make a population with N neurons
     model = 'standard_glm'
-    N = 2
+    N = 10
     population, data, x_true = initialize_test_harness(N, model)
     
     # Sample random initial state
