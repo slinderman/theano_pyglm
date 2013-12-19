@@ -15,7 +15,6 @@ def run_synth_test():
     print "Performing parallel inference"
     # HACK: Figure out why the second iteration sometimes hangs
     x_inf = parallel_coord_descent(client, data['N'], maxiter=1)
-
     ll_inf = popn.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf
 

@@ -17,6 +17,9 @@ def parse_cmd_line_args():
     from optparse import OptionParser
 
     parser = OptionParser()
+    parser.add_option("-m", "--model", dest="model", default='standard_glm',
+                      help="Type of model to use. See model_factory.py for available types.")
+
     parser.add_option("-d", "--dataFile", dest="dataFile", default=None,
                       help="Use this data file. If not specified, simulate from model.")
 
@@ -28,6 +31,9 @@ def parse_cmd_line_args():
 
     parser.add_option("-p", "--profile", dest="profile", default='default',
                       help="IPython parallel profile to use.")
+
+    parser.add_option("-j", "--json", dest="json", default=None,
+                      help="IPython parallel json file specifying which controller to connect to.")
 
     (options, args) = parser.parse_args()
 
@@ -53,7 +59,7 @@ def initialize_imports(dview):
 
 def create_population_on_engines(dview,
                                  data,
-                                 model_type='standard_glm'
+                                 model_type
                                  ):
     """ Initialize a model with N neurons. Use the data if specified on the
         command line, otherwise sample new data from the model.
@@ -108,19 +114,22 @@ def initialize_parallel_test_harness(model_type):
     data = load_data(options)
 
     print "Creating master population object"
-    model = make_model(model_type, N=data['N'])
+    model = make_model(options.model, N=data['N'])
     popn = Population(model)
     popn.set_data(data)
 
     # Create a client with direct view to all engines
-    client = Client(profile=options.profile)
+    if options.json is not None:
+        client = Client(options.json)
+    else:
+        client = Client(profile=options.profile)
     dview = client[:]
 
     print "Initializing imports on each engine"
     initialize_imports(dview)
 
     print "Creating population objects on each engine"
-    create_population_on_engines(dview, data, model_type=model_type)
+    create_population_on_engines(dview, data, options.model)
 
     return popn, data, client
 

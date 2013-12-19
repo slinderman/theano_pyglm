@@ -56,13 +56,14 @@ def parallel_coord_descent(client,
     gradients of the log probability.
     """
     dview = client[:]
+    master = client[client.ids[0]]
 
     # Import req'd functions on engines
     initialize_imports(dview)
 
     # Parameter checking
     # We only use Rops if use_hessian is False
-    use_rop = use_rop and not use_hessipyan
+    use_rop = use_rop and not use_hessian
     
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
@@ -73,9 +74,8 @@ def parallel_coord_descent(client,
     # Draw initial state from prior if not given
     if x0 is None:
         # TODO Initialize with STA
-        # TODO Don't hardcode client 0
-        client[0].execute('x0 = popn.sample()', block=True)
-        x0 = client[0]['x0']
+        master.execute('x0 = popn.sample()', block=True)
+        x0 = master['x0']
 
     # Also initialize with intelligent parameters from the data
     # initialize_with_data(population, data, x0)
