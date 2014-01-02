@@ -189,6 +189,8 @@ class Population:
         acc = np.zeros(N)
         thr = -np.log(np.random.rand(N))
 
+        # Count the number of exceptions arising from more spikes per bin than allowable
+        n_exceptions = 0
         for t in np.arange(nT):
             # Update accumulator
             if np.mod(t,10000)==0:
@@ -213,6 +215,7 @@ class Population:
                                           vars['net']),
                                     [N,N,1]),
                          [1,1,t_imp])
+
             Wt = np.tile(np.reshape(seval(self.network.weights.W,
                                           syms['net'],
                                           vars['net']),
@@ -220,7 +223,14 @@ class Population:
                          [1,1,t_imp])
 
             # Iterate until no more spikes
+            # Cap the number of spikes in a time bin
+            max_spks_per_bin = 10
             while n_spk > 0:
+                if np.any(S[t,:] >= max_spks_per_bin):
+                    #print "Limiting to at most %d spikes in time bin %d" % \
+                    #      (max_spks_per_bin, t)
+                    n_exceptions += 1
+                    break
                 # Add weighted impulse response to activation of other neurons)
                 X[t+1:t+t_imp+1,:] += np.sum(At[i_spk,:,:t_imp] *
                                              Wt[i_spk,:,:t_imp] *
@@ -237,14 +247,17 @@ class Population:
                 S[t,i_spk] += 1
                 n_spk = np.sum(i_spk)
 
-                if np.any(S[t,:]>10):
-                    raise Exception("More than 10 spikes in a bin! Decrease variance on impulse weights or decrease simulation bin width.")
+                #if np.any(S[t,:]>10):
+                #    import pdb
+                #    pdb.set_trace()
+                #    raise Exception("More than 10 spikes in a bin! Decrease variance on impulse weights or decrease simulation bin width.")
+                
         # DEBUG:
         tt = dt * np.arange(nT)
         lam = np.zeros_like(X)
         for n in np.arange(N):
             lam[:,n] = self.glm.nlin_model.f_nlin(X[:,n])
-
+        
         print "Max firing rate (post sim): %f" % np.max(lam)
         E_nS = np.trapz(lam,tt,axis=0)
         nS = np.sum(S,0)
@@ -253,7 +266,9 @@ class Population:
         print "Expected %s spikes." % str(E_nS)
 
         if np.any(np.abs(nS-E_nS) > 3*np.sqrt(E_nS)):
-            print "ERROR: Actual num spikes (%d) differs from expected (%d) by >3 std." % (E_nS,nS)
+            print "ERROR: Actual num spikes (%s) differs from expected (%s) by >3 std." % (str(nS),str(E_nS))
+
+        print "Number of exceptions arising from multiple spikes per bin: %d" % n_exceptions
 
         return S,X
 

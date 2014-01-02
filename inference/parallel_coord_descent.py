@@ -7,11 +7,15 @@ from coord_descent import prep_glm_inference, \
                           fit_glm, \
                           fit_network
 
+from utils.progress_report import wait_watching_stdout
+
 def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
     """
+    print "Initializing imports for parallel coord descent"
     dview.execute('from utils.theano_func_wrapper import seval')
     dview.execute('from inference.coord_descent import *')
+    dview.execute('from inference.smart_init import initialize_with_data')
 
 def parallel_compute_log_p(dview,
                            v,
@@ -72,14 +76,26 @@ def parallel_coord_descent(client,
     #           "with the complete graph model."
               
     # Draw initial state from prior if not given
+    print "Initializing parameters"
     if x0 is None:
-        # TODO Initialize with STA
         master.execute('x0 = popn.sample()', block=True)
         x0 = master['x0']
 
     # Also initialize with intelligent parameters from the data
-    # initialize_with_data(population, data, x0)
+    # dview['x0d'] = x0      
+    # @interactive
+    # def _initialize_with_data(n):
+    #     initialize_with_data(popn, data, x0d, Ns=n)
+    # x0s = dview.map_async(_initialize_with_data,
+    #                       range(N)) 
+    # x0s = x0s.get()
+    # Extract the initial parameters for each GLM
+    #x0['glms'] = [x0s['glms'][n] for n in np.arange(N)]
 
+    master.execute('initialize_with_data(popn, data, x0)')
+    x0 = master['x0']
+    
+    print "Preparing Theano functions for inference"
     # Compute log prob, gradient, and hessian wrt network parameters
     dview.execute('net_inf_prms = prep_network_inference(popn,'
                   'use_hessian=%s,'
@@ -116,7 +132,11 @@ def parallel_coord_descent(client,
                                  range(N),
                                  [x]*N)
 
-        # TODO Do some sort of progress checking...
+        # Print progress report ever interval seconds
+        interval = 30.0
+        # Timeout after specified number of seconds (-1 = Inf?)
+        #timeout = -1
+        wait_watching_stdout(x_glms, interval=interval)
 
         x['glms'] = x_glms.get()
         x_glms.display_outputs()

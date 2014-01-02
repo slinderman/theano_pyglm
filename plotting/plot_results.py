@@ -53,17 +53,28 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
         stim_x = s_glm['bkgd']['stim_response_x']
         stim_t = s_glm['bkgd']['stim_response_t']
             
+        # Plot the spatial component of the stimulus response
         plt.subplot(1,2,1)
-        plt.plot(stim_x, color=color, linestyle='-')
-        plt.hold(True)
-        # If standard deviation is given, plot that as well
-        if s_glm_std is not None:
-            stim_x_std = s_glm_std['bkgd']['stim_response_x']
-            plt.plot(stim_x + 2*stim_x_std, color=color, linestyle='--') 
-            plt.plot(stim_x - 2*stim_x_std, color=color, linestyle='--')
+        if len(stim_x.shape) >= 2:
+            px_per_node = 10
+            stim_x_max = np.amax(np.abs(stim_x))
+            plt.imshow(np.kron(stim_x,np.ones((px_per_node,px_per_node))),
+                       vmin=-stim_x_max,vmax=stim_x_max,
+                       extent=[0,1,0,1],
+                       interpolation='nearest')
+            plt.colorbar()
+        else:
+            plt.plot(stim_x, color=color, linestyle='-')
+            plt.hold(True)
+
+            # If standard deviation is given, plot that as well
+            if s_glm_std is not None:
+                stim_x_std = s_glm_std['bkgd']['stim_response_x']
+                plt.plot(stim_x + 2*stim_x_std, color=color, linestyle='--') 
+                plt.plot(stim_x - 2*stim_x_std, color=color, linestyle='--')
             
         plt.subplot(1,2,2)
-        plt.plot(opt_stim_t,'-r')
+        plt.plot(stim_t,'-r')
         plt.hold(True)
         if s_glm_std is not None:
             stim_t_std = s_glm_std['bkgd']['stim_response_t']
@@ -158,10 +169,11 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
                      color='k', linestyle=':')
 
             # Set labels 
-            ax.set_xlabel("")
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_ylabel("")
+            if not (n_pre == N-1 and n_post == 0):
+                ax.set_xlabel("")
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_ylabel("")
             ax.set_ylim(-imp_max,imp_max)
 
     return fig
@@ -178,15 +190,52 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None):
         plt.plot(s_glm['lam'] - 2*s_glm_std['lam'],
                  color=color,
                  linestyle='--')
+
+def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
+    """ Plot a Kolmogorov-Smirnov goodness of fit test..
+    """
+    lam = s_glm['lam']
+    # Cumulative integral of fr
+    I = dt * np.cumsum(lam);
+
+    # Find rescaled spike times
+    rescaled_isi = np.diff(I[S])
+
+    # For a PP the cdf is of the exponential distribution
+    z = 1-np.exp(-rescaled_isi);
+    z = np.sort(z)
+    N = len(z)
+
+    ez = (np.arange(1,N+1)-.5)/N
+    plt.plot(ez,ez,'k');
+    plt.hold(True)
+
+    # The 95% confidence interval is approximately ez+-1.36/sqrt(N)
+    plt.plot(ez,ez+1.36/np.sqrt(N),'--k')
+    plt.plot(ez,ez-1.36/np.sqrt(N),'--k')
+
+    # Plot the actual statistic
+    plt.plot(z,ez,'-b');
+
+    plt.ylim([0,1])
+    plt.xlim([0,1])
+    
+    # Check if the test passes
+    test_passed = np.all(np.abs(z-ez)<1.36/np.sqrt(N))
+    return test_passed
+
+def plot_basis(s_glm, color='k'):
+    plt.plot(s_glm['glms'][0]['imp']['basis'],
+             color=color)
                 
-def plot_results(population, x_inf, x_true=None, resdir=None):
+def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     if not resdir:
         resdir = '.'
 
 
-    true_given = x_true is not None
+    true_given = x_true is not None and popn_true is not None
     
     # Make sure we have a list of x's
     if not isinstance(x_inf, list):
@@ -200,7 +249,7 @@ def plot_results(population, x_inf, x_true=None, resdir=None):
     
     s_true = None
     if true_given:
-        s_true = population.eval_state(x_true)
+        s_true = popn_true.eval_state(x_true)
 
     # Average the inferred states
     s_avg = average_list_of_dicts(s_inf)
@@ -248,6 +297,13 @@ def plot_results(population, x_inf, x_true=None, resdir=None):
     f.savefig(os.path.join(resdir,'imp_resp.pdf'))
     plt.close(f)
     
+    # Plot the impulse response basis
+    f = plt.figure()
+    plot_basis(s_avg)
+    f.savefig(os.path.join(resdir,'imp_basis.pdf'))
+    plt.close(f)
+    
+
     # Plot the firing rates
     print "Plotting firing rates"
     for n in range(N):
@@ -257,7 +313,7 @@ def plot_results(population, x_inf, x_true=None, resdir=None):
                          color='r')
         if true_given:
             plot_firing_rate(s_true['glms'][n], color='k')
-
+            
         # Plot the spike times
         St = np.nonzero(population.glm.S.get_value()[:,n])[0]
         plt.plot(St,0.1*np.ones_like(St),'kx')
@@ -268,6 +324,13 @@ def plot_results(population, x_inf, x_true=None, resdir=None):
             
         f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
         plt.close(f)
+
+        f = plt.figure()
+        plot_ks(s_avg['glms'][n], St, population.glm.dt.get_value())
+        f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
+        plt.close(f)
+
+    print "Plots can be found in directory: %s" % resdir
 
 def parse_cmd_line_args():
     """

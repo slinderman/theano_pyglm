@@ -1,5 +1,3 @@
-
-
 """ Fit a Network GLM with MAP estimation. For some models, the log posterior
     is concave and has a unique maximum.
 """
@@ -35,8 +33,8 @@ def prep_network_inference(population,
     print "Computing log probabilities, gradients, and Hessians for network variables"
     net_syms = differentiable(syms['net'])
     net_prior = network.log_p
-    g_net_prior = grad_wrt_list(net_prior, _flatten(net_syms))
-    H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms))
+    g_net_prior, g_list = grad_wrt_list(net_prior, _flatten(net_syms))
+    H_net_prior = hessian_wrt_list(net_prior, _flatten(net_syms), g_list)
     
     # TODO: Replace this with a function that just gets the shapes?
     x0 = population.sample()
@@ -45,10 +43,8 @@ def prep_network_inference(population,
     
     # Get the likelihood of the GLM wrt the net variables
     glm_logp = glm.log_p
-    g_glm_logp = grad_wrt_list(glm_logp, _flatten(net_syms))
-    
-    if use_hessian:
-        H_glm_logp = hessian_wrt_list(glm_logp, _flatten(net_syms))
+    g_glm_logp, g_list = grad_wrt_list(glm_logp, _flatten(net_syms))
+    H_glm_logp = hessian_wrt_list(glm_logp, _flatten(net_syms), g_list)
         
     # Private function to compute the log probability (or grads and Hessians thereof)
     # of the log probability given new network variables
@@ -87,11 +83,12 @@ def prep_network_inference(population,
                                                x, 
                                                g_net_prior, 
                                                g_glm_logp)
+    
     hess_nll = lambda x_net_vec, x: net_helper(x_net_vec, 
                                                x, 
                                                H_net_prior, 
                                                H_glm_logp)
-        
+    
     # Return the symbolic expressions and a function that evaluates them
     # for given vector.
     return net_syms, nll, grad_nll, hess_nll
@@ -240,10 +237,12 @@ def fit_glm(xn, n,
                               disp=True,
                               callback=cbk)
     else:
-        xn_opt = opt.fmin_ncg(nll, x_glm_0,
-                              fprime=grad_nll,
-                              disp=True,
-                              callback=cbk)
+        # If we're not given the hessian or an Rop, use BFGS
+        xn_opt = opt.fmin_bfgs(nll, x_glm_0,
+                               fprime=grad_nll,
+                               disp=True,
+                               callback=cbk,
+                               maxiter=200)
     
     # Unpack the optimized parameters back into the state dict
     x_glm_n = unpackdict(xn_opt, shapes)
@@ -254,7 +253,7 @@ def coord_descent(population,
                   x0=None, 
                   maxiter=50, 
                   atol=1e-5,
-                  use_hessian=True,
+                  use_hessian=False,
                   use_rop=False):
     """
     Compute the maximum a posterior parameter estimate using Theano to compute
@@ -306,7 +305,6 @@ def coord_descent(population,
         fit_network(x, net_inf_prms, use_hessian, use_rop)
         
         # Fit the GLMs.
-        # TODO Parallelize this!
         for n in np.arange(N):
             nvars = population.extract_vars(x, n)
             fit_glm(nvars, n, glm_inf_prms, use_hessian, use_rop)

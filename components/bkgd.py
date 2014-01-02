@@ -92,7 +92,7 @@ class BasisStimulus(Component):
         for d in np.arange(self.prms['D_stim']):
             stim[:, d] = np.interp(t,
                                    t_stim,
-                                   data['stim'][:, d])
+                                   data['stim'][:len(t_stim), d])
 
         # Interpolate basis at the resolution of the data
         (L,B) = self.basis.shape
@@ -214,11 +214,20 @@ class SpatiotemporalStimulus(Component):
         # By convention, choose the sign that results in the most
         # positive temporal filter. 
         sign = T.sgn(T.sum(self.stim_resp_t))
+
         # Similarly, we can trade a constant between the spatial and temporal
         # pieces. By convention, set the temporal filter to norm 1.
         Z = self.stim_resp_t.norm(2)
-        return {'stim_response_x' : sign*Z*self.stim_resp_x,
-                'stim_response_t' : sign*(1.0/Z)*self.stim_resp_t}
+        stim_resp_t = sign*(1.0/Z)*self.stim_resp_t
+
+        # Finally, reshape the spatial component as necessary
+        if 'shape' in self.prms:
+            stim_resp_x = sign*Z*T.reshape(self.stim_resp_x, self.prms['shape'])
+        else:
+            stim_resp_x = sign*Z*self.stim_resp_x
+
+        return {'stim_response_x' : stim_resp_x,
+                'stim_response_t' : stim_resp_t}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

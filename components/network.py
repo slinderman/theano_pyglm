@@ -37,7 +37,7 @@ class Network(Component):
                 'weights' : self.weights.get_variables()}
         
     def get_state(self):
-        """ Get the effective weights (A*W)
+        """ Get the state of the graph and weights
         """
         state = {'graph' : self.graph.get_state(),
                  'weights' : self.weights.get_state()}

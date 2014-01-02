@@ -46,8 +46,16 @@ class GaussianWeightModel(Component):
         N = model['N']
 
         prms = model['network']['weight']
-        self.mu = prms['mu']
-        self.sigma = prms['sigma']
+        self.mu = prms['mu'] * np.ones((N,N))
+        self.sigma = prms['sigma'] * np.ones((N,N))
+	
+	# HACK: Implement refractory period by having negative mean on self loops
+	if 'mu_refractory' in prms:
+            self.mu[np.diag_indices(N)] = prms['mu_refractory']
+
+	if 'sigma_refractory' in prms:
+            self.sigma[np.diag_indices(N)] = prms['sigma_refractory']
+
 
         # Define weight matrix
         self.W_flat = T.dvector(name='W')
@@ -63,7 +71,7 @@ class GaussianWeightModel(Component):
         N = self.model['N']
         W = self.mu + self.sigma * np.random.randn(N,N)
         W_flat = np.reshape(W,(N**2,))
-        return [W_flat]
+        return {str(self.W_flat): W_flat}
 
     def get_variables(self):
         """ Get the theano variables associated with this model.

@@ -63,44 +63,49 @@ def prep_network_inference(population,
         return lp
 
     # Helper functions to sample W
-    def lp_W(W, x, n_post):
-        """ Compute the log probability for a given column W[:,n_post] 
-        """
-        # Set A in state dict x
-        set_vars('W', x['net']['weights'], W)
+    if 'W' in syms['net']['weights']:
+        def lp_W(W, x, n_post):
+            """ Compute the log probability for a given column W[:,n_post] 
+            """
+            # Set A in state dict x
+            set_vars('W', x['net']['weights'], W)
 
-        # Get the prior probability of A
-        lp = seval(network.log_p,
-                   syms['net'],
-                   x['net'])
+            # Get the prior probability of A
+            lp = seval(network.log_p,
+                       syms['net'],
+                       x['net'])
 
-        # Get the likelihood of the GLM under W
-        nvars = population.extract_vars(x, n_post)
-        lp += seval(glm.log_p,
-                    syms,
-                    nvars)
+            # Get the likelihood of the GLM under W
+            nvars = population.extract_vars(x, n_post)
+            lp += seval(glm.log_p,
+                        syms,
+                        nvars)
 
-        return lp
+            return lp
 
-    def grad_lp_W(W, x, n_post):
-        """ Compute the log probability for a given column W[:,n_post] 
-        """
-        # Set A in state dict x
-        set_vars('W', x['net']['weights'], W)
+        g_netlp_wrt_W = T.grad(network.log_p, syms['net']['weights']['W'])
+        g_glmlp_wrt_W = T.grad(glm.log_p, syms['net']['weights']['W'])
+        def grad_lp_W(W, x, n_post):
+            """ Compute the log probability for a given column W[:,n_post] 
+            """
+            # Set A in state dict x
+            set_vars('W', x['net']['weights'], W)
 
-        # Get the prior probability of A
-        g_lp = seval(T.grad(network.log_p, syms['net']['weights']['W']),
-                   syms['net'],
-                   x['net'])
+            # Get the prior probability of A
+            g_lp = seval(g_netlp_wrt_W,
+                         syms['net'],
+                         x['net'])
 
-        # Get the likelihood of the GLM under W
-        nvars = population.extract_vars(x, n_post)
-        g_lp += seval(T.grad(glm.log_p, syms['net']['weights']['W']),
-                      syms,
-                      nvars)
+            # Get the likelihood of the GLM under W
+            nvars = population.extract_vars(x, n_post)
+            g_lp += seval(g_glmlp_wrt_W,
+                          syms,
+                          nvars)
 
-        return g_lp
-
+            return g_lp
+    else:
+        lp_W = None
+        grad_lp_W = None
     return lp_A, lp_W, grad_lp_W
 
 def prep_glm_inference(population,
@@ -214,9 +219,17 @@ def sample_network_column(n_post,
             # Sample A[n_pre,n_post]
             A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
 
-        return A[:,n_post]
+    # Sample W if it exists
+    if 'W' in x['net']['weights']:
+        nll = lambda W: -1.0 * lp_W(W, x, n_post)
+        grad_nll = lambda W: -1.0 * g_lp_W(W, x, n_post)
 
-    # TODO Sample W
+        # TODO Automatically tune these parameters
+        epsilon = 0.01
+        L = 10
+        W = hmc(nll, grad_nll, epsilon, L, x['net']['weights']['W'])
+        
+        x['net']['weights']['W'] = W
 
 def network_gibbs_step(x, 
                        net_inf_prms):
@@ -228,12 +241,11 @@ def network_gibbs_step(x,
     """
     # TODO Check for Gaussian weights with Bernoulli A and do 
     #      collapsed Gibbs.
-    for n_post in np.arange(N):
+    for n_post in np.arange(len(x['glms'])):
         # Sample coupling filters from other neurons
         sample_network_column(n_post,
                               x,
                               net_inf_prms)
-    # TODO Sample W
                 
 def glm_gibbs_step(xn, n,
                    (glm_syms, glm_nll, g_glm_nll, H_glm_nll)):
@@ -247,11 +259,10 @@ def glm_gibbs_step(xn, n,
     # Create lambda functions to compute the nll and its gradient
     nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
     grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
-    hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
     
     # Call HMC
     # TODO Automatically tune these parameters
-    epsilon = 0.01
+    epsilon = 0.001
     L = 10
     x_glm = hmc(nll, grad_nll, epsilon, L, x_glm_0)
 
@@ -265,7 +276,7 @@ def gibbs_sample(population,
                  data, 
                  N_samples=1000,
                  x0=None, 
-                 init_from_mle=True):
+                 init_from_mle=False):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -280,17 +291,12 @@ def gibbs_sample(population,
         
         if init_from_mle:
             print "Initializing with coordinate descent"
-            
-            # Also initialize with intelligent parameters from the data
-            initialize_with_data(population, data, x0)
-            
-            # If we are using a sparse network, set it to complete 
-            # before computing the initial state
-            if 'A' in x0['net']['graph']:
-                x0['net']['graph']['A'] = np.ones((N,N), dtype=np.bool)
-            
+            # TODO Create a population with standard GLM models 
             x0 = coord_descent(population, data, x0=x0, maxiter=1)
-    
+
+            # TODO Convert between inferred parameters of the standard GLM
+            # and the parameters of this model. Eg. Convert unweighted 
+            # networks to weighted networks with normalized impulse responses.
 
     # Compute log prob, gradient, and hessian wrt network parameters
     net_inf_prms = prep_network_inference(population)
@@ -306,6 +312,8 @@ def gibbs_sample(population,
     # Alternate fitting the network and fitting the GLMs
     x_smpls = []
     x = x0
+    import pdb
+    pdb.set_trace()
 
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
@@ -316,7 +324,6 @@ def gibbs_sample(population,
         network_gibbs_step(x, net_inf_prms)
 
         # Sample the GLM parameters
-        # TODO Parallelize this!
         for n in np.arange(N):
             print "Gibbs step for GLM %d" % n
             nvars = population.extract_vars(x, n)

@@ -41,13 +41,17 @@ class ErdosRenyiGraphModel(Component):
         self.model = model
         self.prms = model['network']['graph']
         N = model['N']
-        rho = self.prms['rho']
-        
+        self.rho = self.prms['rho'] * np.ones((N,N))
+
+        if 'rho_refractory' in self.prms:
+            self.rho[np.diag_indices(N)] = self.prms['rho_refractory']
+
         # Define complete adjacency matrix
         self.A = T.bmatrix('A')
 
         # Define log probability
-        self.log_p = T.sum(self.A*np.log(rho) + (1-self.A)*np.log(1.0-rho))
+        self.log_p = T.sum(self.A*np.log(np.minimum(0.99,self.rho)) + 
+			   (1-self.A)*np.log(np.maximum(0.01,1.0-self.rho)))
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -57,16 +61,8 @@ class ErdosRenyiGraphModel(Component):
     
     def sample(self):
         N = self.model['N']
-        rho = self.prms['rho']
-        
-        A = np.random.rand(N,N) < rho
-
-        # DEBUG: Make sure we're sampling A properly
-        #nnz = np.sum(A)
-        #Ennz = rho*N**2
-        #std_nnz = np.sqrt(N**2 * rho * (1.0-rho))
-        #assert np.abs(nnz-Ennz) < 3*std_nnz, "ERROR: Number of nonzeros in A outside 3 std of mean!"
-
+        A = np.random.rand(N,N) < self.rho
+	A = A.astype(np.int8)
         return {str(self.A) : A}
     
     def get_state(self):

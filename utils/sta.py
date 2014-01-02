@@ -3,7 +3,7 @@
 """
 import numpy as np
 
-def sta(stim, data, L):
+def sta(stim, data, L, Ns=None):
     """ Compute the spike-triggered average as an initialization for spatiotemporal
     stimulus filters.
     data : dictionary containing the following keys
@@ -13,6 +13,7 @@ def sta(stim, data, L):
     stim : stimulus at sampling interval data['dt_stim']
     L    : length of the STA in bins of size data['dt']
     """
+
     # Interpolate stimulus at the resolution of the data
     D_stim = stim.shape[1]
     S = data['S']
@@ -33,11 +34,12 @@ def sta(stim, data, L):
         # divide by this to keep the stimulus * weight dot product the same
         istim[:,d] /= (dt_stim/dt)
         
-    # TODO Make lagged stim matrix to compute STA
+    # Make lagged stim matrix to compute STA
     stim_lag = np.zeros((nt,L*D_stim))
-    for l in np.arange(L):
+    stim_lag[:,:D_stim] = istim
+    for l in np.arange(1,L):
         stim_lag[:,(l*D_stim):((l+1)*D_stim)] = \
-            np.concatenate((np.zeros((l,D_stim)),istim[l:,:]))
+            np.vstack((np.zeros((l,D_stim)),istim[:-l,:]))
 
     # Initialize STA
     #A = np.zeros((N,L,D_stim))
@@ -56,20 +58,26 @@ def sta(stim, data, L):
     #                      axes=[1,0])
 
 
-    A = np.zeros((N,L,D_stim))
-    for n in np.arange(N):
+    # Only compute STA for the specified neurons Ns
+    if Ns is None:
+        Ns = range(N)
+    # Make sure Ns is a list
+    if isinstance(Ns, int):
+        Ns = [Ns]
+
+    A = np.zeros((len(Ns),L,D_stim))
+    for i,n in enumerate(Ns):
         Sn = S[:,n] > 0
         Aflat = np.sum(stim_lag[Sn,:],axis=0)
 
         # Reshape into L x D_stim array
-        # (this is more readable and safer than using Numpy reshape)
+        # (this is more readable and less error prone than using Numpy reshape)
         for l in np.arange(L):
-            A[n,l,:] = Aflat[(l*D_stim):((l+1)*D_stim)]
+            A[i,l,:] = Aflat[(l*D_stim):((l+1)*D_stim)]
 
     # Normalize
-    for n in np.arange(N):
-        #A[n,:,:] /= np.sum(S[:,n])
-        A[n,:,:] /= np.sum(S[:,n]>0)
+    for i,n in enumerate(Ns):
+        A[i,:,:] /= np.sum(S[:,n]>0)
 
     # Flip the result so that the first column is the most recent stimulus frame
     #A = A[:,::-1,:]

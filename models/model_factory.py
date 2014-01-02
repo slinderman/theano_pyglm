@@ -1,11 +1,13 @@
 """
 Make models from a template
 """
+import numpy as np
+
 from standard_glm import StandardGlm
 from spatiotemporal_glm import SpatiotemporalGlm
 from simple_weighted_model import SimpleWeightedModel
 from simple_sparse_model import SimpleSparseModel
-
+from sparse_weighted_model import SparseWeightedModel
 
 import copy
 
@@ -25,7 +27,9 @@ def make_model(template, N=None):
         elif template.lower() == 'simple_sparse_model' or \
              template.lower() == 'simplesparsemodel':
             model = copy.deepcopy(SimpleSparseModel)
-
+        elif template.lower() == 'sparse_weighted_model' or \
+             template.lower() == 'sparseweightedmodel':
+            model = copy.deepcopy(SparseWeightedModel)
 
     elif isinstance(template, dict):
         model = copy.deepcopy(template)
@@ -39,3 +43,27 @@ def make_model(template, N=None):
     # TODO Update other parameters as necessary
 
     return model
+
+def stabilize_sparsity(model):
+    """ Adjust the sparsity level for simple weighted models
+        with Gaussian weight models and Bernoulli adjacency matrices.
+    """
+    N = model['N']
+    weight_model = model['network']['weight']
+    graph_model = model['network']['graph']
+    if weight_model['type'].lower() == 'gaussian':
+        if graph_model['type'].lower() == 'erdos_renyi':
+            sigma = weight_model['sigma']
+            maxeig = 0.7
+
+            # If we have a refractory bias on the diagonal weights then
+            # we can afford slightly stronger weights
+            if 'mu_refractory' in weight_model:
+                maxeig -= weight_model['mu_refractory']
+
+            stable_rho = maxeig/N/sigma**2
+            stable_rho = np.minimum(stable_rho, 1.0)
+            print "Setting sparsity to %.2f for stability." % stable_rho
+            graph_model['rho'] = stable_rho
+
+            

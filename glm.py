@@ -37,11 +37,11 @@ class Glm:
             # Compute the effective incoming weights
             An = network.graph.A[:,self.n]
             Wn = network.weights.W[:,self.n]
-            W_eff = An * Wn
+            self.W_eff = An * Wn
         else:
-            W_eff = np.ones((model['N'],))
+            self.W_eff = np.ones((model['N'],))
 
-        self.I_net = T.dot(self.imp_model.I_imp, W_eff)
+        self.I_net = T.dot(self.imp_model.I_imp, self.W_eff)
 
         # Rectify the currents to get a firing rate
         self.nlin_model = create_nlin_component(model)

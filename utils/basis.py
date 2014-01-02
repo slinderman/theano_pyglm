@@ -77,7 +77,7 @@ def create_cosine_basis(prms):
     b = prms['b']                       # Offset in log time
     nlin = lambda t: np.log(a*t+b)      # Nonlinearity
     u_ir = nlin(np.arange(n_pts))       # Time in log time
-    ctrs = u_ir[np.floor(np.linspace(n_eye+1,(n_pts/2.0),n_cos)).astype(np.int)]
+    ctrs = u_ir[np.floor(np.linspace(n_eye,(n_pts/2.0),n_cos)).astype(np.int)]
     if len(ctrs) == 1:
         w = ctrs/2
     else:
@@ -119,8 +119,8 @@ def create_exp_basis(prms):
     
     # The remaining basis elements are exponential functions with logarithmically
     # spaced time constants
-    taus = np.logspace(1, n_pts/2, n_exp)
-    
+    taus = np.logspace(np.log10(1), np.log10(n_pts/3), n_exp)
+
     # Basis function is a raised cosine centered at c with width w
     basis_fn = lambda t,tau: np.exp(-t/tau)
     for i in np.arange(n_exp):

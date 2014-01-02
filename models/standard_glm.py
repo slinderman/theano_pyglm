@@ -23,8 +23,8 @@ StandardGlm = \
     # Parameters of the background model
     'bkgd' :
         {
-            # 'type' : 'basis',
-            'type' : 'none',
+            'type' : 'basis',
+            #'type' : 'none',
             'D_stim' : 1,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
             'mu' : 0.0,
@@ -47,7 +47,7 @@ StandardGlm = \
              'type' : 'basis',
              'dt_max' : 0.3,
              'mu' : 0.0,
-             'sigma' : 1.0,
+             'sigma' : 0.5,
              'basis' :
                  {
                      'type' : 'cosine',
@@ -59,6 +59,7 @@ StandardGlm = \
                      'norm' : False
                  }
          },
+
     # Parameters of the network
     'network' :
         {
