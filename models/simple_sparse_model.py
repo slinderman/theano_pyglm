@@ -52,7 +52,7 @@ SimpleSparseModel = \
                  {
                      'type' : 'cosine',
                      'n_eye' : 0,
-                     'n_cos' : 3,
+                     'n_cos' : 5,
                      'a': 1.0/120,
                      'b': 0.5,
                      'orth' : True,

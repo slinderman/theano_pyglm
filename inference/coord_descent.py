@@ -189,10 +189,20 @@ def fit_network(x,
         grad_nll = lambda x_net_vec: g_net_nll(x_net_vec, x)
         hess_nll = lambda x_net_vec: H_net_nll(x_net_vec, x)
         
+        # Callback to print progress. In order to count iters, we need to
+        # pass the current iteration via a list
+        ncg_iter_ls = [0]
+        def progress_report(x_curr, ncg_iter_ls):
+            ll = -1.0*nll(x_curr)
+            print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
+            ncg_iter_ls[0] += 1
+        cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
+    
         x_net_opt = opt.fmin_ncg(nll, x_net_0,
                                  fprime=grad_nll,
                                  fhess=hess_nll,
-                                 disp=True)
+                                 disp=True,
+                                 callback=cbk)
         x_net = unpackdict(x_net_opt, shapes)
         set_vars(net_syms, x['net'], x_net)
 
@@ -300,16 +310,16 @@ def coord_descent(population,
     while not converged and iter < maxiter:
         iter += 1
         print "Coordinate descent iteration %d." % iter
-        
-        # Fit the network
-        fit_network(x, net_inf_prms, use_hessian, use_rop)
-        
+                
         # Fit the GLMs.
         for n in np.arange(N):
             nvars = population.extract_vars(x, n)
             fit_glm(nvars, n, glm_inf_prms, use_hessian, use_rop)
             x['glms'][n] = nvars['glm']
-            
+        
+        # Fit the network
+        fit_network(x, net_inf_prms, use_hessian, use_rop)
+    
         # Check for convergence 
         lp = population.compute_log_p(x)
         print "Iteration %d: LP=%.2f. Change in LP: %.2f" % (iter, lp, lp-lp_prev)

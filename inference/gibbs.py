@@ -63,6 +63,7 @@ def prep_network_inference(population,
         return lp
 
     # Helper functions to sample W
+    W_gibbs_prms = {}
     if 'W' in syms['net']['weights']:
         def lp_W(W, x, n_post):
             """ Compute the log probability for a given column W[:,n_post] 
@@ -103,19 +104,20 @@ def prep_network_inference(population,
                           nvars)
 
             return g_lp
-    else:
-        lp_W = None
-        grad_lp_W = None
-    return lp_A, lp_W, grad_lp_W
 
-def prep_glm_inference(population,
-                       use_hessian=False,
-                       use_rop=False):
+        W_gibbs_prms['lp_W'] = lp_W
+        W_gibbs_prms['g_lp_W'] = grad_lp_W
+        W_gibbs_prms['avg_accept_rate'] = 0.9
+        W_gibbs_prms['step_sz'] = 0.05
+
+    return lp_A, W_gibbs_prms
+
+def prep_glm_inference(population):
     """ Initialize functions that compute the gradient and Hessian of 
         the log probability with respect to the differentiable GLM 
         parameters, e.g. the weight matrix if it exists.
     """
-    
+    glm_gibbs_prms = {}
     N = population.model['N']
     network = population.network
     glm = population.glm
@@ -126,17 +128,7 @@ def prep_glm_inference(population,
     glm_syms = differentiable(syms['glm'])
     glm_logp = glm.log_p
     g_glm_logp_wrt_glm, g_list = grad_wrt_list(glm_logp, _flatten(glm_syms))
-    if use_hessian:
-        H_glm_logp_wrt_glm = hessian_wrt_list(glm_logp, _flatten(glm_syms), g_list)
-
-    elif use_rop:
-        # Alternatively, we could just use an Rop to compute Hessian-vector prod       
-        v = T.dvector()
-        H_glm_logp_wrt_glm = hessian_rop_wrt_list(glm_logp,
-                                                  _flatten(glm_syms),
-                                                  v,
-                                                  g_vec=g_glm_logp_wrt_glm)
-
+ 
     # TODO: Replace this with a function that just gets the shapes?
     x0 = population.sample()
     nvars = population.extract_vars(x0, 0)
@@ -152,47 +144,26 @@ def prep_glm_inference(population,
         x_glm = unpackdict(x_glm_vec, glm_shapes)
         set_vars(glm_syms, x['glm'], x_glm)
         lp = seval(glm_expr,
-                    syms,
-                    x)
-        return -1.0*lp
+                   syms,
+                   x)
+        return lp
 
-    if use_rop:
-        rop_syms = copy.copy(syms)
-        rop_syms['v'] = v
-        def glm_rop_helper(x_glm_vec, v_vec, x, glm_expr):
-            """ Compute the Hessian vector product for the GLM
-            """
-            import pdb
-            pdb.set_trace()
-            x_glm = unpackdict(x_glm_vec, glm_shapes)
-            set_vars(glm_syms, x['glm'], x_glm)
-            defaults = {'v' : v_vec}
-            Hv = seval(glm_expr,
-                       rop_syms,
-                       x,
-                       defaults)
-            return -1.0*Hv
+    lp = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
+                                         x, 
+                                         glm_logp)
+    g_lp = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
+                                           x, 
+                                           g_glm_logp_wrt_glm)
     
-    nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
-                                          x, 
-                                          glm_logp)
-    grad_nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
-                                               x, 
-                                               g_glm_logp_wrt_glm)
-    if use_rop:
-        hess_nll = lambda x_glm_vec, v_vec, x: glm_rop_helper(x_glm_vec, 
-                                                              v_vec, 
-                                                              x, 
-                                                              H_glm_logp_wrt_glm)
-    else:
-        hess_nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
-                                                   x, 
-                                                   H_glm_logp_wrt_glm)        
-    return glm_syms, nll, grad_nll, hess_nll
+    glm_gibbs_prms['lp'] = lp
+    glm_gibbs_prms['g_lp'] = g_lp
+    glm_gibbs_prms['avg_accept_rate'] = 0.9
+    glm_gibbs_prms['step_sz'] = 0.05
+    return glm_syms, glm_gibbs_prms
 
 def sample_network_column(n_post,
                           x,
-                          (lp_A, lp_W, g_lp_W)):
+                          (lp_A, W_gibbs_prms)):
     """ Sample a single column of the network (all the incoming
         coupling filters). This is a parallelizable chunk.
     """
@@ -201,12 +172,13 @@ def sample_network_column(n_post,
 
     # Sample the adjacency matrix if it exists
     if 'A' in x['net']['graph']:
+        print "Sampling A"
         A = x['net']['graph']['A']
         N = A.shape[0]
 
         # Sample coupling filters from other neurons
         for n_pre in np.arange(N):
-            print "Sampling A[%d,%d]" % (n_pre,n_post)
+            # print "Sampling A[%d,%d]" % (n_pre,n_post)
             # WARNING Setting A is somewhat of a hack. It only works
             # because nvars copies x's pointer to A rather than making
             # a deep copy of the adjacency matrix.
@@ -221,14 +193,27 @@ def sample_network_column(n_post,
 
     # Sample W if it exists
     if 'W' in x['net']['weights']:
-        nll = lambda W: -1.0 * lp_W(W, x, n_post)
-        grad_nll = lambda W: -1.0 * g_lp_W(W, x, n_post)
+        print "Sampling W"
+        nll = lambda W: -1.0 * W_gibbs_prms['lp_W'](W, x, n_post)
+        grad_nll = lambda W: -1.0 * W_gibbs_prms['g_lp_W'](W, x, n_post)
 
         # TODO Automatically tune these parameters
-        epsilon = 0.01
-        L = 10
-        W = hmc(nll, grad_nll, epsilon, L, x['net']['weights']['W'])
+        n_steps = 10
+        # W = hmc(nll, grad_nll, epsilon, L, x['net']['weights']['W'])
+        (W, new_step_sz, new_accept_rate) = hmc(nll, 
+                                                grad_nll, 
+                                                W_gibbs_prms['step_sz'], 
+                                                n_steps,
+                                                x['net']['weights']['W'],
+                                                adaptive_step_sz=True,
+                                                avg_accept_rate=W_gibbs_prms['avg_accept_rate'])
+
+        # Update step size and accept rate
+        W_gibbs_prms['step_sz'] = new_step_sz
+        W_gibbs_prms['avg_accept_rate'] = new_accept_rate
+        print "W step sz: %.3f\tW_accept rate: %.3f" % (new_step_sz, new_accept_rate)
         
+        # Update current W
         x['net']['weights']['W'] = W
 
 def network_gibbs_step(x, 
@@ -248,7 +233,7 @@ def network_gibbs_step(x,
                               net_inf_prms)
                 
 def glm_gibbs_step(xn, n,
-                   (glm_syms, glm_nll, g_glm_nll, H_glm_nll)):
+                   (glm_syms, glm_gibbs_prms)):
     """ Gibbs sample the GLM parameters. These are mostly differentiable
         so we use HMC wherever possible.
     """
@@ -257,14 +242,25 @@ def glm_gibbs_step(xn, n,
     x_glm_0, shapes = packdict(dxn)
 
     # Create lambda functions to compute the nll and its gradient
-    nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
-    grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
+    nll = lambda x_glm_vec: -1.0*glm_gibbs_prms['lp'](x_glm_vec, xn)
+    grad_nll = lambda x_glm_vec: -1.0*glm_gibbs_prms['g_lp'](x_glm_vec, xn)
     
     # Call HMC
     # TODO Automatically tune these parameters
-    epsilon = 0.001
-    L = 10
-    x_glm = hmc(nll, grad_nll, epsilon, L, x_glm_0)
+    n_steps = 10
+    x_glm, new_step_sz, new_accept_rate = hmc(nll, 
+                                              grad_nll, 
+                                              glm_gibbs_prms['step_sz'],
+                                              n_steps, 
+                                              x_glm_0,
+                                              adaptive_step_sz=True,
+                                              avg_accept_rate=glm_gibbs_prms['avg_accept_rate'])
+
+    # Update step size and accept rate
+    glm_gibbs_prms['step_sz'] = new_step_sz
+    glm_gibbs_prms['avg_accept_rate'] = new_accept_rate
+    print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+
 
     # Unpack the optimized parameters back into the state dict
     x_glm_n = unpackdict(x_glm, shapes)
@@ -276,7 +272,7 @@ def gibbs_sample(population,
                  data, 
                  N_samples=1000,
                  x0=None, 
-                 init_from_mle=False):
+                 init_from_mle=True):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -312,9 +308,7 @@ def gibbs_sample(population,
     # Alternate fitting the network and fitting the GLMs
     x_smpls = []
     x = x0
-    import pdb
-    pdb.set_trace()
-
+    
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = population.compute_log_p(x)
@@ -324,8 +318,9 @@ def gibbs_sample(population,
         network_gibbs_step(x, net_inf_prms)
 
         # Sample the GLM parameters
+        print "Sampling GLMs"
         for n in np.arange(N):
-            print "Gibbs step for GLM %d" % n
+            # print "Gibbs step for GLM %d" % n
             nvars = population.extract_vars(x, n)
             glm_gibbs_step(nvars, n, glm_inf_prms)
             x['glms'][n] = nvars['glm']
@@ -338,9 +333,8 @@ def gibbs_sample(population,
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     ps.print_stats()
 
-    with open('mcmc.prof.txt', 'w') as f:
-        f.write(s.getvalue())
-        f.close()
-
+    #with open('mcmc.prof.txt', 'w') as f:
+    #    f.write(s.getvalue())
+    #    f.close()
 
     return x_smpls

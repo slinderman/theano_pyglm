@@ -47,6 +47,22 @@ class Population:
 
         return lp
 
+    def compute_ll(self, vars):
+        """ Compute the log likelihood under a given set of variables
+        """
+        ll = 0.0
+
+        # Get set of symbolic variables
+        syms = self.get_variables()
+
+        for n in range(self.N):
+            nvars = self.extract_vars(vars, n)
+            ll += seval(self.glm.ll,
+                        syms,
+                        nvars)
+
+        return ll
+
     def eval_state(self, vars):
         """ Evaluate the population state expressions given the parameters, 
             e.g. the stimulus response curves from the basis function weights.
@@ -68,6 +84,10 @@ class Population:
                                                       state_vars['glm'], 
                                                       nvars))
         state['glms'] = glm_states
+
+        # Finally, evaluate the log probability and the log likelihood
+        state['logp'] = self.compute_log_p(vars)
+        state['ll'] = self.compute_ll(vars)
         return state
 
     def _eval_state_helper(self, syms, d, vars):

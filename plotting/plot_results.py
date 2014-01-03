@@ -227,13 +227,35 @@ def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
 def plot_basis(s_glm, color='k'):
     plt.plot(s_glm['glms'][0]['imp']['basis'],
              color=color)
-                
+
+def plot_log_prob(s_inf, key='logp', s_true=None, color='r'):
+    inf_lp_trace = np.array([s[key] for s in s_inf])
+
+    if len(inf_lp_trace) > 1:
+        plt.plot(inf_lp_trace, color=color)
+        plt.xlabel('Iteration')
+    else:
+        plt.bar(0, inf_lp_trace[0], color=color)
+
+    if s_true is not None:
+        plt.hold(True)
+        true_lp_trace = s_true[key] * np.ones_like(inf_lp_trace)
+        if len(inf_lp_trace) > 1:
+            plt.plot(true_lp_trace, color='k')
+        else:
+            plt.bar(1, true_lp_trace[0], color='k')
+
+    plt.ylabel('Log probability')
+
+def plot_log_lkhd(s_inf, s_true=None,  color='k'):
+    plot_log_prob(s_inf, key='ll', s_true=s_true, color=color)
+    plt.ylabel('Log likelihood')
+
 def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     if not resdir:
         resdir = '.'
-
 
     true_given = x_true is not None and popn_true is not None
     
@@ -329,6 +351,17 @@ def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
         plot_ks(s_avg['glms'][n], St, population.glm.dt.get_value())
         f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
         plt.close(f)
+
+    print "Plotting log probability and log likelihood trace"
+    f = plt.figure()
+    plot_log_prob(s_inf, s_true=s_true, color='r')
+    f.savefig(os.path.join(resdir, 'log_prob.pdf'))
+    plt.close(f)
+
+    f = plt.figure()
+    plot_log_lkhd(s_inf, s_true=s_true, color='r')
+    f.savefig(os.path.join(resdir, 'log_lkhd.pdf'))
+    plt.close(f)
 
     print "Plots can be found in directory: %s" % resdir
 

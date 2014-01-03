@@ -49,10 +49,11 @@ def stabilize_sparsity(model):
         with Gaussian weight models and Bernoulli adjacency matrices.
     """
     N = model['N']
+    imp_model = model['impulse']
     weight_model = model['network']['weight']
     graph_model = model['network']['graph']
-    if weight_model['type'].lower() == 'gaussian':
-        if graph_model['type'].lower() == 'erdos_renyi':
+    if graph_model['type'].lower() == 'erdos_renyi':
+        if weight_model['type'].lower() == 'gaussian':
             sigma = weight_model['sigma']
             maxeig = 0.7
 
@@ -66,4 +67,15 @@ def stabilize_sparsity(model):
             print "Setting sparsity to %.2f for stability." % stable_rho
             graph_model['rho'] = stable_rho
 
+        elif weight_model['type'].lower() == 'constant' and \
+             imp_model['type'].lower() == 'basis':
+            sigma = imp_model['sigma']
+            maxeig = 0.7
             
+            # TODO Figure out how sigma actually relates to the eigenvalues
+            stable_rho = maxeig/N/sigma**2
+            stable_rho = np.minimum(stable_rho, 1.0)
+            print "Setting sparsity to %.2f for stability." % stable_rho
+            graph_model['rho'] = stable_rho
+
+        
