@@ -225,8 +225,9 @@ def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
     return test_passed
 
 def plot_basis(s_glm, color='k'):
-    plt.plot(s_glm['glms'][0]['imp']['basis'],
-             color=color)
+    if 'basis' in s_glm['glms'][0]['imp']:
+        plt.plot(s_glm['glms'][0]['imp']['basis'],
+                 color=color)
 
 def plot_log_prob(s_inf, key='logp', s_true=None, color='r'):
     inf_lp_trace = np.array([s[key] for s in s_inf])
@@ -341,7 +342,7 @@ def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
         plt.plot(St,0.1*np.ones_like(St),'kx')
         
         # Zoom in on small fraction
-        plt.xlim([10000,12000])
+        plt.xlim([0,2000])
         plt.title('Firing rate %d' % n)
             
         f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))

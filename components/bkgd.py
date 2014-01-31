@@ -1,7 +1,8 @@
 import theano
 import theano.tensor as T
 
-from component import Component
+from components.component import Component
+from components.priors import create_prior
 from utils.basis import *
 
 def create_bkgd_component(model):
@@ -39,11 +40,7 @@ class BasisStimulus(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
-
         self.prms = model['bkgd']
-        self.mu = self.prms['mu']
-        self.sigma = self.prms['sigma']
-
         # Create a basis for the stimulus response
         self.basis = create_basis(self.prms['basis'])
         (_,B) = self.basis.shape
@@ -53,46 +50,66 @@ class BasisStimulus(Component):
 
         # Compute the number of parameters
         self.n_vars = B*self.prms['D_stim']
+        
+        # Create a spherical Gaussian prior on the weights
+#        self.prior = create_prior(self.prms['prior'], name='w_stim', D=self.n_vars)
+        self.w_stim = T.dvector('w_stim')
 
         # Store stimulus in shared memory
         self.stim = theano.shared(name='stim',
                                   value=np.zeros((1,self.n_vars)))
 
-
-        self.w_stim = T.dvector('w_stim')
-        
         # Log probability
-        self.log_p = -0.5/self.sigma**2 *T.sum((self.w_stim-self.mu)**2)
-        
+#        self.log_p = self.prior.log_p
+#        self.log_p = -0.5/0.01**2 *T.sum((self.w_stim-0)**2)
+        self.log_p = T.sum(-0.5/0.01**2 * (self.w_stim-0.0)**2)
+#        self.log_p = 0.0
+
         # Expose outputs to the Glm class
+#        self.I_stim = T.dot(self.stim,self.prior.value)
         self.I_stim = T.dot(self.stim,self.w_stim)
 
         # A symbolic variable for the for the stimulus response
+#        self.stim_resp = T.dot(self.ibasis,self.prior.value)
         self.stim_resp = T.dot(self.ibasis,self.w_stim)
-    
+   
     def get_variables(self):
         """ Get the theano variables associated with this model.
         """
         return {str(self.w_stim): self.w_stim}
+#        vs = {}
+#        vs.update(self.prior.get_variables())
+#        return vs
     
     def get_state(self):
         """ Get the stimulus response
         """
-        return {'stim_response' : self.stim_resp}
+        return {'stim_response' : self.stim_resp,
+                'basis' : self.ibasis}
         
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
+        # Check data shape
+        if not self.prms['D_stim'] == data['stim'].shape[1]: 
+            raise Exception("Stim dimension (%d) is not equal to that specified by model (%d)" % (data['stim'].shape[1], self.prms['D_stim']))
+
+        D_stim = self.prms['D_stim']
+        
+        if not np.abs(data['stim'].shape[0] * data['dt_stim'] - data['T']) < \
+               data['dt_stim']:
+            raise Exception('Stimulus length is not the same as data time length!')
+
         # Interpolate stimulus at the resolution of the data
         dt = data['dt']
         dt_stim = data['dt_stim']
-        t = np.arange(0, data['T'], dt)
-        t_stim = np.arange(0, data['T'], dt_stim)
-        stim = np.zeros((len(t), self.prms['D_stim']))
-        for d in np.arange(self.prms['D_stim']):
+        t = dt * np.arange(data['S'].shape[0])
+        t_stim = dt_stim * np.arange(data['stim'].shape[0])
+        stim = np.zeros((len(t), D_stim))
+        for d in np.arange(D_stim):
             stim[:, d] = np.interp(t,
                                    t_stim,
-                                   data['stim'][:len(t_stim), d])
+                                   data['stim'][:, d])
 
         # Interpolate basis at the resolution of the data
         (L,B) = self.basis.shape
@@ -121,12 +138,20 @@ class BasisStimulus(Component):
                 fstim[:,d*B+b] = cstim[:,d,b]
         self.stim.set_value(fstim)
 
+    def set_hyperparameters(self, model):
+        """ Set hyperparameters of the model
+        """
+#        self.prior.set_hyperparameters(model)
+        pass
+
     def sample(self):
         """
         return a sample of the variables
         """
-        w = self.mu + self.sigma * np.random.randn(self.n_vars)
-        return {str(self.w_stim): w}
+        smpl = {str(self.w_stim) : 0.01*np.random.randn(self.n_vars)}
+#        smpl = {}
+#        smpl.update(self.prior.sample())
+        return smpl
 
 
 class SpatiotemporalStimulus(Component):
@@ -227,7 +252,8 @@ class SpatiotemporalStimulus(Component):
             stim_resp_x = sign*Z*self.stim_resp_x
 
         return {'stim_response_x' : stim_resp_x,
-                'stim_response_t' : stim_resp_t}
+                'stim_response_t' : stim_resp_t,
+                'basis_t' : self.ibasis_t}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

@@ -20,6 +20,11 @@ class Component:
         """ Set the shared memory variables that depend on the data
         """
         pass
+    
+    def set_hyperparameters(self, model):
+        """ Set hyperparameters of the model
+        """
+        pass
 
     def sample(self):
         """

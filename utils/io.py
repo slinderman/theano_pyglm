@@ -114,3 +114,31 @@ def load_data(options):
             cPickle.dump(data,f)
     
     return data
+
+def segment_data(data, (T_start, T_stop)):
+    """ Extract a segment of the data
+    """
+    import copy
+    new_data = copy.deepcopy(data)
+    
+    # Check that T_start and T_stop are within the range of the data
+    assert T_start >= 0 and T_start <= data['T']
+    assert T_stop >= 0 and T_stop <= data['T']
+    assert T_start < T_stop
+
+    # Set the new T's
+    new_data['T'] = T_stop - T_start
+
+    # Get indices for start and stop of spike train
+    i_start = T_start // data['dt']
+    i_stop = T_stop // data['dt']
+    new_data['S'] = new_data['S'][i_start:i_stop, :]
+    
+    # Get indices for start and stop of stim
+    i_start = T_start // data['dt_stim']
+    i_stop = T_stop // data['dt_stim']
+    new_data['stim'] = new_data['stim'][i_start:i_stop, :]
+    
+    return new_data
+
+    

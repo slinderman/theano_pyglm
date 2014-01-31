@@ -46,3 +46,60 @@ def initialize_test_harness():
             print "true LL: %f" % ll_true
 
     return options, popn, data, popn_true, x_true
+
+def get_xv_models(model):
+    """ Get a set of models for cross validation. Each model
+        has a different set of hyperparameters (eg variances 
+        for priors)
+    """
+    # Create a set of parameters and values
+    prms = {('bias','sigma') : (0.05, 0.5, 1.0, 2.0),
+            ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
+            ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
+            ('bkgd','sigma_x') : (0.05, 0.5, 1.0, 2.0),
+            ('bkgd','sigma_t') : (0.05, 0.5, 1.0, 2.0),
+            ('impulse', 'sigma') : (0.05, 0.5, 1.0, 2.0),
+            ('network', 'weight', 'sigma') : (0.05, 0.5, 1.0, 2.0),
+            ('network', 'weight', 'sigma_refractory') : (0.05, 0.5, 1.0, 2.0)}
+
+    # Only keep those settings which exist in the model
+    def check_key(d,tk):
+        # d is a dict
+        # tk is a tuple of subkeys
+        if len(tk) == 0:
+            return True
+        k = tk[0]
+        if k in d:
+            return check_key(d[k], tk[1:])
+        else:
+            return False
+
+    for key in prms.keys():
+        if not check_key(model, key):
+            del prms[key]
+    
+    # Take the Cartesian product of the remaining key vals
+    prms_items = prms.items()
+    prms_keys = [k for (k,v) in prms_items]
+    prms_vals = [v for (k,v) in prms_items]
+    import itertools
+    prms_vals_combos = list(itertools.product(*prms_vals))
+    print "Number of cross validation combos: %d" % len(prms_vals_combos)
+    
+    # Create a list of models, one for each param combo
+    def set_key(d, tk, v):
+        k = tk[0]
+        if len(tk) == 1:
+            d[k] = v
+        else:
+            set_key(d[k], tk[1:], v)
+
+    import copy
+    models = []
+    for v_combo in prms_vals_combos:
+        m = copy.deepcopy(model)
+        for (tk,v) in zip(prms_keys, v_combo):
+            set_key(m, tk, v)
+        models.append(m)
+
+    return models

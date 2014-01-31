@@ -109,6 +109,12 @@ class Population:
         v['glm'] = self.glm.get_variables()
         return v
 
+    def set_hyperparameters(self, model):
+        """ Set the hyperparameters of the model
+        """
+        self.network.set_hyperparameters(model)
+        self.glm.set_hyperparameters(model)
+
     def sample(self):
         """
         Sample parameters of the GLM from the prior
@@ -277,7 +283,7 @@ class Population:
         lam = np.zeros_like(X)
         for n in np.arange(N):
             lam[:,n] = self.glm.nlin_model.f_nlin(X[:,n])
-        
+            
         print "Max firing rate (post sim): %f" % np.max(lam)
         E_nS = np.trapz(lam,tt,axis=0)
         nS = np.sum(S,0)

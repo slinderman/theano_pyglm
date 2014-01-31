@@ -31,10 +31,10 @@ def parallel_compute_log_p(dview,
     # in the __main__ namespace that contains 'popn'
     @interactive
     def _compute_glm_lp(n, vs):
-        print "Computing lp for GLM %d" % n
+        print "Computing log lkhd for GLM %d" % n
         syms = popn.get_variables()
         nvars = popn.extract_vars(vs, n)
-        lp = seval(popn.glm.log_p,
+        lp = seval(popn.glm.ll,
                    syms,
                    nvars)
         return lp

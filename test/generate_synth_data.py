@@ -102,6 +102,16 @@ def gen_synth_data():
             'vars': x_true,
             'model' : 'model.pkl'}
 
+    # Set the data so that the population state can be evaluated
+    popn.set_data(data)
+    
+    # DEBUG Evaluate the firing rate and the simulated firing rate
+    state = popn.eval_state(x_true)
+    for n in np.arange(options.N):
+        lam_true = state['glms'][n]['lam']
+        lam_sim = np.exp(X[:,n])
+        assert np.allclose(lam_true, lam_sim)
+
     # Save the data for reuse
     fname_mat = os.path.join(options.resultsDir, 'data.mat')
     print "Saving data to %s" % fname_mat
@@ -114,7 +124,6 @@ def gen_synth_data():
         cPickle.dump(data,f)
 
     # Plot firing rates, stimulus responses, etc
-    popn.set_data(data)
     plot_results(popn, data['vars'], resdir=options.resultsDir)
     
 if __name__ == "__main__":

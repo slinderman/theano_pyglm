@@ -42,24 +42,31 @@ SparseWeightedModel = \
         },
 
     # Parameters of the impulse responses
+    #'impulse' :
+    #    {
+    #        'type' : 'normalized',
+    #        'dt_max' : 0.2,
+    #        'alpha' : 1,
+    #        'basis' :
+    #            {
+    #                #'type' : 'cosine',
+    #                #'n_eye' : 0,
+    #                #'n_cos' : 5,
+    #                'type' : 'exp',
+    #                'n_eye' : 0,
+    #                'n_exp' : 5,
+    #                'a': 1.0/120,
+    #                'b': 0.5,
+    #                'orth' : False,
+    #                'norm' : False
+    #            }
+    #    },
     'impulse' :
         {
-            'type' : 'normalized',
+            'type' : 'exponential',
             'dt_max' : 0.2,
-            'alpha' : 1,
-            'basis' :
-                {
-                    #'type' : 'cosine',
-                    #'n_eye' : 0,
-                    #'n_cos' : 5,
-                    'type' : 'exp',
-                    'n_eye' : 0,
-                    'n_exp' : 5,
-                    'a': 1.0/120,
-                    'b': 0.5,
-                    'orth' : False,
-                    'norm' : False
-                }
+            'tau0' : 0.07,
+            'sigma': 0.1
         },
 
     # Parameters of the network

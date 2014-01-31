@@ -10,6 +10,8 @@ def create_impulse_component(model):
     elif typ.lower() == 'normalized' \
          or typ.lower() == 'dirichlet':
         return NormalizedBasisImpulses(model)
+    elif typ.lower() == 'exponential':
+        return ExponentialImpulses(model)
 
 class LinearBasisImpulses(Component):
     """ Linear impulse response functions. Here we make use of Theano's
@@ -44,15 +46,11 @@ class LinearBasisImpulses(Component):
         # Make w_ir3 broadcastable in the 1st dim
         T.addbroadcast(w_ir3,0)
 
-        #ov = T.ones((self.ir.shape[0],1))
-        #w_ir_rep = T.tensordot(ov,w_ir3,axes=[1,0])
-
         # Take the elementwise product of the filtered stimulus and
         # the repeated weights to get the weighted impulse current along each
         # impulse basis dimension. Then sum over bases to get the
         # total coupling current from each presynaptic neurons at
         # all time points
-        #self.I_imp = T.sum(self.ir*w_ir_rep, axis=2)
         self.I_imp = T.sum(self.ir*w_ir3, axis=2)
         self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
 
@@ -222,4 +220,96 @@ class NormalizedBasisImpulses(Component):
                              "resulted in incorrect shape: %s" % str(fS.shape)
         self.ir.set_value(fS)
 
+class ExponentialImpulses(Component):
+    """ Exponential impulse response functions. Here we make use of Theano's
+        broadcasting to sum up the currents from each presynaptic neuron.
+    """
+    def __init__(self, model):
+        self.prms = model['impulse']
+
+        # Number of presynaptic neurons
+        self.N = model['N']
+
+        # Get parameters of the prior
+        self.tau0 = self.prms['tau0']
+        self.sigma = self.prms['sigma']
+
+        # Impulse responses are parameterized by a time constant tau
+        self.taus = T.dvector('taus_ir')
+
+        # Spike train is shared variable populated by the data
+        self.S = theano.shared(name='S', value=np.zeros((1,self.N)))
+
+        # Number of time bins is a shared variable set by the data
+        self.T_bins = T.shape(self.S)[0]
+        self.t_ir = theano.shared(name='t_ir', value=np.zeros((1,)))
+
+        # The impulse response is exponentially decaying function of t_ir
+        # self.impulse = T.exp(-self.t_ir/ self.tau)
+        # Scan computes an exponentially decreasing impulse with a different
+        # time constant for each impulse response function. The results
+        # are stacked together intoa matrix of size 
+        filt_fn = lambda tau: (self.t_ir>1e-14)*T.exp(-self.t_ir/tau)
+        self.impulse,_ = theano.scan(fn=lambda tau: T.exp(-self.t_ir[1:]/tau),
+                                     outputs_info=None,
+                                     sequences=[self.taus],
+                                     non_sequences=[])
+                
+        # The filtered stimulus is found by convolving the spike train with the
+        # impulse response function and keeping the first T_bins 
+        from theano.tensor.signal.conv import conv2d
+        def filter_spike_train(n,S,taus):
+            """ Helper function to filter the spike train
+            """
+            filt = T.shape_padright(filt_fn(taus[n]), n_ones=1)
+            filtered_S = conv2d(T.shape_padright(S[:,n], n_ones=1), 
+                                filt, 
+                                border_mode='full')
+            return filtered_S[0,:,0]
+        
+        self.ir,_ = theano.scan(fn=filter_spike_train,
+                                outputs_info=None,
+                                sequences=[T.arange(self.N)],
+                                non_sequences=[self.S, self.taus])
+        # Keep only the first T_bins and the central portion of the impulse
+        # responses
+        self.ir = self.ir[:, :self.T_bins]
+        self.ir = T.transpose(self.ir)
+        self.I_imp = T.reshape(self.ir, (self.T_bins, self.N))
+        
+        # TODO: Log probability of tau
+        self.log_p = 0.0
+                      
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.taus): self.taus}
+
+    def sample(self):
+        """
+        return a sample of the variables
+        """
+        #ln_taus = np.log(self.tau0) + self.sigma * np.random.randn(size=(self.N,))
+        #taus = np.exp(ln_taus)
+        taus = np.random.lognormal(np.log(self.tau0), self.sigma, size=(self.N,))
+        print "Taus: %s" % str(taus)
+        return {str(self.taus): taus}
+
+    def get_state(self):
+        """ Get the impulse responses
+        """
+        return {'impulse' : self.impulse,
+                'I_imp' : self.I_imp}
+
+    def set_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        # Set data
+        self.S.set_value(data['S'])
+
+        # Set t_ir, the time delta for each impulse bin
+        N_ir = self.prms['dt_max'] / data['dt']
+        t_ir = data['dt']*np.arange(N_ir)
+        #t_ir = np.reshape(t_ir, (N_ir, 1))
+        self.t_ir.set_value(t_ir)
 

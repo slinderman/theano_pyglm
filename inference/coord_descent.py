@@ -134,11 +134,15 @@ def prep_glm_inference(population,
         """ Compute the negative log probability (or gradients and Hessians thereof)
         of the given glm variables
         """
+        max_xvec = np.amax(np.abs(x_glm_vec))
+#        print "Calling GLM Helper. Max x: %f" % max_xvec
         x_glm = unpackdict(x_glm_vec, glm_shapes)
         set_vars(glm_syms, x['glm'], x_glm)
         lp = seval(glm_expr,
                     syms,
                     x)
+#        print "GLM expr: %s" % str(glm_expr)
+#        print "Result: %s" % str(lp)
         return -1.0*lp
 
     if use_rop:
@@ -173,6 +177,7 @@ def prep_glm_inference(population,
         hess_nll = lambda x_glm_vec, x: glm_helper(x_glm_vec, 
                                                    x, 
                                                    H_glm_logp_wrt_glm)        
+
     return glm_syms, nll, grad_nll, hess_nll
 
 def fit_network(x, 
@@ -217,12 +222,36 @@ def fit_glm(xn, n,
     x_glm_0, shapes = packdict(dnvars)
     
     # Create lambda functions to compute the nll and its gradient and Hessian
-    nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
-    grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
+    def nll(x_glm_vec):
+        y = glm_nll(x_glm_vec, xn)
+        if np.isnan(y):
+#            import pdb
+#            pdb.set_trace()
+            return np.Inf
+        else:
+            return y
+    #nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
+    
+    def grad_nll(x_glm_vec):
+        # DEBUG: Test the gradient
+        g = g_glm_nll(x_glm_vec, xn)
+        approx_g = opt.approx_fprime( x_glm_vec, nll, 1e-6)
+        err = opt.check_grad(nll, lambda x: g_glm_nll(x, xn), x_glm_vec)
+        print "Test gradient error: %f" % err
+        if np.any(np.isnan(g)):
+            import pdb; pdb.set_trace()
+            g = np.zeros_like(g)
+        # END DEBUG
+        return g
+
+#    grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
     if use_rop:
         hess_nll = lambda x_glm_vec, v_vec: H_glm_nll(x_glm_vec, v_vec, xn)
     elif use_hessian:
         hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
+        
+
+    
     
     # Callback to print progress. In order to count iters, we need to
     # pass the current iteration via a list
@@ -232,7 +261,7 @@ def fit_glm(xn, n,
         print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
         ncg_iter_ls[0] += 1
     cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
-        
+    
     # Call the appropriate scipy optimization function
     if use_hessian:
         xn_opt = opt.fmin_ncg(nll, x_glm_0,

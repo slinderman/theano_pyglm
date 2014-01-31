@@ -27,8 +27,12 @@ StandardGlm = \
             #'type' : 'none',
             'D_stim' : 1,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
-            'mu' : 0.0,
-            'sigma' : 0.01,
+            'prior' : 
+                {
+                    'type' : 'spherical_gaussian',
+                    'mu' : 0.0,
+                    'sigma' : 0.01,
+                },
             'basis' :
                 {
                     'type' : 'cosine',

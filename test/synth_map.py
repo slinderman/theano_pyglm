@@ -13,13 +13,14 @@ def run_synth_test():
     options, popn, data, popn_true, x_true = initialize_test_harness()
 
     # Sample random initial state
+    import pdb; pdb.set_trace()
     x0 = popn.sample()
     ll0 = popn.compute_log_p(x0)
     print "LL0: %f" % ll0
 
     # Perform inference
     x_inf = coord_descent(popn, data, x0=x0, maxiter=1,
-                          use_hessian=False,
+                          use_hessian=True,
                           use_rop=False)
     ll_inf = popn.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf
