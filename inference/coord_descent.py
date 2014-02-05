@@ -61,7 +61,6 @@ def prep_network_inference(population,
         # Reduce the log prob, gradient, and Hessian across all GLM nodes.
         # We can do this because the log prob is a sum of log probs from each GLM,
         # plus the log prior from the network model.
-        # TODO Parallelize this loop!
         for n in np.arange(N):
             # Get the variables associated with the n-th GLM
             nvars = population.extract_vars(x, n)
@@ -134,15 +133,11 @@ def prep_glm_inference(population,
         """ Compute the negative log probability (or gradients and Hessians thereof)
         of the given glm variables
         """
-        max_xvec = np.amax(np.abs(x_glm_vec))
-#        print "Calling GLM Helper. Max x: %f" % max_xvec
         x_glm = unpackdict(x_glm_vec, glm_shapes)
         set_vars(glm_syms, x['glm'], x_glm)
         lp = seval(glm_expr,
                     syms,
                     x)
-#        print "GLM expr: %s" % str(glm_expr)
-#        print "Result: %s" % str(lp)
         return -1.0*lp
 
     if use_rop:
@@ -225,30 +220,23 @@ def fit_glm(xn, n,
     def nll(x_glm_vec):
         y = glm_nll(x_glm_vec, xn)
         if np.isnan(y):
-#            import pdb
-#            pdb.set_trace()
-            return np.Inf
-        else:
-            return y
-    #nll = lambda x_glm_vec: glm_nll(x_glm_vec, xn)
-    
+            y = 1e16
+
+        return y
+
     def grad_nll(x_glm_vec):
-        # DEBUG: Test the gradient
         g = g_glm_nll(x_glm_vec, xn)
-        approx_g = opt.approx_fprime( x_glm_vec, nll, 1e-6)
-        err = opt.check_grad(nll, lambda x: g_glm_nll(x, xn), x_glm_vec)
-        print "Test gradient error: %f" % err
         if np.any(np.isnan(g)):
-            import pdb; pdb.set_trace()
             g = np.zeros_like(g)
-        # END DEBUG
+
         return g
 
-#    grad_nll = lambda x_glm_vec: g_glm_nll(x_glm_vec, xn)
     if use_rop:
         hess_nll = lambda x_glm_vec, v_vec: H_glm_nll(x_glm_vec, v_vec, xn)
     elif use_hessian:
         hess_nll = lambda x_glm_vec: H_glm_nll(x_glm_vec, xn)
+    else:
+        hess_nll = None
         
 
     
@@ -261,7 +249,7 @@ def fit_glm(xn, n,
         print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
         ncg_iter_ls[0] += 1
     cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
-    
+
     # Call the appropriate scipy optimization function
     if use_hessian:
         xn_opt = opt.fmin_ncg(nll, x_glm_0,
@@ -277,12 +265,25 @@ def fit_glm(xn, n,
                               callback=cbk)
     else:
         # If we're not given the hessian or an Rop, use BFGS
-        xn_opt = opt.fmin_bfgs(nll, x_glm_0,
-                               fprime=grad_nll,
-                               disp=True,
-                               callback=cbk,
-                               maxiter=200)
-    
+        # xn_opt = opt.fmin_bfgs(nll, x_glm_0,
+        #                        fprime=grad_nll,
+        #                        disp=True,
+        #                        callback=cbk,
+        #                        maxiter=200)
+
+        # xn_opt = opt.fmin_ncg(nll, x_glm_0,
+        #                       fprime=grad_nll,
+        #                       disp=True,
+        #                       callback=cbk)
+
+        res =    opt.minimize(nll, x_glm_0,
+                              method="bfgs",
+                              jac=grad_nll,
+                              options={'disp': True,
+                                       'maxiter' : 225},
+                              callback=cbk)
+        xn_opt = res.x
+
     # Unpack the optimized parameters back into the state dict
     x_glm_n = unpackdict(xn_opt, shapes)
     set_vars(glm_syms, xn['glm'], x_glm_n)
@@ -319,6 +320,11 @@ def coord_descent(population,
 
     # Also initialize with intelligent parameters from the data
     initialize_with_data(population, data, x0)
+
+    print "Initial x"
+    print x0
+    lp = population.compute_log_p(x0)
+    print "Initial LP=%.2f." % (lp)
 
     # Compute log prob, gradient, and hessian wrt network parameters
     net_inf_prms = prep_network_inference(population,

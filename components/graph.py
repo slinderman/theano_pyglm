@@ -58,12 +58,12 @@ class ErdosRenyiGraphModel(Component):
         """
         return {str(self.A): self.A}
 
-    
+
     def sample(self):
         N = self.model['N']
         A = np.random.rand(N,N) < self.rho
-	A = A.astype(np.int8)
+        A = A.astype(np.int8)
         return {str(self.A) : A}
-    
+
     def get_state(self):
         return {'A': self.A}

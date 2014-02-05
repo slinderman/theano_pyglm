@@ -14,8 +14,13 @@ def sta(stim, data, L, Ns=None):
     L    : length of the STA in bins of size data['dt']
     """
 
-    # Interpolate stimulus at the resolution of the data
+    # import pdb; pdb.set_trace()
     D_stim = stim.shape[1]
+    # Compute the STA in chunks
+    maxchunk = 1e8
+    chunksz = maxchunk//D_stim//L
+
+    # Interpolate stimulus at the resolution of the data
     S = data['S']
     (nt,N) = S.shape
     dt = data['dt']
@@ -33,30 +38,13 @@ def sta(stim, data, L, Ns=None):
         # Each stimulus frame is repeated (dt_stim/dt) times, so 
         # divide by this to keep the stimulus * weight dot product the same
         istim[:,d] /= (dt_stim/dt)
-        
-    # Make lagged stim matrix to compute STA
-    stim_lag = np.zeros((nt,L*D_stim))
-    stim_lag[:,:D_stim] = istim
-    for l in np.arange(1,L):
-        stim_lag[:,(l*D_stim):((l+1)*D_stim)] = \
-            np.vstack((np.zeros((l,D_stim)),istim[:-l,:]))
 
-    # Initialize STA
-    #A = np.zeros((N,L,D_stim))
-    #for ti in np.arange(nt):
-    #    # if ti % 1000 == 0:
-    #        # print "STA iter %d:" % ti
-    #    if ti<L-1:
-    #        stim_pad = np.concatenate((np.zeros((L-ti-1,D_stim)),istim[:ti+1,:]))
-    #    else:
-    #        stim_pad = istim[ti-L+1:ti+1,:]
-    #
-    #    assert stim_pad.shape == (L,D_stim)
-    #
-    #    A += np.tensordot(np.reshape(S[ti,:],(N,1)),
-    #                      np.reshape(stim_pad, (1,L,D_stim)),
-    #                      axes=[1,0])
+    # Pad istim with L zeros
+    istim = np.vstack((np.zeros((L,D_stim)),
+                       istim))
 
+
+    A = np.zeros((len(Ns),L,D_stim))
 
     # Only compute STA for the specified neurons Ns
     if Ns is None:
@@ -65,19 +53,32 @@ def sta(stim, data, L, Ns=None):
     if isinstance(Ns, int):
         Ns = [Ns]
 
-    A = np.zeros((len(Ns),L,D_stim))
-    for i,n in enumerate(Ns):
-        Sn = S[:,n] > 0
-        Aflat = np.sum(stim_lag[Sn,:],axis=0)
+    for chunk in np.arange(np.ceil(float(nt)/chunksz)):
+        print "Chunk %d" % chunk
+        start = chunk*chunksz
+        end = min((chunk+1)*chunksz, nt)
 
-        # Reshape into L x D_stim array
-        # (this is more readable and less error prone than using Numpy reshape)
+        # Make lagged stim matrix to compute STA
+        stim_lag = np.zeros((end-start,L*D_stim))
+        # stim_lag[:,:D_stim] = istim[start:end,:]
         for l in np.arange(L):
-            A[i,l,:] = Aflat[(l*D_stim):((l+1)*D_stim)]
+            stim_lag[:,(l*D_stim):((l+1)*D_stim)] = \
+                istim[L+start-l:L+end-l, :]
+            # np.vstack((np.zeros((l,D_stim)),istim[start:end-l,:]))
+
+        for i,n in enumerate(Ns):
+            Sn = S[start:end,n]
+            # Aflat += np.sum(stim_lag[Sn,:],axis=0)
+            Aflat = np.dot(Sn, stim_lag)
+
+            # Reshape into L x D_stim array
+            # (this is more readable and less error prone than using Numpy reshape)
+            for l in np.arange(L):
+                A[i,l,:] += Aflat[(l*D_stim):((l+1)*D_stim)]
 
     # Normalize
     for i,n in enumerate(Ns):
-        A[i,:,:] /= np.sum(S[:,n]>0)
+        A[i,:,:] /= np.sum(S[:,n])
 
     # Flip the result so that the first column is the most recent stimulus frame
     #A = A[:,::-1,:]
