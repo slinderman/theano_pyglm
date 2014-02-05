@@ -62,8 +62,8 @@ class BasisStimulus(Component):
         # Log probability
 #        self.log_p = self.prior.log_p
 #         self.log_p = -0.5/0.1**2 *T.sum(T.pow(self.w_stim-0,2))
-#         self.log_p = T.sum(-0.5/(0.01**2) * (self.w_stim-0.0)**2)
-        self.log_p = 0.0
+        self.log_p = T.sum(-0.5/(0.01**2) * (self.w_stim-0.0)**2)
+#         self.log_p = 0.0
 
         # Expose outputs to the Glm class
 #        self.I_stim = T.dot(self.stim,self.prior.value)
