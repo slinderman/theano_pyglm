@@ -169,7 +169,8 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
                      color='k', linestyle=':')
 
             # Set labels 
-            if not (n_pre == N-1 and n_post == 0):
+            #if not (n_pre == N-1 and n_post == 0):
+            if True:
                 ax.set_xlabel("")
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -178,18 +179,27 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
 
     return fig
 
-def plot_firing_rate(s_glm, s_glm_std=None, color=None):
+def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None):
+    if tt is None:
+        tt = np.arange(np.size(s_glm['lam']))
     plt.plot(s_glm['lam'],
              color=color)
     plt.hold(True)
     
     if s_glm_std is not None:
-        plt.plot(s_glm['lam'] + 2*s_glm_std['lam'],
-                 color=color,
-                 linestyle='--')
-        plt.plot(s_glm['lam'] - 2*s_glm_std['lam'],
-                 color=color,
-                 linestyle='--')
+        # Make a shaded patch for the error bars
+        from matplotlib.patches import Polygon
+        verts = list(zip(tt,s_glm['lam'] + 2*s_glm_std['lam'])) + \
+                list(zip(tt[::-1],s_glm['lam'][::-1] - 2*s_glm_std['lam'][::-1]))
+        poly = Polygon(verts, facecolor=color, edgecolor=color, alpha=0.5)
+        plt.gca().add_patch(poly)
+
+#        plt.plot(s_glm['lam'] + 2*s_glm_std['lam'],
+#                 color=color,
+#                 linestyle='--')
+#        plt.plot(s_glm['lam'] - 2*s_glm_std['lam'],
+#                 color=color,
+#                 linestyle='--')
 
 def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
     """ Plot a Kolmogorov-Smirnov goodness of fit test..
@@ -339,7 +349,7 @@ def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
             
         # Plot the spike times
         St = np.nonzero(population.glm.S.get_value()[:,n])[0]
-        plt.plot(St,0.1*np.ones_like(St),'kx')
+        plt.plot(St,s_avg['glms'][n]['lam'][St],'ko')
         
         # Zoom in on small fraction
         plt.xlim([0,2000])

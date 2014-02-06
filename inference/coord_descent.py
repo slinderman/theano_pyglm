@@ -194,7 +194,7 @@ def fit_network(x,
         ncg_iter_ls = [0]
         def progress_report(x_curr, ncg_iter_ls):
             ll = -1.0*nll(x_curr)
-            print "Newton iter %d.\tNeuron %d. LL: %.1f" % (ncg_iter_ls[0],n,ll)
+            print "Newton iter %d.\tNetwork. LL: %.1f" % (ncg_iter_ls[0],ll)
             ncg_iter_ls[0] += 1
         cbk = lambda x_curr: progress_report(x_curr, ncg_iter_ls)
     
@@ -321,8 +321,6 @@ def coord_descent(population,
     # Also initialize with intelligent parameters from the data
     initialize_with_data(population, data, x0)
 
-    print "Initial x"
-    print x0
     lp = population.compute_log_p(x0)
     print "Initial LP=%.2f." % (lp)
 

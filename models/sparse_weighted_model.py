@@ -9,14 +9,14 @@ SparseWeightedModel = \
     # Parameters of the nonlinearity
     'nonlinearity' :
         {
-            'type' : 'exp'
+            'type' : 'explinear'
         },
     
     # Parameters of the bias    
     'bias' :
         {
             'type' : 'constant',
-            'mu' : 3.0,
+            'mu' : 20.0,
             'sigma' : 0.25
         },
 
@@ -42,32 +42,32 @@ SparseWeightedModel = \
         },
 
     # Parameters of the impulse responses
-    #'impulse' :
-    #    {
-    #        'type' : 'normalized',
-    #        'dt_max' : 0.2,
-    #        'alpha' : 1,
-    #        'basis' :
-    #            {
-    #                #'type' : 'cosine',
-    #                #'n_eye' : 0,
-    #                #'n_cos' : 5,
-    #                'type' : 'exp',
-    #                'n_eye' : 0,
-    #                'n_exp' : 5,
-    #                'a': 1.0/120,
-    #                'b': 0.5,
-    #                'orth' : False,
-    #                'norm' : False
-    #            }
-    #    },
     'impulse' :
         {
-            'type' : 'exponential',
+            'type' : 'normalized',
             'dt_max' : 0.2,
-            'tau0' : 0.07,
-            'sigma': 0.1
+            'alpha' : 1,
+            'basis' :
+                {
+                    'type' : 'cosine',
+                    'n_eye' : 0,
+                    'n_cos' : 5,
+                    #'type' : 'exp',
+                    #'n_eye' : 0,
+                    #'n_exp' : 5,
+                    'a': 1.0/120,
+                    'b': 0.5,
+                    'orth' : False,
+                    'norm' : True
+                }
         },
+    #'impulse' :
+    #    {
+    #        'type' : 'exponential',
+    #        'dt_max' : 0.2,
+    #        'tau0' : 0.07,
+    #        'sigma': 0.1
+    #    },
 
     # Parameters of the network
     'network' :
@@ -76,8 +76,8 @@ SparseWeightedModel = \
                 {
                     'type' : 'gaussian',
                     'mu' : 0.0,
-                    'sigma' : 1.0,
-                    'mu_refractory' : -2.0,
+                    'sigma' : 3.0,
+                    'mu_refractory' : -3.0,
                     'sigma_refractory' : 0.1
                 },
 

@@ -47,6 +47,15 @@ def make_model(template, N=None):
 def stabilize_sparsity(model):
     """ Adjust the sparsity level for simple weighted models
         with Gaussian weight models and Bernoulli adjacency matrices.
+        The variance of a Gaussian N(0,sigma) times a Bernoulli(rho) is 
+            E[B*N] = 0
+            Var[B*N] = E[(B*N)**2] = rho*sigma^2 + (1-rho)*0 = rho*sigma^2
+
+        Hence the eigenvalues will be distributed in a complex disk of radius
+            \sqrt(N) * \sqrt(rho) * sigma 
+        For this to be less than (1-delta), we have
+            \sqrt(rho) < (1-delta)/sqrt(N)/sigma
+            rho < (1-delta)**2 / N / sigma**2 
     """
     N = model['N']
     imp_model = model['impulse']
@@ -62,20 +71,20 @@ def stabilize_sparsity(model):
             if 'mu_refractory' in weight_model:
                 maxeig -= weight_model['mu_refractory']
 
-            stable_rho = maxeig/N/sigma**2
+            stable_rho = maxeig**2/N/sigma**2
             stable_rho = np.minimum(stable_rho, 1.0)
             print "Setting sparsity to %.2f for stability." % stable_rho
             graph_model['rho'] = stable_rho
 
-        elif weight_model['type'].lower() == 'constant' and \
-             imp_model['type'].lower() == 'basis':
-            sigma = imp_model['sigma']
-            maxeig = 0.7
-            
-            # TODO Figure out how sigma actually relates to the eigenvalues
-            stable_rho = maxeig/N/sigma**2
-            stable_rho = np.minimum(stable_rho, 1.0)
-            print "Setting sparsity to %.2f for stability." % stable_rho
-            graph_model['rho'] = stable_rho
+        #elif weight_model['type'].lower() == 'constant' and \
+        #     imp_model['type'].lower() == 'basis':
+        #    sigma = imp_model['sigma']
+        #    maxeig = 0.7
+        #    
+        #    # TODO Figure out how sigma actually relates to the eigenvalues
+        #    stable_rho = maxeig/N/sigma**2
+        #    stable_rho = np.minimum(stable_rho, 1.0)
+        #    print "Setting sparsity to %.2f for stability." % stable_rho
+        #    graph_model['rho'] = stable_rho
 
         

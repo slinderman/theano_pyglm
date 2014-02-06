@@ -201,7 +201,7 @@ class NormalizedBasisImpulses(Component):
 
         # Normalize so that the interpolated basis has volume 1
         if self.prms['basis']['norm']:
-            ibasis = ibasis / self.prms['dt_max']
+            ibasis = ibasis / np.trapz(ibasis,t_int,axis=0)
         # Normalize so that the interpolated basis has unit L1 norm
 #         if self.prms['basis']['norm']:
 #             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])

@@ -15,7 +15,7 @@ def run_synth_test():
     options, popn, data, popn_true, x_true = initialize_test_harness()
 
     # Perform inference
-    N_samples = 100
+    N_samples = 10
     x_smpls = gibbs_sample(popn, data, N_samples=N_samples)
 
     # Save results

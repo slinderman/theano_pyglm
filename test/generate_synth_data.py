@@ -70,6 +70,13 @@ def gen_synth_data():
     # Sample random parameters from the model
     x_true = popn.sample()
     
+    # Check stability of matrix
+    if model['network']['graph']['type'].lower() == 'erdos_renyi' and \
+       model['network']['weight']['type'].lower() == 'gaussian':
+        Weff = x_true['net']['graph']['A'] * np.reshape(x_true['net']['weights']['W'], (options.N,options.N))
+        print Weff
+        print np.amax(np.linalg.eig(Weff)[0])
+        
     # Generate random white noise stimulus
     stim = np.random.randn(options.T_stop/dt_stim,D_stim)
 
@@ -109,7 +116,7 @@ def gen_synth_data():
     state = popn.eval_state(x_true)
     for n in np.arange(options.N):
         lam_true = state['glms'][n]['lam']
-        lam_sim = np.exp(X[:,n])
+        lam_sim =  popn.glm.nlin_model.f_nlin(X[:,n])
         assert np.allclose(lam_true, lam_sim)
 
     # Save the data for reuse
@@ -128,4 +135,3 @@ def gen_synth_data():
     
 if __name__ == "__main__":
     gen_synth_data()
-

@@ -12,8 +12,6 @@ def run_synth_test():
     """
     options, popn, data, popn_true, x_true = initialize_test_harness()
 
-    print x_true
-
     # Sample random initial state
     x0 = popn.sample()
     ll0 = popn.compute_log_p(x0)

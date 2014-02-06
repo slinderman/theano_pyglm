@@ -191,7 +191,7 @@ class Population:
                             syms,
                             nvars)
 
-        print "Max background rate: %f" % np.exp(np.max(X))
+        print "Max background rate: %s" % str(self.glm.nlin_model.f_nlin(np.amax(X)))
 
         # Get the impulse response functions
         imps = []

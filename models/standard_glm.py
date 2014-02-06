@@ -9,7 +9,7 @@ StandardGlm = \
     # Parameters of the nonlinearity
     'nonlinearity' :
         {
-            'type' : 'exp'
+            'type' : 'explinear'
         },
     
     # Parameters of the bias    
