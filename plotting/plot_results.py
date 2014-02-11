@@ -179,18 +179,20 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
 
     return fig
 
-def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None):
+def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
     if tt is None:
         tt = np.arange(np.size(s_glm['lam']))
-    plt.plot(s_glm['lam'],
+    if T_lim is None:
+        T_lim = slice(0,np.size(s_glm['lam']))
+    plt.plot(tt[T_lim], s_glm['lam'][T_lim],
              color=color)
     plt.hold(True)
     
     if s_glm_std is not None:
         # Make a shaded patch for the error bars
         from matplotlib.patches import Polygon
-        verts = list(zip(tt,s_glm['lam'] + 2*s_glm_std['lam'])) + \
-                list(zip(tt[::-1],s_glm['lam'][::-1] - 2*s_glm_std['lam'][::-1]))
+        verts = list(zip(tt[T_lim], s_glm['lam'][T_lim] + 2*s_glm_std['lam'][T_lim])) + \
+                list(zip(tt[T_lim][::-1],s_glm['lam'][T_lim][::-1] - 2*s_glm_std['lam'][T_lim][::-1]))
         poly = Polygon(verts, facecolor=color, edgecolor=color, alpha=0.5)
         plt.gca().add_patch(poly)
 
@@ -262,7 +264,17 @@ def plot_log_lkhd(s_inf, s_true=None,  color='k'):
     plot_log_prob(s_inf, key='ll', s_true=s_true, color=color)
     plt.ylabel('Log likelihood')
 
-def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
+def plot_results(population, 
+                 x_inf, 
+                 popn_true=None, 
+                 x_true=None, 
+                 resdir=None,
+                 plot_conn=True,
+                 plot_stim_resp=True,
+                 plot_imp_resp=True,
+                 plot_firing_rate=True,
+                 plot_ks=True,
+                 plot_logpr=True):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     if not resdir:
@@ -292,87 +304,97 @@ def plot_results(population, x_inf, popn_true=None, x_true=None, resdir=None):
     # TODO Fix the averaging of W and A
     # E[W] * E[A] != E[W*A]
     # Plot the inferred connectivity matrix
-    print "Plotting connectivity matrix"
-    f = plt.figure()
-    plot_connectivity_matrix(s_avg, s_true)
-    f.savefig(os.path.join(resdir,'conn.pdf'))
-    plt.close(f)
+    if plot_conn:
+        print "Plotting connectivity matrix"
+        f = plt.figure()
+        plot_connectivity_matrix(s_avg, s_true)
+        f.savefig(os.path.join(resdir,'conn.pdf'))
+        plt.close(f)
 
     # Plot stimulus response functions
-    print "Plotting stimulus response functions"
-    for n in range(N):
-        f = plt.figure()
-        plot_stim_response(s_avg['glms'][n], 
-                           s_glm_std=s_std['glms'][n],
-                           color='r')
-        if true_given:
-            plot_stim_response(s_true['glms'][n], 
-                               color='k')
+    if plot_stim_resp:
+        print "Plotting stimulus response functions"
+        for n in range(N):
+            f = plt.figure()
+            plot_stim_response(s_avg['glms'][n], 
+                               s_glm_std=s_std['glms'][n],
+                               color='r')
+            if true_given:
+                plot_stim_response(s_true['glms'][n], 
+                                   color='k')
         
-        f.savefig(os.path.join(resdir,'stim_resp_%d.pdf' % n))
-        plt.close(f)
+            f.savefig(os.path.join(resdir,'stim_resp_%d.pdf' % n))
+            plt.close(f)
         
     # Plot the impulse responses
-    print "Plotting impulse response functions"
-    f = plt.figure()
-    plot_imp_responses(s_avg,
-                       s_std,
-                       fig=f,
-                       color='r',
-                       use_bgcolor=True)
-    if true_given:
-        plot_imp_responses(s_true,
+    if plot_imp_resp:
+        print "Plotting impulse response functions"
+        f = plt.figure()
+        plot_imp_responses(s_avg,
+                           s_std,
                            fig=f,
-                           color='k',
-                           linestyle='--',
-                           use_bgcolor=False)
-
-    f.savefig(os.path.join(resdir,'imp_resp.pdf'))
-    plt.close(f)
+                           color='r',
+                           use_bgcolor=True)
+        if true_given:
+            plot_imp_responses(s_true,
+                               fig=f,
+                               color='k',
+                               linestyle='--',
+                               use_bgcolor=False)
+            
+        f.savefig(os.path.join(resdir,'imp_resp.pdf'))
+        plt.close(f)
     
     # Plot the impulse response basis
-    f = plt.figure()
-    plot_basis(s_avg)
-    f.savefig(os.path.join(resdir,'imp_basis.pdf'))
-    plt.close(f)
+    if plot_imp_resp:
+        f = plt.figure()
+        plot_basis(s_avg)
+        f.savefig(os.path.join(resdir,'imp_basis.pdf'))
+        plt.close(f)
     
 
     # Plot the firing rates
-    print "Plotting firing rates"
-    for n in range(N):
-        f = plt.figure()
-        plot_firing_rate(s_avg['glms'][n], 
-                         s_std['glms'][n], 
-                         color='r')
-        if true_given:
-            plot_firing_rate(s_true['glms'][n], color='k')
+    if plot_firing_rates:
+        print "Plotting firing rates"
+        T_lim = slice(0,2000)
+        for n in range(N):
+            f = plt.figure()
+            plot_firing_rate(s_avg['glms'][n], 
+                             s_std['glms'][n], 
+                             color='r',
+                             T_lim=T_lim)
+            if true_given:
+                plot_firing_rate(s_true['glms'][n], color='k', T_lim=T_lim)
             
-        # Plot the spike times
-        St = np.nonzero(population.glm.S.get_value()[:,n])[0]
-        plt.plot(St,s_avg['glms'][n]['lam'][St],'ko')
+            # Plot the spike times
+            St = np.nonzero(population.glm.S.get_value()[T_lim,n])[0]
+            plt.plot(St,s_avg['glms'][n]['lam'][T_lim][St],'ko')
+            
+            plt.title('Firing rate %d' % n)
+            
+            f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
+            plt.close(f)
+
+    if plot_ks:
+        print "Plotting KS test results"
+        for n in range(N):
+            f = plt.figure()
+            St = np.nonzero(population.glm.S.get_value()[:,n])[0]
+            plot_ks(s_avg['glms'][n], St, population.glm.dt.get_value())
+            f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
+            plt.close(f)
+
+    if plot_logpr:
+        print "Plotting log probability and log likelihood trace"
+        f = plt.figure()
+        plot_log_prob(s_inf, s_true=s_true, color='r')
+        f.savefig(os.path.join(resdir, 'log_prob.pdf'))
+        plt.close(f)
         
-        # Zoom in on small fraction
-        plt.xlim([0,2000])
-        plt.title('Firing rate %d' % n)
-            
-        f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
-        plt.close(f)
-
         f = plt.figure()
-        plot_ks(s_avg['glms'][n], St, population.glm.dt.get_value())
-        f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
+        plot_log_lkhd(s_inf, s_true=s_true, color='r')
+        f.savefig(os.path.join(resdir, 'log_lkhd.pdf'))
         plt.close(f)
-
-    print "Plotting log probability and log likelihood trace"
-    f = plt.figure()
-    plot_log_prob(s_inf, s_true=s_true, color='r')
-    f.savefig(os.path.join(resdir, 'log_prob.pdf'))
-    plt.close(f)
-
-    f = plt.figure()
-    plot_log_lkhd(s_inf, s_true=s_true, color='r')
-    f.savefig(os.path.join(resdir, 'log_lkhd.pdf'))
-    plt.close(f)
 
     print "Plots can be found in directory: %s" % resdir
 

@@ -71,22 +71,22 @@ def gen_synth_data():
     x_true = popn.sample()
     
     # Check stability of matrix
-    if model['network']['graph']['type'].lower() == 'erdos_renyi' and \
-       model['network']['weight']['type'].lower() == 'gaussian':
+    if model['network']['weight']['type'].lower() == 'gaussian':
         Weff = x_true['net']['graph']['A'] * np.reshape(x_true['net']['weights']['W'], (options.N,options.N))
-        print Weff
-        print np.amax(np.linalg.eig(Weff)[0])
+        maxeig = np.amax(np.abs(np.linalg.eig(Weff)[0]))
+        print "Max eigenvalue of Weff: %.2f" % maxeig
+        assert maxeig < 1, "ERROR: For stability, maxeig must be less than 1"
         
     # Generate random white noise stimulus
     stim = np.random.randn(options.T_stop/dt_stim,D_stim)
 
     # Initialize the GLMs with just the stimulus
     temp_data = {"S": np.zeros((options.T_stop/dt, options.N)),
-            "N": options.N,
-            "dt": dt,
-            "T": np.float(options.T_stop),
-            "stim": stim,
-            'dt_stim': dt_stim}
+                 "N": options.N,
+                 "dt": dt,
+                 "T": np.float(options.T_stop),
+                 "stim": stim,
+                 'dt_stim': dt_stim}
     popn.set_data(temp_data)
 
     # Simulate spikes
@@ -131,7 +131,9 @@ def gen_synth_data():
         cPickle.dump(data,f)
 
     # Plot firing rates, stimulus responses, etc
-    plot_results(popn, data['vars'], resdir=options.resultsDir)
+    plot_results(popn, data['vars'], resdir=options.resultsDir,
+                 plot_stim_resp=False,
+                 plot_imp_resp=False)
     
 if __name__ == "__main__":
     gen_synth_data()

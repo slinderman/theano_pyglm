@@ -215,6 +215,21 @@ class Population:
         acc = np.zeros(N)
         thr = -np.log(np.random.rand(N))
 
+        # TODO: Handle time-varying weights appropriately
+        time_varying_weights = False
+        if not time_varying_weights:
+            At = np.tile(np.reshape(seval(self.network.graph.A,
+                                          syms['net'],
+                                          vars['net']),
+                                    [N,N,1]),
+                         [1,1,T_imp])
+
+            Wt = np.tile(np.reshape(seval(self.network.weights.W,
+                                          syms['net'],
+                                          vars['net']),
+                                    [N,N,1]),
+                         [1,1,T_imp])
+
         # Count the number of exceptions arising from more spikes per bin than allowable
         n_exceptions = 0
         for t in np.arange(nT):
@@ -222,8 +237,9 @@ class Population:
             if np.mod(t,10000)==0:
                 print "Iteration %d" % t
             # TODO Handle nonlinearities with variables
-            lam = np.array(map(lambda n: self.glm.nlin_model.f_nlin(X[t,n]),
-                           np.arange(N)))
+            #lam = np.array(map(lambda n: self.glm.nlin_model.f_nlin(X[t,n]),
+            #               np.arange(N)))
+            lam = self.glm.nlin_model.f_nlin(X[t,:])
             acc = acc + lam*dt
 
             # Spike if accumulator exceeds threshold
@@ -235,18 +251,19 @@ class Population:
             t_imp = np.minimum(nT-t-1,T_imp)
 
             # Get the instantaneous connectivity
-            # TODO Handle time varying weights
-            At = np.tile(np.reshape(seval(self.network.graph.A,
-                                          syms['net'],
-                                          vars['net']),
-                                    [N,N,1]),
-                         [1,1,t_imp])
+            if time_varying_weights:
+                # TODO: Really get the time-varying weights
+                At = np.tile(np.reshape(seval(self.network.graph.A,
+                                              syms['net'],
+                                              vars['net']),
+                                        [N,N,1]),
+                             [1,1,t_imp])
 
-            Wt = np.tile(np.reshape(seval(self.network.weights.W,
-                                          syms['net'],
-                                          vars['net']),
-                                    [N,N,1]),
-                         [1,1,t_imp])
+                Wt = np.tile(np.reshape(seval(self.network.weights.W,
+                                              syms['net'],
+                                              vars['net']),
+                                        [N,N,1]),
+                             [1,1,t_imp])
 
             # Iterate until no more spikes
             # Cap the number of spikes in a time bin

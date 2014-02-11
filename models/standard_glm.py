@@ -16,15 +16,15 @@ StandardGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : 2,
+            'mu' : 20,
             'sigma' : 0.1
         },
 
     # Parameters of the background model
     'bkgd' :
         {
-            'type' : 'basis',
-            #'type' : 'none',
+            #'type' : 'basis',
+            'type' : 'none',
             'D_stim' : 1,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
             'prior' : 
@@ -49,14 +49,14 @@ StandardGlm = \
      'impulse' :
          {
              'type' : 'basis',
-             'dt_max' : 0.3,
+             'dt_max' : 0.2,
              'mu' : 0.0,
-             'sigma' : 0.5,
+             'sigma' : 200.0,
              'basis' :
                  {
                      'type' : 'cosine',
                      'n_eye' : 0,
-                     'n_cos' : 3,
+                     'n_cos' : 5,
                      'a': 1.0/120,
                      'b': 0.5,
                      'orth' : True,
