@@ -269,12 +269,12 @@ def plot_results(population,
                  popn_true=None, 
                  x_true=None, 
                  resdir=None,
-                 plot_conn=True,
-                 plot_stim_resp=True,
-                 plot_imp_resp=True,
-                 plot_firing_rate=True,
-                 plot_ks=True,
-                 plot_logpr=True):
+                 do_plot_connectivity=True,
+                 do_plot_stim_resp=True,
+                 do_plot_imp_responses=True,
+                 do_plot_firing_rates=True,
+                 do_plot_ks=True,
+                 do_plot_logpr=True):
     """ Plot the inferred stimulus tuning curves and impulse responses
     """
     if not resdir:
@@ -304,7 +304,7 @@ def plot_results(population,
     # TODO Fix the averaging of W and A
     # E[W] * E[A] != E[W*A]
     # Plot the inferred connectivity matrix
-    if plot_conn:
+    if do_plot_connectivity:
         print "Plotting connectivity matrix"
         f = plt.figure()
         plot_connectivity_matrix(s_avg, s_true)
@@ -312,7 +312,7 @@ def plot_results(population,
         plt.close(f)
 
     # Plot stimulus response functions
-    if plot_stim_resp:
+    if do_plot_stim_resp:
         print "Plotting stimulus response functions"
         for n in range(N):
             f = plt.figure()
@@ -327,7 +327,7 @@ def plot_results(population,
             plt.close(f)
         
     # Plot the impulse responses
-    if plot_imp_resp:
+    if do_plot_imp_responses:
         print "Plotting impulse response functions"
         f = plt.figure()
         plot_imp_responses(s_avg,
@@ -346,7 +346,7 @@ def plot_results(population,
         plt.close(f)
     
     # Plot the impulse response basis
-    if plot_imp_resp:
+    if do_plot_imp_responses:
         f = plt.figure()
         plot_basis(s_avg)
         f.savefig(os.path.join(resdir,'imp_basis.pdf'))
@@ -354,7 +354,7 @@ def plot_results(population,
     
 
     # Plot the firing rates
-    if plot_firing_rates:
+    if do_plot_firing_rates:
         print "Plotting firing rates"
         T_lim = slice(0,2000)
         for n in range(N):
@@ -375,7 +375,7 @@ def plot_results(population,
             f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
             plt.close(f)
 
-    if plot_ks:
+    if do_plot_ks:
         print "Plotting KS test results"
         for n in range(N):
             f = plt.figure()
@@ -384,7 +384,7 @@ def plot_results(population,
             f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
             plt.close(f)
 
-    if plot_logpr:
+    if do_plot_logpr:
         print "Plotting log probability and log likelihood trace"
         f = plt.figure()
         plot_log_prob(s_inf, s_true=s_true, color='r')

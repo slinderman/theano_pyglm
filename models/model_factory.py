@@ -82,17 +82,28 @@ def stabilize_sparsity(model):
         
         elif graph_model['type'].lower() == 'sbm':
             # Things are trickier in the SBM case because the entries in A
-            # are not iid. But, we can still make an independence approximation
-            # and set the SBM sparsity distribution such that the average
-            # sparsity is the desired level for an ER graph.
-            stable_rho = maxeig**2/N/sigma**2
-            stable_rho = np.minimum(stable_rho, 1.0)
+            # are not iid. But, we can still make some approximations by
+            # thinking about the mean and variance within a single block, wherein
+            # the entries really are i.i.d. Then we scale the eigs of
+            # each block by N/R, as if the blocks were equal size and the
+            # interdependencies between blocks did not matter. Obviously,
+            # this is a hack.
+            R = graph_model['R']
+            if weight_model['type'].lower() == 'sbm':
+                sig_mu = weight_model['sigma_mu']
+                sig_w = weight_model['sigma_w']
+            elif weight_model['type'].lower() == 'gaussian':
+                sig_mu = 0.0
+                sig_w = weight_model['sigma']
+            else:
+                raise Exception("Unrecognized weight model for SBM graph: %s" % weight_model['type'])
 
-            # The mean of a beta is b0/(b0+b1) \approx \rho
-            # b0 \approx b0*\rho + b1*\rho
-            # b0 \approx b1\rho/(1-\rho)
-            # Letting b1 = 1, this gives us a value for rho
-            graph_model['b0'] = stable_rho/(1.0-stable_rho)
+            var_AW =  1./4. * (3.*sig_mu)**2 + sig_w**2
+            mean_lam_max = sig_mu * np.sqrt(R) * N/float(R) + 3*sig_w
+            sig_lam_max = np.sqrt(var_AW)
+            ub_lam_max = mean_lam_max + 3*sig_lam_max
+
+            var_B = (((1.0-mean_lam_max)/3.0)**2 - sig_w**2) / (3*sig_mu)**2
 
             print "Setting b0 to %.2f to achive sparsity of %.2f." % (graph_model['b0'],stable_rho)
 
