@@ -99,19 +99,8 @@ def load_data(options):
             raise Exception("Unrecognized file type: %s" % options.dataFile)
 
     else:
-        print "Generating synthetic data and saving to results directory."
-        T_stop = 180
-        data = generate_synth_data(population,
-                                   T_stop=T_stop)
-
-        # Save the data for reuse
-        import scipy.io
-        import os
-        scipy.io.savemat(os.path.join(options.resultsDir, 'data.mat'), data)
-        
-        # Pickle the data so we can open it more easily
-        with open(os.path.join(options.resultsDir, 'data.pkl'),'w') as f:
-            cPickle.dump(data,f)
+        raise Exception("Path to data file (.mat or .pkl) must be specified with the -d switch. "
+                         "To generate synthetic data, run the test.generate_synth_data script.")
     
     return data
 
