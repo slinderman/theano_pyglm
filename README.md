@@ -12,7 +12,17 @@ Make sure you have g++ installed, otherwise performance will be
 terrible! Theano will warn you if it cannot find g++.
 
 Then, you can quickly demo the code by running:
-'python -m test.synth_map'
+
+1.    cd pyglm
+2.    mkdir data
+3.    mkdir results
+4.    ``python -m test.generate_synth_data -N 4 -T 60 -m standard_glm -r data``
+
+      *(outputs something like 'Creating results directory: data\/2014_02_18-21_40')*
+5.    ``python -m test.synth_map -d data/2014_02_18-21_40/data.pkl -r results``
+
+      *(outputs something like 'Plots can be found in directory: results/2014_02_18-21_43')*
+6.    open the PDFs in the results directory. Hopefully they look good!
 
 overview
 -
