@@ -65,47 +65,50 @@ def stabilize_sparsity(model):
     imp_model = model['impulse']
     weight_model = model['network']['weight']
     graph_model = model['network']['graph']
-    if weight_model['type'].lower() == 'gaussian':
-        maxeig = 0.7
-        # If we have a refractory bias on the diagonal weights then
-        # we can afford slightly stronger weights
-        if 'mu_refractory' in weight_model:
-            maxeig -= weight_model['mu_refractory']
 
-        sigma = weight_model['sigma']
+    delta = 0.3
+    maxeig = 1.0-delta
 
-        if graph_model['type'].lower() == 'erdos_renyi':
+    if graph_model['type'].lower() == 'erdos_renyi':
+        if weight_model['type'].lower() == 'gaussian':
+
+            # If we have a refractory bias on the diagonal weights then
+            # we can afford slightly stronger weights
+            if 'mu_refractory' in weight_model:
+                maxeig -= weight_model['mu_refractory']
+
+            sigma = weight_model['sigma']
             stable_rho = maxeig**2/N/sigma**2
             stable_rho = np.minimum(stable_rho, 1.0)
             print "Setting sparsity to %.2f for stability." % stable_rho
             graph_model['rho'] = stable_rho
         
-        elif graph_model['type'].lower() == 'sbm':
-            # Things are trickier in the SBM case because the entries in A
-            # are not iid. But, we can still make some approximations by
-            # thinking about the mean and variance within a single block, wherein
-            # the entries really are i.i.d. Then we scale the eigs of
-            # each block by N/R, as if the blocks were equal size and the
-            # interdependencies between blocks did not matter. Obviously,
-            # this is a hack.
-            R = graph_model['R']
-            if weight_model['type'].lower() == 'sbm':
-                sig_mu = weight_model['sigma_mu']
-                sig_w = weight_model['sigma_w']
-            elif weight_model['type'].lower() == 'gaussian':
-                sig_mu = 0.0
-                sig_w = weight_model['sigma']
-            else:
-                raise Exception("Unrecognized weight model for SBM graph: %s" % weight_model['type'])
+    elif graph_model['type'].lower() == 'sbm':
+        # Things are trickier in the SBM case because the entries in A
+        # are not iid. But, we can still make some approximations by
+        # thinking about the mean and variance within a single block, wherein
+        # the entries really are i.i.d. Then we scale the eigs of
+        # each block by N/R, as if the blocks were equal size and the
+        # interdependencies between blocks did not matter. Obviously,
+        # this is a hack.
+        R = graph_model['R']
+        if weight_model['type'].lower() == 'sbm':
+            sig_mu = weight_model['sigma_mu']
+            sig_w = weight_model['sigma_w']
+        elif weight_model['type'].lower() == 'gaussian':
+            sig_mu = 0.0
+            sig_w = weight_model['sigma']
+        else:
+            raise Exception("Unrecognized weight model for SBM graph: %s" % weight_model['type'])
 
-            var_AW =  1./4. * (3.*sig_mu)**2 + sig_w**2
-            mean_lam_max = sig_mu * np.sqrt(R) * N/float(R) + 3*sig_w
-            sig_lam_max = np.sqrt(var_AW)
-            ub_lam_max = mean_lam_max + 3*sig_lam_max
-
-            var_B = (((1.0-mean_lam_max)/3.0)**2 - sig_w**2) / (3*sig_mu)**2
-
-            print "Setting b0 to %.2f to achive sparsity of %.2f." % (graph_model['b0'],stable_rho)
+        # var_AW =  1./4. * (3.*sig_mu)**2 + sig_w**2
+        # mean_lam_max = sig_mu * np.sqrt(R) * N/float(R) + 3*sig_w
+        # sig_lam_max = np.sqrt(var_AW)
+        # ub_lam_max = mean_lam_max + 3*sig_lam_max
+        #
+        # var_B = (((1.0-mean_lam_max)/3.0)**2 - sig_w**2) / (3*sig_mu)**2
+        #
+        # print "Setting b0 to %.2f to achive sparsity of %.2f." % (graph_model['b0'],stable_rho)
 
         #elif weight_model['type'].lower() == 'constant' and \
         #     imp_model['type'].lower() == 'basis':
@@ -118,4 +121,16 @@ def stabilize_sparsity(model):
         #    print "Setting sparsity to %.2f for stability." % stable_rho
         #    graph_model['rho'] = stable_rho
 
-        
+def check_stability(model, x, N):
+    """
+    Check the stability of model parameters
+    """
+
+    if model['network']['weight']['type'].lower() == 'gaussian':
+        Weff = x['net']['graph']['A'] * np.reshape(x['net']['weights']['W'], (N,N))
+        maxeig = np.amax(np.real(np.linalg.eig(Weff)[0]))
+        print "Max eigenvalue of Weff: %.2f" % maxeig
+        return maxeig < 1
+    else:
+        print "Check stability: unrecognized model type. Defaulting to true."
+        return True

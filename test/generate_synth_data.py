@@ -6,7 +6,8 @@ import numpy as np
 
 from population import Population
 from models.model_factory import make_model, \
-                                 stabilize_sparsity
+                                 stabilize_sparsity, \
+                                 check_stability
 from plotting.plot_results import plot_results
 from utils.io import create_unique_results_folder
 
@@ -71,11 +72,7 @@ def gen_synth_data():
     x_true = popn.sample()
     
     # Check stability of matrix
-    if model['network']['weight']['type'].lower() == 'gaussian':
-        Weff = x_true['net']['graph']['A'] * np.reshape(x_true['net']['weights']['W'], (options.N,options.N))
-        maxeig = np.amax(np.abs(np.linalg.eig(Weff)[0]))
-        print "Max eigenvalue of Weff: %.2f" % maxeig
-        assert maxeig < 1, "ERROR: For stability, maxeig must be less than 1"
+    assert check_stability(model, x_true, options.N), "ERROR: Sampled network is unstable!"
         
     # Generate random white noise stimulus
     stim = np.random.randn(options.T_stop/dt_stim,D_stim)
@@ -131,9 +128,9 @@ def gen_synth_data():
         cPickle.dump(data,f)
 
     # Plot firing rates, stimulus responses, etc
-    plot_results(popn, data['vars'], resdir=options.resultsDir,
-                 plot_stim_resp=False,
-                 plot_imp_resp=False)
+    plot_results(popn, data['vars'],
+                 resdir=options.resultsDir,
+                 do_plot_stim_resp=False)
     
 if __name__ == "__main__":
     gen_synth_data()

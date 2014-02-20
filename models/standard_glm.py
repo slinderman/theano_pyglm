@@ -51,7 +51,7 @@ StandardGlm = \
              'type' : 'basis',
              'dt_max' : 0.2,
              'mu' : 0.0,
-             'sigma' : 200.0,
+             'sigma' : 5.0,
              'basis' :
                  {
                      'type' : 'cosine',
