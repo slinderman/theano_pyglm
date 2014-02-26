@@ -34,7 +34,8 @@ def make_model(template, N=None):
         elif template.lower() == 'sbm_weighted_model' or \
              template.lower() == 'sbmweightedmodel':
             model = copy.deepcopy(SbmWeightedModel)
-
+        else:
+            raise Exception("Unrecognized template model: %s!" % template)
     elif isinstance(template, dict):
         model = copy.deepcopy(template)
     else:
@@ -70,14 +71,14 @@ def stabilize_sparsity(model):
     maxeig = 1.0-delta
 
     if graph_model['type'].lower() == 'erdos_renyi':
-        if weight_model['type'].lower() == 'gaussian':
+        if weight_model['prior']['type'].lower() == 'gaussian':
 
             # If we have a refractory bias on the diagonal weights then
             # we can afford slightly stronger weights
-            if 'mu_refractory' in weight_model:
-                maxeig -= weight_model['mu_refractory']
+            if 'refractory_prior' in weight_model:
+                maxeig -= weight_model['refractory_prior']['mu']
 
-            sigma = weight_model['sigma']
+            sigma = weight_model['prior']['sigma']
             stable_rho = maxeig**2/N/sigma**2
             stable_rho = np.minimum(stable_rho, 1.0)
             print "Setting sparsity to %.2f for stability." % stable_rho
@@ -134,3 +135,54 @@ def check_stability(model, x, N):
     else:
         print "Check stability: unrecognized model type. Defaulting to true."
         return True
+
+def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
+    """ Convert from one model to another model of a different type
+        Generally this will involve projecting impulse responses, etc.
+        It's hairy business.
+    """
+
+    # Idea: Get the state of the GLMs, e.g. the impulse responses, etc.
+    #       Project those states onto the parameters of the to-model
+    N = from_popn.N
+    # import pdb; pdb.set_trace()
+    from_state = from_popn.eval_state(from_vars)
+    to_state = to_popn.eval_state(to_vars)
+
+    conv_vars = None
+    if from_model['impulse']['type'].lower() == 'basis':
+        if to_model['impulse']['type'].lower() == 'normalized':
+            import copy
+            conv_vars = copy.deepcopy(to_vars)
+
+            # To convert from basis -> normalized, project the impulse
+            # responses onto the normalized basis, divide by the area
+            # under the curve to get the weight.
+            from utils.basis import project_onto_basis
+
+            W = np.zeros((N,N))
+            for n2 in np.arange(N):
+                B = to_state['glms'][n2]['imp']['basis'].shape[1]
+                w_ir_n2 = np.zeros((N,B))
+                for n1 in np.arange(N):
+                    w_ir_n1n2 = project_onto_basis(from_state['glms'][n2]['imp']['impulse'][n1,:],
+                                                   to_state['glms'][n2]['imp']['basis'])
+                    w_ir_n1n2 = w_ir_n1n2.flatten()
+
+                    # Normalized weights must be > 0, sum to 1
+                    sgn = np.sign(np.sum(w_ir_n1n2))
+                    w_ir_n1n2 = sgn*w_ir_n1n2
+                    w_ir_n1n2 = np.clip(w_ir_n1n2,0.001,np.Inf)
+                    # Normalize the impulse response to get a weight
+                    W[n1,n2] = sgn*np.sum(w_ir_n1n2)
+                    # Set impulse response to normalized impulse response
+                    w_ir_n2[n1,:] = w_ir_n1n2 / np.sum(w_ir_n1n2)
+
+                # Update to_vars
+                conv_vars['glms'][n2]['imp']['w_lng'] = np.log(w_ir_n2.flatten())
+
+            # Update to_vars
+            conv_vars['net']['weights']['W'] = W.flatten()
+            conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
+
+    return conv_vars

@@ -18,16 +18,22 @@ class Gaussian(Component):
     """ Wrapper for a scalar random variable with a Normal distribution
     """
     def __init__(self, model, name='gaussian'):
-        import pdb; pdb.set_trace()
         self.prms = model
-        self.value = T.dscalar(name=name)
+ #       self.value = T.dscalar(name=name)
         self.mu = theano.shared(name='mu', value=self.prms['mu'])
         self.sigma = theano.shared(name='sigma', value=self.prms['sigma'])
 
-        self.log_p = -0.5/self.sigma**2 *T.sum((self.value-self.mu)**2)
+#        self.log_p = -0.5/self.sigma**2 *T.sum((self.value-self.mu)**2)
+    
+    def log_p(self, value):
+        """ Compute log prob of the given value under this prior
+        """
+        return -0.5/self.sigma**2  * T.sum((value-self.mu)**2)
 
     def get_variables(self):
-        return {str(self.value): self.value}
+#        return {str(self.mu): self.mu, 
+#                str(self.sigma) : self.sigma}
+        return {}
 
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model 
@@ -39,14 +45,13 @@ class Gaussian(Component):
         """ Sample from the prior
         """
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn()
-        return {str(self.value): v}
+        return v
 
 class SphericalGaussian(Component):
     """ Wrapper for a vector random variable with a spherical distribution
     """
     def __init__(self, model, name='spherical_gaussian', D=1):
         self.prms = model
-        import pdb; pdb.set_trace()
         self.D = D
         self.value = T.dvector(name=name)
         self.mu = theano.shared(name='mu', value=self.prms['mu'])

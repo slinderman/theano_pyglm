@@ -78,7 +78,7 @@ class Population:
                                                   vars['net'])
 
         glm_states = []
-        for n in range(self.N):
+        for n in np.arange(self.N):
             nvars = self.extract_vars(vars, n)
             glm_states.append(self._eval_state_helper(syms,
                                                       state_vars['glm'], 

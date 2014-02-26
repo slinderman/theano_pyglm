@@ -75,10 +75,18 @@ SparseWeightedModel = \
             'weight' :
                 {
                     'type' : 'gaussian',
-                    'mu' : 0.0,
-                    'sigma' : 3.0,
-                    'mu_refractory' : -3.0,
-                    'sigma_refractory' : 0.1
+                    'prior' : 
+                     {
+                         'type' : 'gaussian',
+                         'mu' : 0.0,
+                         'sigma' : 2.0
+                     },
+                    'refractory_prior' :
+                    {
+                        'type' : 'gaussian',
+                        'mu' : -2,
+                        'sigma' : 0.5
+                    }
                 },
 
             'graph' :

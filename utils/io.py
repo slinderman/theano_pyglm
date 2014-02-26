@@ -21,6 +21,13 @@ def parse_cmd_line_args():
     parser.add_option("-r", "--resultsDir", dest="resultsDir", default='.',
                       help="Save the results to this directory.")
 
+    parser.add_option("-x", "--x0", dest="x0_file", default=None,
+                      help="Initial x to start inference algorithm.")
+
+    parser.add_option("-u", "--unique_results", dest="unique_results", default=True,
+                      help="Whether or not to create a unique results directory.")
+
+
     # Parallel-specific options for loading IPython profiles
     parser.add_option("-p", "--profile", dest="profile", default='default',
                       help="IPython parallel profile to use.")
@@ -40,8 +47,15 @@ def parse_cmd_line_args():
     # Make a unique results folder for this run
     if not options.resultsDir is None and not os.path.exists(options.resultsDir):
         raise Exception("Invalid results folder specified: %s" % options.resultsDir)
-    
-    options.resultsDir = create_unique_results_folder(options.resultsDir)
+
+    if not options.x0_file is None and not os.path.exists(options.x0_file):
+        raise Exception("Invalid initial starting state: %s" % options.x0_file)
+
+
+    if options.unique_results != "0" and \
+       options.unique_results.lower() != "false":
+        options.resultsDir = create_unique_results_folder(options.resultsDir)
+
     return (options, args)
 
 

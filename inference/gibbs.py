@@ -103,6 +103,9 @@ def prep_network_inference(population,
                           syms,
                           nvars)
 
+            g_mask = np.zeros((N,N))
+            g_mask[:,n_post] = 1
+            g_lp *= g_mask.flatten()
             return g_lp
 
         W_gibbs_prms['lp_W'] = lp_W
@@ -169,7 +172,7 @@ def sample_network_column(n_post,
     """
     # TODO Check for Gaussian weights with Bernoulli A and do
     #      collapsed Gibbs.
-
+    # import pdb; pdb.set_trace()
     # Sample the adjacency matrix if it exists
     if 'A' in x['net']['graph']:
         print "Sampling A"
@@ -197,10 +200,9 @@ def sample_network_column(n_post,
         nll = lambda W: -1.0 * W_gibbs_prms['lp_W'](W, x, n_post)
         grad_nll = lambda W: -1.0 * W_gibbs_prms['g_lp_W'](W, x, n_post)
 
-        # TODO Automatically tune these parameters
+        # Automatically tune these parameters
         n_steps = 10
-        # W = hmc(nll, grad_nll, epsilon, L, x['net']['weights']['W'])
-        (W, new_step_sz, new_accept_rate) = hmc(nll, 
+        (W, new_step_sz, new_accept_rate) = hmc(nll,
                                                 grad_nll, 
                                                 W_gibbs_prms['step_sz'], 
                                                 n_steps,
@@ -287,8 +289,18 @@ def gibbs_sample(population,
         
         if init_from_mle:
             print "Initializing with coordinate descent"
+            from models.model_factory import make_model
+            from population import Population
+            mle_model = make_model('standard_glm', N=N)
+            mle_popn = Population(mle_model)
+            mle_popn.set_data(data)
+            mle_x0 = mle_popn.sample()
+
+            x0 = coord_descent(mle_popn, data, x0=mle_x0, maxiter=1)
+
+            import pdb; pdb.set_trace()
             # TODO Create a population with standard GLM models 
-            x0 = coord_descent(population, data, x0=x0, maxiter=1)
+            # x0 = coord_descent(population, data, x0=x0, maxiter=1)
 
             # TODO Convert between inferred parameters of the standard GLM
             # and the parameters of this model. Eg. Convert unweighted 
@@ -306,7 +318,7 @@ def gibbs_sample(population,
     pr.enable()
 
     # Alternate fitting the network and fitting the GLMs
-    x_smpls = []
+    x_smpls = [x0]
     x = x0
     
     for smpl in np.arange(N_samples):
