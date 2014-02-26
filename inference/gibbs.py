@@ -175,7 +175,7 @@ def sample_network_column(n_post,
     # import pdb; pdb.set_trace()
     # Sample the adjacency matrix if it exists
     if 'A' in x['net']['graph']:
-        print "Sampling A"
+        # print "Sampling A"
         A = x['net']['graph']['A']
         N = A.shape[0]
 
@@ -196,7 +196,7 @@ def sample_network_column(n_post,
 
     # Sample W if it exists
     if 'W' in x['net']['weights']:
-        print "Sampling W"
+        # print "Sampling W"
         nll = lambda W: -1.0 * W_gibbs_prms['lp_W'](W, x, n_post)
         grad_nll = lambda W: -1.0 * W_gibbs_prms['g_lp_W'](W, x, n_post)
 
@@ -213,7 +213,7 @@ def sample_network_column(n_post,
         # Update step size and accept rate
         W_gibbs_prms['step_sz'] = new_step_sz
         W_gibbs_prms['avg_accept_rate'] = new_accept_rate
-        print "W step sz: %.3f\tW_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+        # print "W step sz: %.3f\tW_accept rate: %.3f" % (new_step_sz, new_accept_rate)
         
         # Update current W
         x['net']['weights']['W'] = W
@@ -261,7 +261,7 @@ def glm_gibbs_step(xn, n,
     # Update step size and accept rate
     glm_gibbs_prms['step_sz'] = new_step_sz
     glm_gibbs_prms['avg_accept_rate'] = new_accept_rate
-    print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+    # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
 
 
     # Unpack the optimized parameters back into the state dict
@@ -289,22 +289,20 @@ def gibbs_sample(population,
         
         if init_from_mle:
             print "Initializing with coordinate descent"
-            from models.model_factory import make_model
+            from models.model_factory import make_model, convert_model
             from population import Population
             mle_model = make_model('standard_glm', N=N)
             mle_popn = Population(mle_model)
             mle_popn.set_data(data)
             mle_x0 = mle_popn.sample()
 
-            x0 = coord_descent(mle_popn, data, x0=mle_x0, maxiter=1)
+            # Initialize with MLE under standard GLM
+            mle_x0 = coord_descent(mle_popn, data, x0=mle_x0, maxiter=1)
 
-            import pdb; pdb.set_trace()
-            # TODO Create a population with standard GLM models 
-            # x0 = coord_descent(population, data, x0=x0, maxiter=1)
-
-            # TODO Convert between inferred parameters of the standard GLM
+            # Convert between inferred parameters of the standard GLM
             # and the parameters of this model. Eg. Convert unweighted 
             # networks to weighted networks with normalized impulse responses.
+            x0 = convert_model(mle_popn, mle_model, mle_x0, population, population.model, x0)
 
     # Compute log prob, gradient, and hessian wrt network parameters
     net_inf_prms = prep_network_inference(population)
@@ -324,13 +322,13 @@ def gibbs_sample(population,
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = population.compute_log_p(x)
-        print "Iter %d: Log prob: %.3f" % (smpl,lp)
+        print "Gibbs iter %d: Log prob: %.3f" % (smpl,lp)
 
         # Go through variables, sampling one at a time, in parallel where possible
         network_gibbs_step(x, net_inf_prms)
 
         # Sample the GLM parameters
-        print "Sampling GLMs"
+        # print "Sampling GLMs"
         for n in np.arange(N):
             # print "Gibbs step for GLM %d" % n
             nvars = population.extract_vars(x, n)

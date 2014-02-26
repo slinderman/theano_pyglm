@@ -24,7 +24,7 @@ def parse_cmd_line_args():
     parser.add_option("-x", "--x0", dest="x0_file", default=None,
                       help="Initial x to start inference algorithm.")
 
-    parser.add_option("-u", "--unique_results", dest="unique_results", default=True,
+    parser.add_option("-u", "--unique_result", dest="unique_results", default="true",
                       help="Whether or not to create a unique results directory.")
 
 
@@ -51,9 +51,8 @@ def parse_cmd_line_args():
     if not options.x0_file is None and not os.path.exists(options.x0_file):
         raise Exception("Invalid initial starting state: %s" % options.x0_file)
 
-
-    if options.unique_results != "0" and \
-       options.unique_results.lower() != "false":
+    if not( options.unique_results == "0" or \
+            options.unique_results.lower() == "false"):
         options.resultsDir = create_unique_results_folder(options.resultsDir)
 
     return (options, args)
