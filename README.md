@@ -60,6 +60,23 @@ and other variables that may be shared among individual neurons.
 A more thorough code overview is in the works, but for now feel free
 to browse!
 
+parallel
+-
+
+Some basic instructions for running with IPython.parallel (note,
+these instructions are specifically for my cluster with SGE queueing system.
+For your own cluster, consult the IPython.parallel tutorial on starting
+the controller and engines).
+
+To start the controller (on a node visible from all engines):
+`` ipcontroller --profile=sge --ip='*'``
+
+To start the engines (on cluster worker nodes):
+``ipcluster engines --profile=sge --n=8``
+
+Then, run the parallel test script:
+``python -m test.parallel_coord_descent -m standard_glm -d data/synth.mat -p sge``
+
 contributing
 -
 

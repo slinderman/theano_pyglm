@@ -62,7 +62,9 @@ def run_parallel_map():
     model = make_model(model_type, N=data['N'])
 
     # Get parallel clients
-    dview = get_engines(n_workers=8)
+    rc = Client(profile="sge")
+    dview = rc[:]
+    # dview = get_engines(n_workers=8)
 
     # Load imports on the client
     load_imports_on_client(dview)

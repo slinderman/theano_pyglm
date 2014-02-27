@@ -66,20 +66,6 @@ def parallel_gibbs_sample(client,
 
     # Draw initial state from prior if not given
     if x0 is None:
-        # x0 = population.sample()
-        #
-        # if init_from_mle:
-        #     print "Initializing with coordinate descent"
-        #
-        #     # Also initialize with intelligent parameters from the data
-        #     initialize_with_data(population, data, x0)
-        #
-        #     # If we are using a sparse network, set it to complete
-        #     # before computing the initial state
-        #     if 'A' in x0['net']['graph']:
-        #         x0['net']['graph']['A'] = np.ones((N,N), dtype=np.bool)
-        #
-        #     x0 = coord_descent(population, data, x0=x0, maxiter=1)
         client[0].execute('x0 = popn.sample()', block=True)
         x0 = client[0]['x0']
 
@@ -104,7 +90,7 @@ def parallel_gibbs_sample(client,
     @interactive
     def _parallel_sample_glm(n, x, use_hessian=False, use_rop=False):
         nvars = popn.extract_vars(x, n)
-        glm_gibbs_step(nvars, n, glm_inf_prms)
+        single_glm_gibbs_step(nvars, n, glm_inf_prms)
         return nvars['glm']
 
     ## DEBUG Profile the Gibbs sampling loop
@@ -117,12 +103,23 @@ def parallel_gibbs_sample(client,
     x_smpls = []
     x = x0
 
+    import time
+    start_time = time.clock()
+
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = parallel_compute_log_p(dview,
                                     x,
                                     N)
-        print "Iter %d: Log prob: %.3f" % (smpl,lp)
+        # Compute iters per second
+        stop_time = time.clock()
+        if stop_time - start_time == 0:
+            print "Gibbs iteration %d. Iter/s exceeds time resolution. Log prob: %.3f" % (smpl, lp)
+        else:
+            print "Gibbs iteration %d. Iter/s = %f. Log prob: %.3f" % (smpl,
+                                                                       1.0/(stop_time-start_time),
+                                                                       lp)
+        start_time = stop_time
 
         # Go through variables, sampling one at a time, in parallel where possible
         x_net = dview.map_async(_parallel_sample_network_col,

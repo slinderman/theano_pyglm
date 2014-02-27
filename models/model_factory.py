@@ -185,4 +185,10 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             conv_vars['net']['weights']['W'] = W.flatten()
             conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
 
+            # Update simple other parameters
+            for n in np.arange(N):
+                conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
+
+            # TODO Update background params
+
     return conv_vars

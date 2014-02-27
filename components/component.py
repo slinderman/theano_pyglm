@@ -30,4 +30,4 @@ class Component:
         """
         return a sample of the variables
         """
-        return []
+        return {}

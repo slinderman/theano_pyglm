@@ -29,9 +29,11 @@ class NoStimulus(Component):
         """        
         # Log probability
         self.log_p = T.constant(0.0)
-        
+
+        # Due a theano quirk, I_stim cannot directly be a constant
+        self.stim = T.constant(0.0)
         # Expose outputs to the Glm class
-        self.I_stim = T.constant(0.0)
+        self.I_stim = T.dot(T.constant(1.0), self.stim)
     
 class BasisStimulus(Component):
     """ Filter the stimulus and expose the filtered stimulus
