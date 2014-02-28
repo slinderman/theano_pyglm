@@ -56,8 +56,6 @@ def parallel_gibbs_sample(client,
     """
     Sample the posterior distribution over parameters using MCMC.
     """
-    import pdb
-    pdb.set_trace()
     dview = client[:]
     N = data['N']
 
@@ -100,7 +98,7 @@ def parallel_gibbs_sample(client,
     ## END DEBUG
 
     # Alternate fitting the network and fitting the GLMs
-    x_smpls = []
+    x_smpls = [x0]
     x = x0
 
     import time

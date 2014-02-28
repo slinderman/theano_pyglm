@@ -30,7 +30,7 @@ def run_synth_test():
             x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
     # Perform inference
-    N_samples = 500
+    N_samples = 0
     x_smpls = gibbs_sample(popn, data, x0=x0, N_samples=N_samples)
 
     # Save results

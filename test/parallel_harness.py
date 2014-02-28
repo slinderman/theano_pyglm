@@ -1,5 +1,8 @@
 from IPython.parallel import Client
 
+import os
+import cPickle
+
 from utils.io import parse_cmd_line_args, load_data
 from population import Population
 from models.model_factory import *
@@ -34,19 +37,35 @@ def create_population_on_engines(dview,
     dview['data'] = data
     dview.execute("popn.set_data(data)", block=True)
 
-def initialize_parallel_test_harness(model_type):
+def initialize_parallel_test_harness():
     # Parse command line args
     (options, args) = parse_cmd_line_args()
     
     # Load data from file or create synthetic test dataset
     data = load_data(options)
     
-    # TODO Use the model specified on the command line
-
     print "Creating master population object"
-    model = make_model(model_type, N=data['N'])
+    model = make_model(options.model, N=data['N'])
     popn = Population(model)
-    popn.set_data(data)
+    popn.set_data(data) 
+    
+    # Initialize the GLM with the data
+    popn_true = None
+    x_true = None
+    if 'vars' in data:
+        x_true = data['vars']
+        
+        # Load the true model 
+        model_true = None
+        data_dir = os.path.dirname(options.dataFile)
+        model_file = os.path.join(data_dir, 'model.pkl')
+        print "Loading true model from %s" % model_file
+        with open(model_file) as f:
+            model_true = cPickle.load(f) 
+            popn_true = Population(model_true)
+            popn_true.set_data(data)
+            ll_true = popn_true.compute_log_p(x_true)
+            print "true LL: %f" % ll_true
 
     # Create a client with direct view to all engines
     if options.json is not None:
@@ -60,6 +79,6 @@ def initialize_parallel_test_harness(model_type):
     initialize_imports(dview)
 
     print "Creating population objects on each engine"
-    create_population_on_engines(dview, data, model_type)
+    create_population_on_engines(dview, data, options.model)
 
-    return popn, data, client, options
+    return options, popn, data, client, popn_true, x_true
