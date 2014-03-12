@@ -67,6 +67,11 @@ class LinearBasisImpulses(Component):
         """
         return {str(self.w_ir): self.w_ir}
 
+    def set_hyperparameters(self, model):
+        """ Set the hyperparameters of the model
+        """
+        self.prior.set_hyperparameters(model['prior'])
+
     def sample(self):
         """
         return a sample of the variables

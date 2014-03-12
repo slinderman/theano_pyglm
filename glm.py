@@ -95,11 +95,13 @@ class Glm:
 
         self.bkgd_model.set_data(data)
         self.imp_model.set_data(data)
+
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
         """
-        self.bkgd_model.set_hyperparameters(model)
-        self.imp_model.set_hyperparameters(model)
+        self.bkgd_model.set_hyperparameters(model['bkgd'])
+        self.imp_model.set_hyperparameters(model['impulse'])
+        self.bias_model.set_hyperparameters(model['bias'])
 
     def sample(self):
         """ Sample a random set of parameters

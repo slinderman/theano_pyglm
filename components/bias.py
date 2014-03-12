@@ -44,6 +44,13 @@ class ConstantBias(Component):
         """
         pass
 
+
+    def set_hyperparameters(self, model):
+        """ Set the hyperparameters of the model
+        """
+        self.mu_bias = model['mu']
+        self.sig_bias = model['sigma']
+
     def get_state(self):
         return {'bias': self.bias}
     

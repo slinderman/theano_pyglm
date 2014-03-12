@@ -38,12 +38,13 @@ class Gaussian(Component):
 #                str(self.sigma) : self.sigma}
         return {}
 
+
     def set_hyperparameters(self, model):
-        """ Set the hyperparameters of the model 
-        """ 
-        self.mu.set_value(self.prms['mu'])
-        self.sigma.set_value(self.prms['sigma'])
-        
+        """ Set the hyperparameters of the model
+        """
+        self.mu.set_value(model['mu'])
+        self.sigma.set_value(model['sigma'])
+
     def sample(self, size=(1,)):
         """ Sample from the prior
         """
@@ -65,14 +66,16 @@ class SphericalGaussian(Component):
         return {str(self.value): self.value}
 
     def set_hyperparameters(self, model):
-        """ Set the hyperparameters of the model 
-        """ 
-        self.mu.set_value(self.prms['mu'])
-        self.sigma.set_value(self.prms['sigma'])
-    
-    def sample(self):
+        """ Set the hyperparameters of the model
+        """
+        # TODO Fix me
+        self.mu.set_value(model['mu'])
+        self.sigma.set_value(model['sigma'])
+
+    def sample(self, size=(1,)):
         """ Sample from the prior
         """
+        # TODO Use size
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn(self.D)
         return {str(self.value): v}
 
@@ -90,9 +93,7 @@ class GroupLasso(Component):
             Value should be NxB where N is the number of groups and
             B is the number of parameters per group.
         """
-        mu = self.mu.get_value()
-        sigma = self.sigma.get_value()
-        return -1.0*self.lam * T.sum(T.sqrt(T.sum(((value-mu)/sigma)**2, axis=1)))
+        return -1.0*self.lam * T.sum(T.sqrt(T.sum(((value-self.mu)/self.sigma)**2, axis=1)))
 
 
     def get_variables(self):
@@ -101,8 +102,9 @@ class GroupLasso(Component):
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model 
         """
-        self.mu.set_value(self.prms['mu'])
-        self.sigma.set_value(self.prms['sigma'])
+        self.mu.set_value(model['mu'])
+        self.sigma.set_value(model['sigma'])
+        self.lam.set_value(model['lam'])
         
     def sample(self, size=(1,)):
         """ Sample from the prior

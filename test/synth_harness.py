@@ -53,14 +53,16 @@ def get_xv_models(model):
         for priors)
     """
     # Create a set of parameters and values
-    prms = {('bias','sigma') : (0.05, 0.5, 1.0, 2.0),
-            ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
-            ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
-            ('bkgd','sigma_x') : (0.05, 0.5, 1.0, 2.0),
-            ('bkgd','sigma_t') : (0.05, 0.5, 1.0, 2.0),
-            ('impulse', 'sigma') : (0.05, 0.5, 1.0, 2.0),
-            ('network', 'weight', 'sigma') : (0.05, 0.5, 1.0, 2.0),
-            ('network', 'weight', 'sigma_refractory') : (0.05, 0.5, 1.0, 2.0)}
+    # prms = {('bias','sigma') : (0.05, 0.5, 1.0, 2.0),
+    #         ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
+    #         ('bkgd','sigma') : (0.05, 0.5, 1.0, 2.0),
+    #         ('bkgd','sigma_x') : (0.05, 0.5, 1.0, 2.0),
+    #         ('bkgd','sigma_t') : (0.05, 0.5, 1.0, 2.0),
+    #         ('impulse', 'sigma') : (0.05, 0.5, 1.0, 2.0),
+    #         ('network', 'weight', 'sigma') : (0.05, 0.5, 1.0, 2.0),
+    #         ('network', 'weight', 'sigma_refractory') : (0.05, 0.5, 1.0, 2.0)}
+
+    prms = {('impulse', 'prior', 'lam') : (0.05, 0.5, 1.0, 2.0)}
 
     # Only keep those settings which exist in the model
     def check_key(d,tk):
