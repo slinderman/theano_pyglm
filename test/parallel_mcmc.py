@@ -27,23 +27,24 @@ def run_synth_test():
             x0 = popn.sample()
             x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
-
-    import pdb; pdb.set_trace()
     # Perform inference
     print "Performing parallel inference"
-    N_samples = 0
+    N_samples = 250
     x_smpls = parallel_gibbs_sample(client, data, x0=x0, N_samples=N_samples)
 
     # Save results
+    print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
     with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
-        cPickle.dump(x_smpls,f)
+        cPickle.dump(x_smpls, f, protocol=-1)
 
     # Plot average of last 20% of samples
+    print "Plotting results"
     smpl_frac = 0.2
     plot_results(popn,
                  x_smpls[-1*int(smpl_frac*N_samples):],
                  popn_true,
                  x_true,
+                 do_plot_imp_responses=False,
                  resdir=options.resultsDir)
 
 if __name__ == "__main__":

@@ -28,7 +28,7 @@ def run_synth_test():
     results_file = os.path.join(options.resultsDir, 'results.pkl')
     print "Saving results to %s" % results_file
     with open(results_file, 'w') as f:
-        cPickle.dump(x_inf, f)
+        cPickle.dump(x_inf, f, protocol=-1)
 
     # Plot results
     plot_results(popn, x_inf, popn_true, x_true, resdir=options.resultsDir)

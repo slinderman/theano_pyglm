@@ -4,7 +4,7 @@ Plotting for ROC curves and link prediction tests
 import numpy as np
 import matplotlib.pyplot as plt
 
-def plot_roc_curve(tprs, fprs, color='k', ax=None):
+def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1):
     """ Plot an ROC curve for the given true and false positive rates.
         If multiple rates are given, e.g. corresponding to multiple
         networks inferred using the same procedure, compute error bars
@@ -13,6 +13,8 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None):
         Plot in specified color, default black.
 
         Plot on the specified axes, or create a new axis necessary.
+        
+        Subsample allows you to subsample the errorbar
     """
     if ax is None:
         plt.figure()
@@ -25,12 +27,14 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None):
 
     # Make sure all tprs and fprs are the same length
     N = tprs[0].size
-    for tpr in tprs:
-        if not tpr.shape == (N,):
+    for (i,tpr) in enumerate(tprs):
+        if not tpr.size == N:
             raise Exception("All TPRs must be vectors of length %d." % N)
-    for fpr in fprs:
-        if not fpr.shape == (N,):
+        tprs[i] = tpr.reshape((N,1))
+    for (i,fpr) in enumerate(fprs):
+        if not fpr.size == N:
             raise Exception("All FPRs must be vectors of length %d." % N)
+        fprs[i] = fpr.reshape((N,1))
 
     # Stack tprs and fprs to make matrices
     tprs = np.concatenate(tprs, axis=1)
@@ -46,7 +50,8 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None):
     # Plot the error bars
     plt.errorbar(mean_fprs, mean_tprs,
                  xerr=std_fprs, yerr=std_tprs,
-                 ecolor=color, axes=ax)
+                 ecolor=color, color=color,
+                 axes=ax)
 
     plt.xlabel('FPR')
     plt.ylabel('TPR')

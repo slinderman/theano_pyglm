@@ -15,8 +15,13 @@ from utils.avg_dicts import average_list_of_dicts, std_list_of_dicts
 
 import cPickle
 
-def plot_connectivity_matrix(s_inf, s_true=None):
-    W_inf = s_inf['net']['weights']['W'] * s_inf['net']['graph']['A']
+def plot_connectivity_matrix(s_smpls, s_true=None):
+    
+    # Compute the inferred connectivity matrix
+    W_inf = np.zeros_like(s_smpls[0]['net']['weights']['W'])
+    for smpl in s_smpls:
+        W_inf += smpl['net']['weights']['W'] * smpl['net']['graph']['A']
+    W_inf /= len(s_smpls)
 
     true_given = s_true is not None
     if true_given:
@@ -179,6 +184,118 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
 
     return fig
 
+def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-'):
+    """ Plot the impulse responses plus or minus two standard devs
+        In this case we use a single axes rather than multiple subplots since
+        matplotlib is, unfortunately, ridiculously slow when it comes to large
+        numbers of subplots
+    """ 
+    # Get a red-gray cmap
+    cmap = cm.get_cmap('RdGy')
+
+    # Get the weights of the impulse responses
+    W_inf = s_inf['net']['weights']['W'] * s_inf['net']['graph']['A']
+    N = W_inf.shape[0]
+    
+    s_imps = []
+    s_imps_std = []
+    for n_post in np.arange(N):
+        s_imp_row = []
+        s_imp_std_row = []
+        
+        s_imp_n = s_inf['glms'][n_post]['imp']['impulse']
+        if s_std is not None:
+            s_imp_std_n = s_std['glms'][n_post]['imp']['impulse']
+
+        for n_pre in np.arange(N):
+            w = W_inf[n_pre,n_post]
+            s_imp_row.append(w*s_imp_n[n_pre,:])
+            if s_std is not None:
+                s_imp_std_row.append(w*s_imp_std_n[n_pre,:])
+
+        s_imps.append(s_imp_row)
+        s_imps_std.append(s_imp_std_row)
+        
+    s_imps = np.array(s_imps)    
+    s_imps_std = np.array(s_imps_std)
+    
+    # Transpose so that pre is row index 
+    s_imps = np.transpose(s_imps, [1,0,2])
+    if s_std is not None:
+        s_imps_std = np.transpose(s_imps_std, [1,0,2])
+    else:
+        s_imps_std = np.zeros_like(s_imps)
+    imp_max = np.amax(np.abs(s_imps+2*s_imps_std))
+        
+    W_imp = np.sum(s_imps,2)
+    W_imp_max = np.amax(W_imp)
+
+    # Create a figure if necessary
+    if fig is None:
+        fig = plt.figure()
+
+    # Get subplot sizes
+    x_sz = s_imps.shape[2]     # Number of time bins per impulse response
+    y_sz = 2*W_imp_max         # Amplitude of impulse responses
+    x_buf = .05*x_sz            # x buffer on either side of figure 
+    y_buf = .05*y_sz            # y buffer on top and bottom of figure
+    
+    ax = plt.subplot(111)
+    plt.setp(ax, 'frame_on', False)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.hold(True)
+
+    from matplotlib.patches import Rectangle
+
+    for n_pre in np.arange(N):
+        for n_post in np.arange(N):
+            x_foff = (x_sz + 2*x_buf) * n_post   # Offset of this subfigure
+            y_foff = (y_sz + 2*y_buf) * n_pre 
+            x_aoff = x_foff + x_buf              # Offset of this axis
+            y_aoff = y_foff + y_buf
+            if use_bgcolor:
+                # Add a semitransparent patch for the background
+                # Set background color based on weight of impulse
+                bkgd_color = cmap((W_imp[n_pre,n_post] -(-W_imp_max))/(2*W_imp_max))
+                # Set it slightly transparent
+                tcolor = list(bkgd_color)
+                tcolor[3] = 0.75
+                tcolor = tuple(tcolor)
+                #ax.set_axis_bgcolor(tcolor)
+                ax.add_patch(Rectangle((x_foff,y_foff+y_sz+2*y_buf),  # Lower left coordinate
+                                       x_sz+2*x_buf,                  # width
+                                       y_sz+2*y_buf,                  # height
+                                       alpha=0.75,
+                                       color=tcolor,
+                                       fill=True))
+
+
+            # Plot the inferred impulse response
+            ax.plot(x_aoff + np.arange(x_sz),
+                    y_aoff + np.squeeze(s_imps[n_pre,n_post,:]),
+                    color=color, linestyle=linestyle)
+
+            # Plot plus or minus 2 stds
+            if s_std is not None:
+                ax.plot(x_aoff + np.arange(x_sz),
+                        y_aoff + np.squeeze(s_imps[n_pre,n_post,:] +
+                                            2*s_imps_std[n_pre,n_post,:]),
+                        color=color, 
+                        linestyle='--')
+                ax.plot(x_aoff + np.arange(x_sz),
+                        y_aoff + np.squeeze(s_imps[n_pre,n_post,:] -
+                                            2*s_imps_std[n_pre,n_post,:]),
+                        color=color, 
+                        linestyle='--')
+
+            ax.plot(x_aoff + np.arange(x_sz),
+                    y_aoff + np.zeros_like(np.squeeze(s_imps[n_pre,n_post,:])),
+                    color='k', linestyle=':')
+
+    return fig
+
+
 def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
     if tt is None:
         tt = np.arange(np.size(s_glm['lam']))
@@ -307,7 +424,7 @@ def plot_results(population,
     if do_plot_connectivity:
         print "Plotting connectivity matrix"
         f = plt.figure()
-        plot_connectivity_matrix(s_avg, s_true)
+        plot_connectivity_matrix(s_inf, s_true)
         f.savefig(os.path.join(resdir,'conn.pdf'))
         plt.close(f)
 
@@ -422,38 +539,21 @@ def parse_cmd_line_args():
 
 
 if __name__ == "__main__":
-    # Parse command line args
-    (options, args) = parse_cmd_line_args()
-
-    # Load data                                                              
-    if options.dataFile.endswith('.mat'):
-        print "Loading data from %s" % options.dataFile
-        import scipy.io
-        data = scipy.io.loadmat(options.dataFile, squeeze_me=True, mat_dtype=True)
-        data['N'] = np.int(data['N'])
-    elif options.dataFile.endswith('.pkl'):
-        print "Loading data from %s" % options.dataFile
-        import cPickle
-        with open(options.dataFile,'r') as f:
-            data = cPickle.load(f)
-    else:
-        raise Exception("Unrecognized file type: %s" % options.dataFile)
-
-    # Load results
-    if options.resultsFile.endswith('.pkl'):
-        print "Loading results from %s" % options.resultsFile
-        with open(options.resultsFile,'r') as f:
-            x_inf = cPickle.load(f)
-    else:
-        raise Exception("Unrecognized file type: %s" % options.resultsFile)
-
-    print "Initializing GLM"
-    from population import Population
-    from models.rgc import Rgc
-    model = Rgc
-    population = Population(model)
-    print "Conditioning on the data"
-    population.set_data(data)
+    from test.synth_harness import initialize_test_harness
+    options, popn, data, popn_true, x_true = initialize_test_harness()
+    
+    # Load the results
+    with open(options.x0_file, 'r') as f:
+        print "Loading results from: %s" % options.x0_file
+        x = cPickle.load(f)
+        # If x is a list of samples, only keep the last (burned-in) fraction
+        if isinstance(x, list):
+            smpl_frac = 0.2
+            x = x[-1*int(smpl_frac*len(x)):]
 
     print "Plotting results"
-    plot_results(population, x_inf)
+    plot_results(popn, 
+                 x,
+                 popn_true=popn_true,
+                 x_true=x_true,
+                 resdir=options.resultsDir)

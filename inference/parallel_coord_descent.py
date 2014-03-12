@@ -18,14 +18,26 @@ def initialize_imports(dview):
     dview.execute('from inference.smart_init import initialize_with_data')
 
 def parallel_compute_log_p(dview,
+                           master,
                            v,
                            N):
     """ Compute the log prob in parallel
     """
-
-    # TODO Compute the log probabaility of global variables
-    # (e.g. the network) on the first node
     lp_tot = 0
+
+    # Compute the log probabaility of global variables
+    # (e.g. the network) on the first node
+    @interactive
+    def _compute_network_lp(vs):
+        print "Computing log prob for network"
+        syms = popn.get_variables()
+        nvars = popn.extract_vars(vs,0)
+        lp = seval(popn.network.log_p,
+                   syms,
+                   nvars)
+        return lp
+    
+    lp_tot += master.apply_sync(_compute_network_lp, v)
 
     # Decorate with @interactive to ensure that the function runs
     # in the __main__ namespace that contains 'popn'
@@ -34,7 +46,7 @@ def parallel_compute_log_p(dview,
         print "Computing log lkhd for GLM %d" % n
         syms = popn.get_variables()
         nvars = popn.extract_vars(vs, n)
-        lp = seval(popn.glm.ll,
+        lp = seval(popn.glm.log_p,
                    syms,
                    nvars)
         return lp
@@ -42,8 +54,6 @@ def parallel_compute_log_p(dview,
     lp_glms = dview.map_async(_compute_glm_lp,
                               range(N),
                               [v]*N)
-    # print lp_glms.get()
-    # lp_glms.display_outputs()
 
     lp_tot += sum(lp_glms.get())
     return lp_tot
@@ -117,7 +127,7 @@ def parallel_coord_descent(client,
 
     # Alternate fitting the network and fitting the GLMs
     x = x0
-    lp_prev = parallel_compute_log_p(dview, x, N)
+    lp_prev = parallel_compute_log_p(dview, master, x, N)
     converged = False
     iter = 0
     while not converged and iter < maxiter:
@@ -133,7 +143,7 @@ def parallel_coord_descent(client,
                                  [x]*N)
 
         # Print progress report ever interval seconds
-        interval = 30.0
+        interval = 15.0
         # Timeout after specified number of seconds (-1 = Inf?)
         #timeout = -1
         wait_watching_stdout(x_glms, interval=interval)
@@ -142,7 +152,7 @@ def parallel_coord_descent(client,
         x_glms.display_outputs()
 
         # Check for convergence
-        lp = parallel_compute_log_p(dview, x, N)
+        lp = parallel_compute_log_p(dview, master, x, N)
         print "Iteration %d: LP=%.2f. Change in LP: %.2f" % (iter, lp, lp-lp_prev)
 
         converged = np.abs(lp-lp_prev) < atol

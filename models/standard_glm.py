@@ -45,24 +45,30 @@ StandardGlm = \
                 }
         },
 
-     # Parameters of the impulse responses
-     'impulse' :
-         {
-             'type' : 'basis',
-             'dt_max' : 0.2,
-             'mu' : 0.0,
-             'sigma' : 5.0,
-             'basis' :
-                 {
-                     'type' : 'cosine',
-                     'n_eye' : 0,
-                     'n_cos' : 5,
-                     'a': 1.0/120,
-                     'b': 0.5,
-                     'orth' : True,
-                     'norm' : False
-                 }
-         },
+    # Parameters of the impulse responses
+    'impulse' :
+        {
+            'type' : 'basis',
+            'dt_max' : 0.2,
+            'prior' :
+                {
+                    'type' : 'group_lasso',
+                    # 'type' : 'gaussian',
+                    'mu' : 0.0,
+                    'sigma' : 5.0,
+                    'lam' : 1
+                },
+            'basis' :
+                {
+                    'type' : 'cosine',
+                    'n_eye' : 0,
+                    'n_cos' : 5,
+                    'a': 1.0/120,
+                    'b': 0.5,
+                    'orth' : True,
+                    'norm' : False
+                }
+        },
 
     # Parameters of the network
     'network' :

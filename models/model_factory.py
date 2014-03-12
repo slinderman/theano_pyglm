@@ -2,6 +2,7 @@
 Make models from a template
 """
 import numpy as np
+from scipy.optimize import nnls
 
 from standard_glm import StandardGlm
 from spatiotemporal_glm import SpatiotemporalGlm
@@ -165,16 +166,32 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
                 B = to_state['glms'][n2]['imp']['basis'].shape[1]
                 w_ir_n2 = np.zeros((N,B))
                 for n1 in np.arange(N):
-                    w_ir_n1n2 = project_onto_basis(from_state['glms'][n2]['imp']['impulse'][n1,:],
-                                                   to_state['glms'][n2]['imp']['basis'])
-                    w_ir_n1n2 = w_ir_n1n2.flatten()
+                    # HACKY SOLN: Project onto the basis and the round to get the nearest solution
+                    #w_ir_n1n2 = project_onto_basis(from_state['glms'][n2]['imp']['impulse'][n1,:],
+                    #                               to_state['glms'][n2]['imp']['basis'])
+                    #w_ir_n1n2 = w_ir_n1n2.flatten()
+                    #Wsgn = np.sign(np.sum(w_ir_n1n2))
 
+                    # HOPEFULLY A BETTER SOLN:
+                    # Solve a nonnegative least squares problem
+                    (w_ir_n1n2p, residp) = nnls(to_state['glms'][n2]['imp']['basis'], 
+                                                from_state['glms'][n2]['imp']['impulse'][n1,:])
+                    (w_ir_n1n2n, residn) = nnls(to_state['glms'][n2]['imp']['basis'], 
+                                                -1.0*from_state['glms'][n2]['imp']['impulse'][n1,:])
+                    
+                    # Take the better of the two solutions
+                    if residp < residn:
+                        Wsgn = 1.0
+                        w_ir_n1n2 = w_ir_n1n2p
+                    else:
+                        Wsgn = -1.0
+                        w_ir_n1n2 = w_ir_n1n2n
+                    
                     # Normalized weights must be > 0, sum to 1
-                    sgn = np.sign(np.sum(w_ir_n1n2))
-                    w_ir_n1n2 = sgn*w_ir_n1n2
+                    w_ir_n1n2 = w_ir_n1n2
                     w_ir_n1n2 = np.clip(w_ir_n1n2,0.001,np.Inf)
                     # Normalize the impulse response to get a weight
-                    W[n1,n2] = sgn*np.sum(w_ir_n1n2)
+                    W[n1,n2] = Wsgn*np.sum(w_ir_n1n2)
                     # Set impulse response to normalized impulse response
                     w_ir_n2[n1,:] = w_ir_n1n2 / np.sum(w_ir_n1n2)
 

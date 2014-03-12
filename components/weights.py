@@ -80,13 +80,16 @@ class GaussianWeightModel(Component):
 
         if hasattr(self, 'refractory_prior'):
             W = np.zeros((N,N))
-            W_diags = np.array([self.refractory_prior.sample() for n in np.arange(N)])
-            W_nondiags = np.array([self.prior.sample() for n in np.arange(N**2-N)])
+            # W_diags = np.array([self.refractory_prior.sample() for n in np.arange(N)])
+            W_diags = self.refractory_prior.sample(size=(N,))
+            # W_nondiags = np.array([self.prior.sample() for n in np.arange(N**2-N)])
+            W_nondiags = self.prior.sample(size=(N**2-N,))
             np.put(W, self.diags,  W_diags)
             np.put(W, self.nondiags, W_nondiags)
             W_flat = np.reshape(W,(N**2,))
         else:
-            W_flat = np.array([self.prior.sample() for n in np.arange(N**2)])
+            W_flat = self.prior.sample(size=(N**2,))
+            # W_flat = np.array([self.prior.sample() for n in np.arange(N**2)])
 
         return {str(self.W_flat): W_flat}
 

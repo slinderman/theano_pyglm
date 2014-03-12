@@ -30,6 +30,9 @@ def parse_cmd_line_args():
     parser.add_option("-T", "--T_stop", dest="T_stop", default=60.0,
                       help="Length of simulation (sec).")
 
+    parser.add_option("-u", "--unique_result", dest="unique_results", default="true",
+                      help="Whether or not to create a unique results directory.")
+
     (options, args) = parser.parse_args()
     
     # Make sure parameters are of the correct type
@@ -42,8 +45,10 @@ def parse_cmd_line_args():
     # Check if specified files exist
     if not options.resultsDir is None and not os.path.exists(options.resultsDir):
         raise Exception("Invalid results folder specified: %s" % options.resultsDir)
-    
-    options.resultsDir = create_unique_results_folder(options.resultsDir)
+
+    if not( options.unique_results == "0" or \
+            options.unique_results.lower() == "false"):
+        options.resultsDir = create_unique_results_folder(options.resultsDir)
     return (options, args)
 
 def gen_synth_data():
@@ -93,7 +98,7 @@ def gen_synth_data():
     fname_model = os.path.join(options.resultsDir, 'model.pkl')
     print "Saving data to %s" % fname_model
     with open(fname_model,'w') as f:
-        cPickle.dump(model,f)
+        cPickle.dump(model, f, protocol=-1)
 
     # Package data into dict
     data = {"S": S,
@@ -117,15 +122,15 @@ def gen_synth_data():
         assert np.allclose(lam_true, lam_sim)
 
     # Save the data for reuse
-    fname_mat = os.path.join(options.resultsDir, 'data.mat')
-    print "Saving data to %s" % fname_mat
-    scipy.io.savemat(fname_mat, data, oned_as='row')
+    #fname_mat = os.path.join(options.resultsDir, 'data.mat')
+    #print "Saving data to %s" % fname_mat
+    #scipy.io.savemat(fname_mat, data, oned_as='row')
         
     # Pickle the data so we can open it more easily
     fname_pkl = os.path.join(options.resultsDir, 'data.pkl')
     print "Saving data to %s" % fname_pkl
     with open(fname_pkl,'w') as f:
-        cPickle.dump(data,f)
+        cPickle.dump(data, f, protocol=-1)
 
     # Plot firing rates, stimulus responses, etc
     plot_results(popn, data['vars'],

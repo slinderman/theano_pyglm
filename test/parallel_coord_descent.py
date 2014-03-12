@@ -19,10 +19,13 @@ def run_synth_test():
 
     # Save results
     with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
-        cPickle.dump(x_inf,f)
+        cPickle.dump(x_inf,f, protocol=-1)
     
     # Plot results
-    plot_results(popn, x_inf, popn_true, x_true, resdir=options.resultsDir)
+    plot_results(popn, x_inf, 
+                 popn_true, x_true, 
+                 do_plot_imp_responses=False,
+                 resdir=options.resultsDir)
 
 if __name__ == "__main__":
     run_synth_test()

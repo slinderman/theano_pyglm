@@ -2,6 +2,7 @@ import theano
 import theano.tensor as T
 from utils.basis import *
 from component import Component
+from priors import create_prior
 
 def create_impulse_component(model):
     typ = model['impulse']['type'].lower()
@@ -19,13 +20,14 @@ class LinearBasisImpulses(Component):
     """
     def __init__(self, model):
         self.prms = model['impulse']
+        self.prior = create_prior(self.prms['prior'])
 
         # Number of presynaptic neurons
         self.N = model['N']
 
         # Get parameters of the prior
-        self.mu = self.prms['mu']
-        self.sigma = self.prms['sigma']
+        # self.mu = self.prms['mu']
+        # self.sigma = self.prms['sigma']
 
         # Create a basis for the impulse responses response
         self.basis = create_basis(self.prms['basis'])
@@ -52,7 +54,9 @@ class LinearBasisImpulses(Component):
         # total coupling current from each presynaptic neurons at
         # all time points
         self.I_imp = T.sum(self.ir*w_ir3, axis=2)
-        self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
+        # self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
+        self.log_p = self.prior.log_p(w_ir2)
+
 
         # Define a helper variable for the impulse response
         # after projecting onto the basis
@@ -67,8 +71,10 @@ class LinearBasisImpulses(Component):
         """
         return a sample of the variables
         """
-        w = self.mu + self.sigma*np.random.randn(self.N*self.B)
+        # w = self.mu + self.sigma*np.random.randn(self.N*self.B)
+        w = self.prior.sample(size=(self.N, self.B)).ravel()
         return {str(self.w_ir): w}
+
 
     def get_state(self):
         """ Get the impulse responses
