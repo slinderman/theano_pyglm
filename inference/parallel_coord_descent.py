@@ -90,6 +90,8 @@ def parallel_coord_descent(client,
     if x0 is None:
         master.execute('x0 = popn.sample()', block=True)
         x0 = master['x0']
+    else:
+        master['x0'] = x0
 
     # Also initialize with intelligent parameters from the data
     # dview['x0d'] = x0      
@@ -103,7 +105,6 @@ def parallel_coord_descent(client,
     #x0['glms'] = [x0s['glms'][n] for n in np.arange(N)]
 
     master.execute('initialize_with_data(popn, data, x0)')
-    x0 = master['x0']
     
     print "Preparing Theano functions for inference"
     # Compute log prob, gradient, and hessian wrt network parameters

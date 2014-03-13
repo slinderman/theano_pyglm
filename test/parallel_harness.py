@@ -15,6 +15,19 @@ def initialize_imports(dview):
     dview.execute('from population import Population')
     dview.execute('from models.model_factory import make_model')
 
+def set_data_on_engines(dview, data):
+    """ Send the data to each engine
+    """
+    # Initialize the GLM with the data
+    dview['data'] = data
+    dview.execute("popn.set_data(data)", block=True)
+
+def set_hyperparameters_on_engines(dview, model):
+    """ Send the hyperparameters to each engine
+    """
+    dview['model'] = model
+    dview.execute("popn.set_hyperparameters(model)", block=True)
+
 def create_population_on_engines(dview,
                                  data,
                                  model_type
@@ -34,8 +47,9 @@ def create_population_on_engines(dview,
     dview.execute('popn = Population(model)', block=True)
 
     # Initialize the GLM with the data
-    dview['data'] = data
-    dview.execute("popn.set_data(data)", block=True)
+    #dview['data'] = data
+    #dview.execute("popn.set_data(data)", block=True)
+    set_data_on_engines(dview, data)
 
 def initialize_parallel_test_harness():
     # Parse command line args

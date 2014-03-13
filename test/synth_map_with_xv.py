@@ -3,7 +3,6 @@ import cPickle
 import os
 import numpy as np
 import copy
-import scipy.io
 
 from population import Population
 from inference.coord_descent import coord_descent
@@ -77,8 +76,13 @@ def run_synth_test():
             best_model = copy.deepcopy(model)
         
     # Create a population with the best model
-    popn = Population(best_model)
+    popn.set_hyperparameters(best_model)
     popn.set_data(data)
+
+    # Fit the best model on the full training data
+    best_x = coord_descent(popn, data, x0=x0, maxiter=1,
+                           use_hessian=False,
+                           use_rop=False)
 
     # Print results summary
     for i in np.arange(len(models)):
