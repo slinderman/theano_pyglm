@@ -5,6 +5,7 @@ import copy
 import numpy as np
 
 from IPython.parallel.util import interactive
+from utils.progress_report import wait_watching_stdout
 
 def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
@@ -47,6 +48,18 @@ def parallel_compute_log_p(dview,
     lp_tot += sum(lp_glms.get())
     return lp_tot
 
+def concatenate_network_results(x_net, x, N):
+    """ Concatenate the list of results from the parallel
+        sampling of network columns
+    """
+    for (n, xn) in enumerate(x_net):
+        if 'A' in xn['graph']:
+            x['net']['graph']['A'][:,n] = xn['graph']['A'][:,n]
+        if 'W' in xn['weights']:
+            W_inf = np.reshape(xn['weights']['W'], (N,N))
+            W_curr = np.reshape(x['net']['weights']['W'], (N,N))
+            W_curr[:,n] = W_inf[:,n]
+            x['net']['weights']['W'] = np.reshape(W_curr, (N**2,))
 
 def parallel_gibbs_sample(client,
                           data,
@@ -119,19 +132,29 @@ def parallel_gibbs_sample(client,
                                                                        lp)
         start_time = stop_time
 
+        # TODO Sample network hyperparameters
+
         # Go through variables, sampling one at a time, in parallel where possible
         x_net = dview.map_async(_parallel_sample_network_col,
                                 range(N),
                                 [x]*N)
 
-        # TODO Incorporate the results back into a single network
+        interval = 1.0
+        # Timeout after specified number of seconds (-1 = Inf?)
+        #timeout = -1
+        wait_watching_stdout(x_net, interval=interval)
+
+        # Incorporate the results back into a single network
+        x_net_res = x_net.get()
+        concatenate_network_results(x_net_res, x, N)
 
         # Sample the GLM parameters
         x_glms = dview.map_async(_parallel_sample_glm,
                                  range(N),
                                  [x]*N)
+        wait_watching_stdout(x_glms, interval=interval)
+
         x['glms'] = x_glms.get()
-        x_glms.display_outputs()
 
         x_smpls.append(copy.deepcopy(x))
 

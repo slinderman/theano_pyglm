@@ -3,6 +3,7 @@ Plotting for ROC curves and link prediction tests
 """
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy.spatial
 
 def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1):
     """ Plot an ROC curve for the given true and false positive rates.
@@ -48,14 +49,38 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1):
     std_fprs = np.std(fprs, axis=1)
 
     # Plot the error bars
-    plt.errorbar(mean_fprs, mean_tprs,
-                 xerr=std_fprs, yerr=std_tprs,
-                 ecolor=color, color=color,
-                 axes=ax)
+    # plt.errorbar(mean_fprs, mean_tprs,
+    #              xerr=std_fprs, yerr=std_tprs,
+    #              ecolor=color, color=color,
+    #              axes=ax)
+    err = np.concatenate([np.array([mean_fprs-std_fprs, mean_tprs+std_tprs]).T,
+                          np.flipud(np.array([mean_fprs+std_fprs, mean_tprs-std_tprs]).T)])
+    from matplotlib.patches import PathPatch
+    from matplotlib.path import Path
+
+    plt.gca().add_patch(PathPatch(Path(err),
+                                  facecolor=color,
+                                  alpha=0.5,
+                                  edgecolor='none',
+                                  linewidth=0))
+    # plt.plot(err[:,0], err[:, 1],
+    #          linestyle='--',
+    #          color=color)
+
+    plt.plot(mean_fprs, mean_tprs,
+             linestyle='-',
+             color=color,
+             linewidth=2,
+             label='MAP')
+
+    # Plot the random guessing line
+    plt.plot([0,1],[0,1], '--k')
+
+    plt.legend(loc='lower right')
 
     plt.xlabel('FPR')
     plt.ylabel('TPR')
-    plt.xlim((-0.05,1))
-    plt.ylim((-0.05,1))
+    plt.xlim((-0.01,1))
+    plt.ylim((0.0,1))
 
     return ax

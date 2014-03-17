@@ -315,10 +315,9 @@ def sample_network_column(n_post,
 
     # Precompute the filtered currents from other GLMs
     I_bias, I_stim, I_imp = precompute_currents(x, n_post)
-
     sample_column_of_A(n_post, x, lp_A, I_bias, I_stim, I_imp)
-
     sample_column_of_W(n_post, x, W_gibbs_prms, I_bias, I_stim, I_imp)
+    return x['net']
 
 def network_gibbs_step(x, 
                        net_inf_prms):
