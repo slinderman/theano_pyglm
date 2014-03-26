@@ -77,11 +77,28 @@ def concatenate_network_results(x_net, x, N):
             W_curr[:,n] = W_inf[:,n]
             x['net']['weights']['W'] = np.reshape(W_curr, (N**2,))
 
+def periodically_save_results(x, start, stop, results_dir):
+    """ Periodically save the MCMC samples
+    """
+    fname = "results.partial.%d-%d.pkl" % (start,stop)
+    import os
+    import cPickle
+    print "Saving partial results to %s" % os.path.join(results_dir, fname)
+    with open(os.path.join(results_dir, fname),'w') as f:
+        cPickle.dump(x[start:stop], f, protocol=-1)
+
+def check_convergence(x):
+    """ Check for convergence of the sampler
+    """
+    return False
+
 def parallel_gibbs_sample(client,
                           data,
                           N_samples=1000,
                           x0=None,
-                          init_from_mle=True):
+                          init_from_mle=True,
+                          save_interval=-1,
+                          results_dir='.'):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -150,6 +167,10 @@ def parallel_gibbs_sample(client,
                                                                        1.0/(stop_time-start_time),
                                                                        lp)
         start_time = stop_time
+
+        # Periodically save results
+        if save_interval > 0 and np.mod(smpl+1, save_interval)==0:
+            periodically_save_results(x_smpls, smpl+1-save_interval, smpl+1, results_dir)
 
         # TODO Sample network hyperparameters
 

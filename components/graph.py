@@ -178,6 +178,10 @@ class LatentDistanceGraphModel(Component):
         # The probability of A is exponentially decreasing in delta
         self.pA = T.exp(-1.0*self.D/self.delta)
 
+        if 'rho_refractory' in self.prms:
+            self.pA += T.eye(self.N) * (self.prms['rho_refractory']-self.pA)
+            # self.pA[np.diag_indices(self.N)] = self.prms['rho_refractory']
+
         # Define log probability
         self.log_p = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA))
 

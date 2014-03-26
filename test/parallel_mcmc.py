@@ -30,7 +30,9 @@ def run_synth_test():
     # Perform inference
     print "Performing parallel inference"
     N_samples = 1000
-    x_smpls = parallel_gibbs_sample(client, data, x0=x0, N_samples=N_samples)
+    x_smpls = parallel_gibbs_sample(client, data,
+                                    x0=x0, N_samples=N_samples,
+                                    save_interval=50, results_dir=options.resultsDir)
 
     # Save results
     print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
