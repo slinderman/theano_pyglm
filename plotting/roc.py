@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.spatial
 
-def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1):
+def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1, label=None):
     """ Plot an ROC curve for the given true and false positive rates.
         If multiple rates are given, e.g. corresponding to multiple
         networks inferred using the same procedure, compute error bars
@@ -71,7 +71,7 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1):
              linestyle='-',
              color=color,
              linewidth=2,
-             label='MAP')
+             label=label)
 
     # Plot the random guessing line
     plt.plot([0,1],[0,1], '--k')

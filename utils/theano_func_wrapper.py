@@ -25,7 +25,8 @@ def seval(expr, syms, vals, defaults=None, givens=[]):
     hash_value = lambda v: hashlib.sha1(v).hexdigest() if \
                            isinstance(v, np.ndarray) else v
     hashable_givens = tuple(map(lambda (k,v): (k, hash_value(v)), givens))
-    key = (expr, hashable_givens)
+    hashable_syms = tuple(map(lambda v: hash_value(v), _flatten(syms)))
+    key = (expr, hashable_syms, hashable_givens)
     if key in _func_cache.keys():
         #print "DBG: Found key %s in cache" % str(key)
         f = _func_cache[key]

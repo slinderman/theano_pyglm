@@ -17,6 +17,8 @@ def create_graph_component(model):
         graph = ErdosRenyiGraphModel(model)
     elif type == 'sbm':
         graph = StochasticBlockGraphModel(model)
+    elif type == 'distance':
+        graph = LatentDistanceGraphModel(model)
     else:
         raise Exception("Unrecognized graph model: %s" % type)
     return graph
@@ -55,8 +57,8 @@ class ErdosRenyiGraphModel(Component):
         self.A = T.bmatrix('A')
 
         # Define log probability
-        self.log_p = T.sum(self.A * np.log(np.minimum(0.99, self.rho)) +
-                           (1 - self.A) * np.log(np.maximum(0.01, 1.0 - self.rho)))
+        self.log_p = T.sum(self.A * np.log(np.minimum(0.999, self.rho)) +
+                           (1 - self.A) * np.log(np.maximum(0.001, 1.0 - self.rho)))
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -146,3 +148,66 @@ class StochasticBlockGraphModel(Component):
                 str(self.Y): self.Y,
                 str(self.B): self.B,
                 str(self.alpha): self.alpha}
+
+class LatentDistanceGraphModel(Component):
+    def __init__(self, model):
+        """ Initialize the stochastic block model for the adjacency matrix
+        """
+        self.model = model
+        self.prms = model['network']['graph']
+        self.N = model['N']
+
+        # Latent distance model has NxR matrix of locations L
+        self.L = T.dmatrix('L')
+
+        # Compute the distance between each pair of locations
+        # Reshape L into a Nx1xD matrix and a 1xNxD matrix, then add the requisite
+        # broadcasting in order to subtract the two matrices
+        L1 = self.L.dimshuffle(0,'x',1)     # Nx1xD
+        L2 = self.L.dimshuffle('x',0,1)     # 1xNxD
+        T.addbroadcast(L1,1)
+        T.addbroadcast(L2,0)
+        self.D = T.sum((L1-L2)**2, axis=2)
+
+        # There is a distance scale, \delta
+        self.delta = T.dscalar(name='delta')
+
+        # Define complete adjacency matrix
+        self.A = T.bmatrix('A')
+
+        # The probability of A is exponentially decreasing in delta
+        self.pA = T.exp(-1.0*self.D/self.delta)
+
+        # Define log probability
+        self.log_p = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA))
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.A): self.A,
+                str(self.L): self.L,
+                str(self.delta): self.delta}
+
+    def sample(self):
+        N = self.model['N']
+
+        # TODO: Sample locations from prior
+        L = np.arange(N).reshape((N, 1)).astype(np.float)
+
+        # TODO: Sample delta from prior
+        delta = 2.0
+
+        # Sample A from pA
+        pA = self.pA.eval({self.L: L,
+                           self.delta: delta})
+
+        A = np.random.rand(N, N) < pA
+        A = A.astype(np.int8)
+        return {str(self.A): A,
+                str(self.L): L,
+                str(self.delta): delta}
+
+    def get_state(self):
+        return {str(self.A): self.A,
+                str(self.L): self.L,
+                str(self.delta): self.delta}

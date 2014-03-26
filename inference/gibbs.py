@@ -18,6 +18,10 @@ from coord_descent import coord_descent
 from log_sum_exp import log_sum_exp_sample
 from smart_init import initialize_with_data
 
+# Define constants for Sampling
+DEG_GAUSS_HERMITE = 20
+GAUSS_HERMITE_ABSCISSAE, GAUSS_HERMITE_WEIGHTS = np.polynomial.hermite.hermgauss(DEG_GAUSS_HERMITE)
+
 def prep_network_inference(population,
                            use_hessian=False,
                            use_rop=False):
@@ -208,6 +212,120 @@ def prep_network_inference(population,
 
     return lp_A_new, W_gibbs_prms, precompute_currents
 
+def prep_collapsed_network_inference(population):
+    """ Initialize functions that compute the gradient and Hessian of
+        the log probability with respect to the differentiable network
+        parameters, e.g. the weight matrix if it exists.
+    """
+    N = population.model['N']
+    network = population.network
+    glm = population.glm
+    syms = population.get_variables()
+
+    # Helper functions to sample A and W:
+    #   precompute_currents
+    #   log_prior_A(n_pre, n_post)
+    #   log_prior_noA(n_pre, n_post)
+    #   glm_ll_A(n_pre, n_post, W, x, Is)
+    #   glm_ll_noA(n_pre, n_post, x, Is)
+
+    def precompute_currents(x, n_post):
+        """ Precompute currents for sampling A and W
+        """
+        nvars = population.extract_vars(x, n_post)
+
+        I_bias = seval(glm.bias_model.I_bias,
+                       syms,
+                       nvars)
+
+        I_stim = seval(glm.bkgd_model.I_stim,
+                       syms,
+                       nvars)
+
+        I_imp = seval(glm.imp_model.I_imp,
+                      syms,
+                      nvars)
+
+        return I_bias, I_stim, I_imp
+
+    def lp_A(n_pre, n_post, v, x):
+        """ Compute the log probability for a given column A[:,n_post]
+        """
+
+        # Update A[n_pre, n_post]
+        A = x['net']['graph']['A']
+        A[n_pre, n_post] = v
+
+        # Get the prior probability of A
+        lp = seval(network.log_p,
+                   syms['net'],
+                   x['net'])
+        return lp
+
+    def glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp):
+        """ Compute the log likelihood of the GLM with A=True and given W
+        """
+        # Set A in state dict x
+        A = x['net']['graph']['A']
+        A[n_pre, n_post] = 1
+
+        # Set W in state dict x
+        W = x['net']['weights']['W'].reshape(A.shape)
+        W[n_pre, n_post] = w
+
+
+        # Get the likelihood of the GLM under A and W
+        s = [network.graph.A] + \
+             _flatten(syms['net']['weights']) + \
+            [glm.n,
+             glm.bias_model.I_bias,
+             glm.bkgd_model.I_stim,
+             glm.imp_model.I_imp] + \
+            _flatten(syms['glm']['nlin'])
+
+        xv = [A] + \
+             [W.ravel()] + \
+             [n_post,
+              I_bias,
+              I_stim,
+              I_imp] + \
+            _flatten(x['glms'][n_post]['nlin'])
+
+        ll = glm.ll.eval(dict(zip(s, xv)))
+
+        return ll
+
+    def glm_ll_noA(n_pre, n_post, x, I_bias, I_stim, I_imp):
+        """ Compute the log likelihood of the GLM with A=True and given W
+        """
+        # Set A in state dict x
+        A = x['net']['graph']['A']
+        A[n_pre, n_post] = 0
+
+        # Get the likelihood of the GLM under A and W
+        s = [network.graph.A] + \
+             _flatten(syms['net']['weights']) + \
+            [glm.n,
+             glm.bias_model.I_bias,
+             glm.bkgd_model.I_stim,
+             glm.imp_model.I_imp] + \
+            _flatten(syms['glm']['nlin'])
+
+        xv = [A] + \
+             _flatten(x['net']['weights']) + \
+             [n_post,
+              I_bias,
+              I_stim,
+              I_imp] + \
+            _flatten(x['glms'][n_post]['nlin'])
+
+        ll = glm.ll.eval(dict(zip(s, xv)))
+
+        return ll
+
+    return precompute_currents, lp_A, glm_ll_A, glm_ll_noA
+
+
 def prep_glm_inference(population):
     """ Initialize functions that compute the gradient and Hessian of 
         the log probability with respect to the differentiable GLM 
@@ -304,6 +422,65 @@ def sample_column_of_W(n_post, x, W_gibbs_prms, I_bias, I_stim, I_imp):
         # Update current W
         x['net']['weights']['W'] = W
 
+def collapsed_sample_AW(n_pre, n_post, x,
+                        lp_A, glm_ll_A, glm_ll_noA,
+                        I_bias, I_stim, I_imp):
+    """
+    Do collapsed Gibbs sampling for an entry A_{n,n'} and W_{n,n'} where
+    n = n_pre and n' = n_post.
+    """
+    # import pdb; pdb.set_trace()
+    # TODO: Set sigma_w and mu_w
+    if n_pre == n_post:
+        sigma_w = 0.5
+        mu_w = -2.0
+    else:
+        mu_w = 0.0
+        sigma_w = 2.0
+
+    A = x['net']['graph']['A']
+    W = x['net']['weights']['W'].reshape(A.shape)
+
+    # Approximate G = \int_0^\infty p({s,c} | A, W) p(W_{n,n'}) dW_{n,n'}
+    log_L = np.zeros(DEG_GAUSS_HERMITE)
+    W_nns = np.sqrt(2) * sigma_w * GAUSS_HERMITE_ABSCISSAE + mu_w
+    for i in np.arange(DEG_GAUSS_HERMITE):
+        w = GAUSS_HERMITE_WEIGHTS[i]
+        W_nn = W_nns[i]
+        log_L[i] = np.log(w/np.sqrt(np.pi)) + glm_ll_A(n_pre, n_post, W_nn,
+                                                       x, I_bias, I_stim, I_imp)
+
+    # compute log pr(A_nn) and log pr(\neg A_nn) via log G
+    from scipy.misc import logsumexp
+    log_G = logsumexp(log_L)
+
+    # Compute log Pr(A_nn=1) given prior and estimate of log lkhd after integrating out W
+    log_pr_A = lp_A(n_pre, n_post, 1, x) + log_G
+    # Compute log Pr(A_nn = 0 | {s,c}) = log Pr({s,c} | A_nn = 0) + log Pr(A_nn = 0)
+    log_pr_noA = lp_A(n_pre, n_post, 0, x) + glm_ll_noA(n_pre, n_post, x,
+                                                        I_bias, I_stim, I_imp)
+
+    # Sample A
+    A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+    set_vars('A', x['net']['graph'], A)
+
+    # Sample W from its posterior, i.e. log_L with denominator log_G
+    # If A_nn = 0, we don't actually need to resample W since it has no effect
+    if A[n_pre,n_post] == 1:
+        log_p_W = log_L - log_G
+        # Compute the log CDF
+        log_F_W = [logsumexp(log_p_W[:i]) for i in range(1,DEG_GAUSS_HERMITE)] + [0]
+        # Sample via inverse CDF
+        W[n_pre, n_post] = np.interp(np.log(np.random.rand()),
+                                     log_F_W,
+                                     W_nns)
+    else:
+        # Sample W from the prior
+        W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
+
+    # Set W in state dict x
+    x['net']['weights']['W'] = W.ravel()
+
 def sample_network_column(n_post,
                           x,
                           (lp_A, W_gibbs_prms, precompute_currents)):
@@ -319,6 +496,23 @@ def sample_network_column(n_post,
     sample_column_of_W(n_post, x, W_gibbs_prms, I_bias, I_stim, I_imp)
     return x['net']
 
+def collapsed_sample_network_column(n_post,
+                                    x,
+                                    (precompute_currents, lp_A, glm_ll_A, glm_ll_noA)):
+    """ Collapsed Gibbs sample a column of A and W
+    """
+    A = x['net']['graph']['A']
+    N = A.shape[0]
+    I_bias, I_stim, I_imp = precompute_currents(x, n_post)
+
+    order = np.arange(N)
+    np.random.shuffle(order)
+    for n_pre in order:
+        collapsed_sample_AW(n_pre, n_post, x, lp_A, glm_ll_A, glm_ll_noA,
+                            I_bias, I_stim, I_imp)
+
+    return x['net']
+
 def network_gibbs_step(x, 
                        net_inf_prms):
     """ Gibbs sample the network by collapsing out the weights to 
@@ -331,10 +525,14 @@ def network_gibbs_step(x,
     #      collapsed Gibbs.
     for n_post in np.arange(len(x['glms'])):
         # Sample coupling filters from other neurons
-        sample_network_column(n_post,
+        # sample_network_column(n_post,
+        #                       x,
+        #                       net_inf_prms)
+        collapsed_sample_network_column(n_post,
                               x,
                               net_inf_prms)
-                
+    return x['net']
+
 def single_glm_gibbs_step(xn, n,
                          (glm_syms, glm_gibbs_prms)):
     """ Gibbs sample the GLM parameters. These are mostly differentiable
@@ -405,8 +603,9 @@ def gibbs_sample(population,
             x0 = convert_model(mle_popn, mle_model, mle_x0, population, population.model, x0)
 
     # Compute log prob, gradient, and hessian wrt network parameters
-    net_inf_prms = prep_network_inference(population)
-    
+    # net_inf_prms = prep_network_inference(population)
+    net_inf_prms = prep_collapsed_network_inference(population)
+
     # Compute gradients of the log prob wrt the GLM parameters
     glm_inf_prms = prep_glm_inference(population)
 

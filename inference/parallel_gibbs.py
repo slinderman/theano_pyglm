@@ -10,7 +10,7 @@ from utils.progress_report import wait_watching_stdout
 def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
     """
-    dview.execute('from utils.theano_func_wrapper import seval')
+    dview.execute('from utils.theano_func_wrapper import seval, _flatten')
     dview.execute('from utils.packvec import *')
     dview.execute('from inference.gibbs import *')
     dview.execute('from log_sum_exp import log_sum_exp_sample')
@@ -18,14 +18,30 @@ def initialize_imports(dview):
 
 
 def parallel_compute_log_p(dview,
+                           master,
                            v,
                            N):
     """ Compute the log prob in parallel
     """
 
-    # TODO Compute the log probabaility of global variables
+    # Compute the log probabaility of global variables
     # (e.g. the network) on the first node
     lp_tot = 0
+
+    @interactive
+    def _compute_network_lp(vs):
+        print "Computing log prob for network"
+        syms = popn.get_variables()
+        nvars = popn.extract_vars(vs,0)
+        lp = seval(popn.network.log_p,
+                   syms,
+                   nvars)
+        #lp = popn.network.log_p.eval(dict(zip(_flatten(tmpsyms),
+                                     #        _flatten(tmpnvars))),
+                                     #on_unused_input='ignore')
+        return lp
+
+    lp_tot += master.apply_sync(_compute_network_lp, v)
 
     # Decorate with @interactive to ensure that the function runs
     # in the __main__ namespace that contains 'popn'
@@ -70,6 +86,7 @@ def parallel_gibbs_sample(client,
     Sample the posterior distribution over parameters using MCMC.
     """
     dview = client[:]
+    master = client[client.ids[0]]
     N = data['N']
 
     # Import req'd functions on engines
@@ -81,7 +98,7 @@ def parallel_gibbs_sample(client,
         x0 = client[0]['x0']
 
     # Compute log prob, gradient, and hessian wrt network parameters
-    dview.execute('net_inf_prms = prep_network_inference(popn)',
+    dview.execute('net_inf_prms = prep_collapsed_network_inference(popn)',
                   block=True)
     
     # Compute gradients of the log prob wrt the GLM parameters
@@ -93,7 +110,8 @@ def parallel_gibbs_sample(client,
     # Parallel function to sample network
     @interactive
     def _parallel_sample_network_col(n_post, x):
-        return sample_network_column(n_post,
+        # TODO: Specify collapsed vs regular in options
+        return collapsed_sample_network_column(n_post,
                                      x,
                                      net_inf_prms)
 
@@ -120,6 +138,7 @@ def parallel_gibbs_sample(client,
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = parallel_compute_log_p(dview,
+                                    master,
                                     x,
                                     N)
         # Compute iters per second
@@ -140,8 +159,6 @@ def parallel_gibbs_sample(client,
                                 [x]*N)
 
         interval = 1.0
-        # Timeout after specified number of seconds (-1 = Inf?)
-        #timeout = -1
         wait_watching_stdout(x_net, interval=interval)
 
         # Incorporate the results back into a single network

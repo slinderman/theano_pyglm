@@ -548,7 +548,7 @@ if __name__ == "__main__":
         x = cPickle.load(f)
         # If x is a list of samples, only keep the last (burned-in) fraction
         if isinstance(x, list):
-            smpl_frac = 0.2
+            smpl_frac = 0.5
             x = x[-1*int(smpl_frac*len(x)):]
 
     print "Plotting results"

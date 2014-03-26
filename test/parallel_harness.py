@@ -69,8 +69,7 @@ def initialize_parallel_test_harness():
     if 'vars' in data:
         x_true = data['vars']
         
-        # Load the true model 
-        model_true = None
+        # Load the true model
         data_dir = os.path.dirname(options.dataFile)
         model_file = os.path.join(data_dir, 'model.pkl')
         print "Loading true model from %s" % model_file

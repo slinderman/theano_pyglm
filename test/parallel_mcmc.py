@@ -29,7 +29,7 @@ def run_synth_test():
 
     # Perform inference
     print "Performing parallel inference"
-    N_samples = 250
+    N_samples = 1000
     x_smpls = parallel_gibbs_sample(client, data, x0=x0, N_samples=N_samples)
 
     # Save results
@@ -39,12 +39,16 @@ def run_synth_test():
 
     # Plot average of last 20% of samples
     print "Plotting results"
-    smpl_frac = 0.2
+    smpl_frac = 0.5
+
+    # Only plot the impulse response matrix for small N
+    do_plot_imp_responses = data['N'] < 30
+
     plot_results(popn,
                  x_smpls[-1*int(smpl_frac*N_samples):],
                  popn_true,
                  x_true,
-                 do_plot_imp_responses=False,
+                 do_plot_imp_responses=do_plot_imp_responses,
                  resdir=options.resultsDir)
 
 if __name__ == "__main__":

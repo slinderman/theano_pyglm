@@ -10,6 +10,7 @@ from simple_weighted_model import SimpleWeightedModel
 from simple_sparse_model import SimpleSparseModel
 from sparse_weighted_model import SparseWeightedModel
 from sbm_weighted_model import SbmWeightedModel
+from distance_weighted_model import DistanceWeightedModel
 
 import copy
 
@@ -35,6 +36,9 @@ def make_model(template, N=None):
         elif template.lower() == 'sbm_weighted_model' or \
              template.lower() == 'sbmweightedmodel':
             model = copy.deepcopy(SbmWeightedModel)
+        elif template.lower() == 'distance_weighted_model' or \
+             template.lower() == 'distanceweightedmodel':
+            model = copy.deepcopy(DistanceWeightedModel)
         else:
             raise Exception("Unrecognized template model: %s!" % template)
     elif isinstance(template, dict):
@@ -159,20 +163,11 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             # To convert from basis -> normalized, project the impulse
             # responses onto the normalized basis, divide by the area
             # under the curve to get the weight.
-            from utils.basis import project_onto_basis
-
             W = np.zeros((N,N))
             for n2 in np.arange(N):
                 B = to_state['glms'][n2]['imp']['basis'].shape[1]
                 w_ir_n2 = np.zeros((N,B))
                 for n1 in np.arange(N):
-                    # HACKY SOLN: Project onto the basis and the round to get the nearest solution
-                    #w_ir_n1n2 = project_onto_basis(from_state['glms'][n2]['imp']['impulse'][n1,:],
-                    #                               to_state['glms'][n2]['imp']['basis'])
-                    #w_ir_n1n2 = w_ir_n1n2.flatten()
-                    #Wsgn = np.sign(np.sum(w_ir_n1n2))
-
-                    # HOPEFULLY A BETTER SOLN:
                     # Solve a nonnegative least squares problem
                     (w_ir_n1n2p, residp) = nnls(to_state['glms'][n2]['imp']['basis'], 
                                                 from_state['glms'][n2]['imp']['impulse'][n1,:])
@@ -200,7 +195,11 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
 
             # Update to_vars
             conv_vars['net']['weights']['W'] = W.flatten()
-            conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
+
+            # Threshold the adjacency matrix to start with the right level of sparsity
+            W_sorted = np.sort(np.abs(W.ravel()))
+            thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)]
+            conv_vars['net']['graph']['A'] = (np.abs(W) > thresh).astype(np.int8)
 
             # Update simple other parameters
             for n in np.arange(N):
