@@ -167,7 +167,7 @@ class LatentDistanceGraphModel(Component):
         L2 = self.L.dimshuffle('x',0,1)     # 1xNxD
         T.addbroadcast(L1,1)
         T.addbroadcast(L2,0)
-        self.D = T.sum((L1-L2)**2, axis=2)
+        self.D = T.sqrt(T.sum((L1-L2)**2, axis=2))
 
         # There is a distance scale, \delta
         self.delta = T.dscalar(name='delta')
@@ -199,7 +199,7 @@ class LatentDistanceGraphModel(Component):
         L = np.arange(N).reshape((N, 1)).astype(np.float)
 
         # TODO: Sample delta from prior
-        delta = 2.0
+        delta = self.prms['delta']
 
         # Sample A from pA
         pA = self.pA.eval({self.L: L,

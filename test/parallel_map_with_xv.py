@@ -23,6 +23,8 @@ def parallel_compute_ll(dview,
                         N):
     """ Compute the log prob in parallel
     """
+    dview.execute('from utils.theano_func_wrapper import seval')
+
     ll_tot = 0
     # Decorate with @interactive to ensure that the function runs
     # in the __main__ namespace that contains 'popn'
@@ -78,7 +80,7 @@ def run_parallel_map():
         set_hyperparameters_on_engines(client[:], model)
         #popn.set_data(train_data)
         set_data_on_engines(client[:], train_data)
-        ll0 = popn.compute_log_p(x0)
+        ll0 = parallel_compute_ll(client[:], x0, data['N'])
         print "Training LL0: %f" % ll0
 
         # Perform inference
@@ -110,6 +112,11 @@ def run_parallel_map():
             best_xv_ll = ll_xv
             best_x = copy.deepcopy(x_inf)
             best_model = copy.deepcopy(model)
+
+        # Save results
+        print "Saving partial results"
+        with open(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i),'w') as f:
+            cPickle.dump(x_inf,f, protocol=-1)
 
     # Set the best hyperparameters
     set_hyperparameters_on_engines(client[:], best_model)

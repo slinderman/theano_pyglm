@@ -450,10 +450,16 @@ def collapsed_sample_AW(n_pre, n_post, x,
         log_L[i] = np.log(w/np.sqrt(np.pi)) + glm_ll_A(n_pre, n_post, W_nn,
                                                        x, I_bias, I_stim, I_imp)
 
+        # Handle NaNs in the GLM log likelihood
+        if np.isnan(log_L[i]):
+            log_L[i] = -np.Inf
+
     # compute log pr(A_nn) and log pr(\neg A_nn) via log G
     from scipy.misc import logsumexp
     log_G = logsumexp(log_L)
 
+    # if n_pre == 3 and n_post == 1:
+    #     import pdb; pdb.set_trace()
     # Compute log Pr(A_nn=1) given prior and estimate of log lkhd after integrating out W
     log_pr_A = lp_A(n_pre, n_post, 1, x) + log_G
     # Compute log Pr(A_nn = 0 | {s,c}) = log Pr({s,c} | A_nn = 0) + log Pr(A_nn = 0)
@@ -461,7 +467,11 @@ def collapsed_sample_AW(n_pre, n_post, x,
                                                         I_bias, I_stim, I_imp)
 
     # Sample A
-    A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+    try:
+        A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+    except Exception as e:
+        raise e
+        # import pdb; pdb.set_trace()
     set_vars('A', x['net']['graph'], A)
 
     # Sample W from its posterior, i.e. log_L with denominator log_G
@@ -508,6 +518,7 @@ def collapsed_sample_network_column(n_post,
     order = np.arange(N)
     np.random.shuffle(order)
     for n_pre in order:
+        # print "Sampling %d->%d" % (n_pre, n_post)
         collapsed_sample_AW(n_pre, n_post, x, lp_A, glm_ll_A, glm_ll_noA,
                             I_bias, I_stim, I_imp)
 

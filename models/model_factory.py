@@ -125,7 +125,38 @@ def stabilize_sparsity(model):
         #    stable_rho = maxeig/N/sigma**2
         #    stable_rho = np.minimum(stable_rho, 1.0)
         #    print "Setting sparsity to %.2f for stability." % stable_rho
-        #    graph_model['rho'] = stable_rho
+        #    graph_model['rho'] = stable_rho\
+
+    elif graph_model['type'].lower() == 'distance':
+        # It's hard to characterize this exactly, but suppose that we had an exact
+        # banded adjacency matrix where the -b-th lower diagonal to the +b-th upper diagonal
+        # are normally distributed, and the rest of the matrix is zero.
+        #
+        # The max eigenvalue of this matrix tends to grow proportionally to log N
+        # and b, and is scaled by the standard deviation of the weights, sigma.
+        # The mean refractory weight adds a bias to the max eigenvalue.
+        #
+        # To estimate the bandwidth (i.e. 2b in this example), suppose that the
+        # probability of connection p(A_n,n') decays exponentially with |n-n'| at
+        # length scale d. That is, when |n-n'| > d, the probability has decreased to
+        # about 1/3. Hence, at distance 2d, the probability of interaction is about 10%.
+        # Thus, let's say the bandwidth of this matrix is roughly 2*(2d) = 4d,
+        #
+        # So, given the bandwidth of 4d and the matrix size N, we will scale the weight
+        # distribution to hopefully achieve stability
+        b = 4.0 * graph_model['delta']
+
+        # Constant scaling factors
+        # max eig ~= mu_ref + .25*sigma_W * (b+2*log(N))
+        # So set sigma_W ~= 4*(1-mu_ref)/(b+2*log N)
+        if weight_model['type'].lower() == 'gaussian':
+            mu_ref = weight_model['refractory_prior']['mu']
+            sig_w = 4.0*(1.0-mu_ref)/(b+2.0*np.log(model['N']))
+
+            print "Setting sig_w to %.3f to ensure stability" % sig_w
+            weight_model['prior']['sigma'] = sig_w
+        else:
+            raise Exception("Unrecognized weight model for distance graph: %s" % weight_model['type'])
 
 def check_stability(model, x, N):
     """
@@ -197,9 +228,12 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             conv_vars['net']['weights']['W'] = W.flatten()
 
             # Threshold the adjacency matrix to start with the right level of sparsity
-            W_sorted = np.sort(np.abs(W.ravel()))
-            thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)]
-            conv_vars['net']['graph']['A'] = (np.abs(W) > thresh).astype(np.int8)
+            if 'rho' in to_model['network']['graph'].keys():
+                W_sorted = np.sort(np.abs(W.ravel()))
+                thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)]
+                conv_vars['net']['graph']['A'] = (np.abs(W) > thresh).astype(np.int8)
+            else:
+                conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
 
             # Update simple other parameters
             for n in np.arange(N):

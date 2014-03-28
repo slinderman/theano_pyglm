@@ -85,7 +85,8 @@ DistanceWeightedModel = \
             'graph' :
                 {
                     'type' : 'distance',
-                    'rho_refractory' : 0.9
+                    'rho_refractory' : 0.999,
+                    'delta' : 2
                 }
         },
 }
