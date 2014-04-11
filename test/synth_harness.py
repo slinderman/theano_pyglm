@@ -39,7 +39,20 @@ def initialize_test_harness():
         model_file = os.path.join(data_dir, 'model.pkl')
         print "Loading true model from %s" % model_file
         with open(model_file) as f:
-            model_true = cPickle.load(f) 
+            model_true = cPickle.load(f)
+            # HACK FOR EXISTING DATA!
+            if 'N_dims' not in model_true['network']['graph']:
+                model_true['network']['graph']['N_dims'] = 1
+            if 'location_prior' not in model_true['network']['graph']:
+                model_true['network']['graph']['location_prior'] = \
+                         {
+                             'type' : 'gaussian',
+                             'mu' : 0.0,
+                             'sigma' : 1.0
+                         }
+            if 'L' in x_true['net']['graph']:
+                x_true['net']['graph']['L'] = x_true['net']['graph']['L'].ravel()
+            # END HACK
             popn_true = Population(model_true)
             popn_true.set_data(data)
             ll_true = popn_true.compute_log_p(x_true)
@@ -63,6 +76,7 @@ def get_xv_models(model):
     #         ('network', 'weight', 'sigma_refractory') : (0.05, 0.5, 1.0, 2.0)}
 
     prms = {('impulse', 'prior', 'lam') : (0.5, 1.0, 2.0, 5.0, 10.0, 15.0)}
+    # prms = {('impulse', 'prior', 'lam') : (15.0, 10.0, 5.0, 2.0, 1.0, 0.5)}
 
     # Only keep those settings which exist in the model
     def check_key(d,tk):

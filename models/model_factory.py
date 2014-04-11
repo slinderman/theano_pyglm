@@ -50,7 +50,13 @@ def make_model(template, N=None):
     if N is not None:
         model['N'] = N
 
-    # TODO Update other parameters as necessary
+    # Update other parameters as necessary
+    if template.lower() == 'distance_weighted_model' or \
+       template.lower() == 'distanceweightedmodel':
+        #model['network']['graph']['location_prior']['sigma'] = N/2.0/3.0
+        model['network']['graph']['location_prior']['mu'] = \
+            np.tile(np.arange(N).reshape((N,1)),
+                    [1,model['network']['graph']['N_dims']]).ravel()
 
     return model
 

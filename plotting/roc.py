@@ -18,7 +18,7 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1, label=None):
         Subsample allows you to subsample the errorbar
     """
     if ax is None:
-        plt.figure()
+        plt.figure(frameon=False)
         ax = plt.subplot(111)
 
     if not isinstance(tprs, list):
@@ -76,7 +76,7 @@ def plot_roc_curve(tprs, fprs, color='k', ax=None, subsample=1, label=None):
     # Plot the random guessing line
     plt.plot([0,1],[0,1], '--k')
 
-    plt.legend(loc='lower right')
+    #plt.legend(loc='lower right')
 
     plt.xlabel('FPR')
     plt.ylabel('TPR')

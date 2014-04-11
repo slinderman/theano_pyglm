@@ -7,9 +7,19 @@ import matplotlib
 matplotlib.use('Agg')       # To enable saving remotely
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from matplotlib.colors import LinearSegmentedColormap
 
-# Get a red-gray cmap
-cmap = cm.get_cmap('RdGy')
+# Get a red-white-black cmap
+cdict = {'red': ((0.0, 1.0, 1.0),
+                 (0.5, 1.0, 1.0),
+                 (1.0, 0.0, 0.0)),
+        'green': ((0.0, 0.0, 0.0),
+                  (0.5, 1.0, 1.0),
+                  (1.0, 0.0, 0.0)),
+        'blue': ((0.0, 0.0, 0.0),
+                 (0.5, 1.0, 1.0),
+                 (1.0, 0.0, 0.0))}
+cmap = LinearSegmentedColormap('my_colormap',cdict,256)
 
 from utils.avg_dicts import average_list_of_dicts, std_list_of_dicts
 
@@ -37,7 +47,8 @@ def plot_connectivity_matrix(s_smpls, s_true=None):
         plt.imshow(np.kron(W_true,np.ones((px_per_node,px_per_node))),
                    vmin=-W_max,vmax=W_max,
                    extent=[0,1,0,1],
-                   interpolation='nearest')
+                   interpolation='nearest',
+                   cmap=cmap)
         plt.colorbar()
         plt.title('True Network')
         plt.subplot(1,2,2)
@@ -46,7 +57,8 @@ def plot_connectivity_matrix(s_smpls, s_true=None):
     plt.imshow(np.kron(W_inf,np.ones((px_per_node,px_per_node))),
                vmin=-W_max,vmax=W_max,
                extent=[0,1,0,1],
-               interpolation='nearest')
+               interpolation='nearest',
+               cmap=cmap)
     plt.colorbar()
     plt.title('Inferred Network')
     
@@ -98,8 +110,7 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
 def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-'):
     """ Plot the impulse responses plus or minus two standard devs
     """ 
-    # Get a red-gray cmap
-    cmap = cm.get_cmap('RdGy')
+
 
     # Get the weights of the impulse responses
     W_inf = s_inf['net']['weights']['W'] * s_inf['net']['graph']['A']
@@ -189,10 +200,7 @@ def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor
         In this case we use a single axes rather than multiple subplots since
         matplotlib is, unfortunately, ridiculously slow when it comes to large
         numbers of subplots
-    """ 
-    # Get a red-gray cmap
-    cmap = cm.get_cmap('RdGy')
-
+    """
     # Get the weights of the impulse responses
     W_inf = s_inf['net']['weights']['W'] * s_inf['net']['graph']['A']
     N = W_inf.shape[0]

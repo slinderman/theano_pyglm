@@ -135,7 +135,8 @@ def gen_synth_data():
     # Plot firing rates, stimulus responses, etc
     plot_results(popn, data['vars'],
                  resdir=options.resultsDir,
-                 do_plot_stim_resp=False)
+                 do_plot_stim_resp=False,
+                 do_plot_imp_responses=False)
     
 if __name__ == "__main__":
     gen_synth_data()

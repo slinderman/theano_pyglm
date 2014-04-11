@@ -18,26 +18,41 @@ def run_synth_test():
     if options.x0_file is not None:
         with open(options.x0_file, 'r') as f:
             print "Initializing with state from: %s" % options.x0_file
-            mle_x0 = cPickle.load(f)
-            # HACK: We're assuming x0 came from a standard GLM
-            mle_model = make_model('standard_glm', N=data['N'])
-            mle_popn = Population(mle_model)
-            mle_popn.set_data(data)
+            prev_x0 = cPickle.load(f)
+            if isinstance(prev_x0, list):
 
-            x0 = popn.sample()
-            x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
+                x0 = prev_x0[-1]
+            else:
+                mle_x0 = prev_x0
+                # HACK: We're assuming x0 came from a standard GLM
+                mle_model = make_model('standard_glm', N=data['N'])
+                mle_popn = Population(mle_model)
+                mle_popn.set_data(data)
 
-    # Perform inference
-    print "Performing parallel inference"
-    N_samples = 1000
-    x_smpls = parallel_gibbs_sample(client, data,
-                                    x0=x0, N_samples=N_samples,
-                                    save_interval=50, results_dir=options.resultsDir)
+                x0 = popn.sample()
+                x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
+    
+    use_existing = False
+    
+    if use_existing and  \
+       os.path.exists(os.path.join(options.resultsDir, 'results.pkl')):
 
-    # Save results
-    print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
-    with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
-        cPickle.dump(x_smpls, f, protocol=-1)
+        print "Found existing results"
+        with open(os.path.join(options.resultsDir, 'results.pkl')) as f:
+            x_smpls = cPickle.load(f)
+            N_samples = len(x_smpls)
+    else:
+        # Perform inference
+        print "Performing parallel inference"
+        N_samples = 1000
+        x_smpls = parallel_gibbs_sample(client, data,
+                                        x0=x0, N_samples=N_samples,
+                                        save_interval=50, results_dir=options.resultsDir)
+        
+        # Save results
+        print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
+        with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
+            cPickle.dump(x_smpls, f, protocol=-1)
 
     # Plot average of last 20% of samples
     print "Plotting results"
@@ -47,11 +62,11 @@ def run_synth_test():
     do_plot_imp_responses = data['N'] < 30
 
     plot_results(popn,
-                 x_smpls[-1*int(smpl_frac*N_samples):],
-                 popn_true,
-                 x_true,
-                 do_plot_imp_responses=do_plot_imp_responses,
-                 resdir=options.resultsDir)
+                x_smpls[-1*int(smpl_frac*N_samples):],
+                popn_true,
+                x_true,
+                do_plot_imp_responses=do_plot_imp_responses,
+                resdir=options.resultsDir)
 
 if __name__ == "__main__":
     run_synth_test()

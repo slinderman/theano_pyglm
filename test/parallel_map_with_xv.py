@@ -69,42 +69,56 @@ def run_parallel_map():
     best_x = x0
     best_model = None
 
+    use_existing = True
+
     # Fit each model using the optimum of the previous models
     train_lls = np.zeros(len(models))
     xv_lls = np.zeros(len(models))
     total_lls = np.zeros(len(models))
     for (i,model) in enumerate(models):
-        print "Training model %d" % i
-        x0 = copy.deepcopy(best_x)
-        #popn.set_hyperparameters(model)
+        print "Evaluating model %d" % i
         set_hyperparameters_on_engines(client[:], model)
-        #popn.set_data(train_data)
         set_data_on_engines(client[:], train_data)
-        ll0 = parallel_compute_ll(client[:], x0, data['N'])
-        print "Training LL0: %f" % ll0
 
-        # Perform inference
-        x_inf = parallel_coord_descent(client, data['N'], x0=x0, maxiter=1,
-                                       use_hessian=False,
-                                       use_rop=False)
-        ll_train = parallel_compute_ll(client[:], x_inf, data['N'])
-        print "Training LL_inf: %f" % ll_train
-        train_lls[i] = ll_train
+        if use_existing and  \
+           os.path.exists(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i)):
+            print "Found existing results for model %d" % i
+            with open(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i)) as f:
+                (x_inf, ll_train, ll_xv, ll_total) = cPickle.load(f)
+                train_lls[i] = ll_train
+                xv_lls[i] = ll_xv
+                total_lls[i] = ll_total
 
+        else:
+            x0 = copy.deepcopy(best_x)
+            # set_data_on_engines(client[:], train_data)
+            ll0 = parallel_compute_ll(client[:], x0, data['N'])
+            print "Training LL0: %f" % ll0
 
-        # Compute log lkhd on xv data
-        #popn.set_data(xv_data)
-        set_data_on_engines(client[:], xv_data)
-        ll_xv = parallel_compute_ll(client[:], x_inf, data['N'])
-        print "Cross Validation LL: %f" % ll_xv
-        xv_lls[i] = ll_xv
+            # Perform inference
+            x_inf = parallel_coord_descent(client, data['N'], x0=x0, maxiter=1,
+                                           use_hessian=False,
+                                           use_rop=False)
 
-        # Compute log lkhd on total dataset
-        #popn.set_data(data)
-        set_data_on_engines(client[:], data)
-        ll_total = parallel_compute_ll(client[:], x_inf, data['N'])
-        print "Total LL: %f" % ll_total
-        total_lls[i] = ll_total
+            ll_train = parallel_compute_ll(client[:], x_inf, data['N'])
+            print "Training LL_inf: %f" % ll_train
+            train_lls[i] = ll_train
+
+            # Compute log lkhd on xv data
+            set_data_on_engines(client[:], xv_data)
+            ll_xv = parallel_compute_ll(client[:], x_inf, data['N'])
+            print "Cross Validation LL: %f" % ll_xv
+            xv_lls[i] = ll_xv
+
+            # Compute log lkhd on total dataset
+            set_data_on_engines(client[:], data)
+            ll_total = parallel_compute_ll(client[:], x_inf, data['N'])
+            print "Total LL: %f" % ll_total
+            total_lls[i] = ll_total
+
+            print "Saving partial results"
+            with open(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i),'w') as f:
+                cPickle.dump((x_inf, ll_train, ll_xv, ll_total) ,f, protocol=-1)
 
         # Update best model
         if ll_xv > best_xv_ll:
@@ -113,18 +127,13 @@ def run_parallel_map():
             best_x = copy.deepcopy(x_inf)
             best_model = copy.deepcopy(model)
 
-        # Save results
-        print "Saving partial results"
-        with open(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i),'w') as f:
-            cPickle.dump(x_inf,f, protocol=-1)
-
+    print "Training the best model (%d) with the full dataset" % best_ind
     # Set the best hyperparameters
     set_hyperparameters_on_engines(client[:], best_model)
-    #popn.set_data(data)
     set_data_on_engines(client[:], data)
 
     # Fit the best model on the full training data
-    best_x = parallel_coord_descent(client, data['N'], x0=x0, maxiter=1,
+    best_x = parallel_coord_descent(client, data['N'], x0=best_x, maxiter=1,
                                     use_hessian=False,
                                     use_rop=False)
 
@@ -138,12 +147,12 @@ def run_parallel_map():
 
     # Save results
     with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
-        cPickle.dump(x_inf,f, protocol=-1)
+        cPickle.dump(best_x, f, protocol=-1)
 
     # Plot results
-    plot_results(popn, x_inf,
+    plot_results(popn, best_x,
                  popn_true, x_true,
-                 do_plot_imp_responses=False,
+                 do_plot_imp_responses=(model['N']<64),
                  resdir=options.resultsDir)
 
 if __name__ == "__main__":

@@ -86,7 +86,14 @@ DistanceWeightedModel = \
                 {
                     'type' : 'distance',
                     'rho_refractory' : 0.999,
-                    'delta' : 2
+                    'delta' : 2,
+                    'N_dims' : 1,
+                    'location_prior' :
+                     {
+                         'type' : 'gaussian',
+                         'mu' : 0.0,
+                         'sigma' : 0.5
+                     },
                 }
         },
 }

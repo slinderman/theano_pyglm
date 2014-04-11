@@ -111,3 +111,8 @@ def set_vars(syms, vars, vals):
                         "or a specific key in vars")
         
     return vars
+
+def get_shapes(x, syms):
+    xv = get_vars(syms, x)
+    _,shapes = packdict(xv)
+    return shapes
