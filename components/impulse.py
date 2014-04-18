@@ -204,8 +204,10 @@ class NormalizedBasisImpulses(Component):
         dt = data['dt']
         (L,B) = self.basis.shape
         Lt_int = self.prms['dt_max']/dt
-        t_int = np.linspace(0,1,Lt_int)
-        t_bas = np.linspace(0,1,L)
+        # t_int = np.linspace(0,1,Lt_int)
+        t_int = np.arange(0.0, self.prms['dt_max'], step=dt)
+        # t_bas = np.linspace(0,1,L)
+        t_bas = np.linspace(0.0, self.prms['dt_max'], L)
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
             ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])

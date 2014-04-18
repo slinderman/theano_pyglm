@@ -7,43 +7,14 @@ import os
 from inference.parallel_coord_descent import parallel_coord_descent
 from parallel_harness import initialize_parallel_test_harness, \
                              set_data_on_engines, \
-                             set_hyperparameters_on_engines
+                             set_hyperparameters_on_engines, \
+                             parallel_compute_ll
 from plotting.plot_results import plot_results
 from models.model_factory import make_model
 from synth_harness import get_xv_models
 
 from utils.parallelutil import *
 from utils.io import segment_data
-
-from IPython.parallel.util import interactive
-
-# TODO move this to a helper function
-def parallel_compute_ll(dview,
-                        v,
-                        N):
-    """ Compute the log prob in parallel
-    """
-    dview.execute('from utils.theano_func_wrapper import seval')
-
-    ll_tot = 0
-    # Decorate with @interactive to ensure that the function runs
-    # in the __main__ namespace that contains 'popn'
-    @interactive
-    def _compute_glm_ll(n, vs):
-        print "Computing log lkhd for GLM %d" % n
-        syms = popn.get_variables()
-        nvars = popn.extract_vars(vs, n)
-        lp = seval(popn.glm.ll,
-                   syms,
-                   nvars)
-        return lp
-
-    ll_glms = dview.map_async(_compute_glm_ll,
-                              range(N),
-                              [v]*N)
-
-    ll_tot += sum(ll_glms.get())
-    return ll_tot
 
 def run_parallel_map():
     """ Run a test with synthetic data and MCMC inference

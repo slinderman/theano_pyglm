@@ -209,7 +209,6 @@ class Population:
         # print "Effective impulse weights: "
         # print Weff
 
-
         # Iterate over each time step and generate spikes
         S = np.zeros((nT,N))
         acc = np.zeros(N)
@@ -307,6 +306,7 @@ class Population:
 
         print "Sampled %s spikes." % str(nS)
         print "Expected %s spikes." % str(E_nS)
+        # import pdb; pdb.set_trace()
 
         if np.any(np.abs(nS-E_nS) > 3*np.sqrt(E_nS)):
             print "ERROR: Actual num spikes (%s) differs from expected (%s) by >3 std." % (str(nS),str(E_nS))

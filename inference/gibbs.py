@@ -161,8 +161,14 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
     def __init__(self):
         super(CollapsedGibbsNetworkColumnUpdate, self).__init__()
 
+        # TODO: Only use an MH proposal from the prior if you are certain
+        # that the prior puts mass on likely edges. Otherwise you will never
+        # propose to transition from no-edge to edge and mixing will be very,
+        # very slow.
+        self.propose_from_prior = False
+
         # Define constants for Sampling
-        self.DEG_GAUSS_HERMITE = 10
+        self.DEG_GAUSS_HERMITE = 20
         self.GAUSS_HERMITE_ABSCISSAE, self.GAUSS_HERMITE_WEIGHTS = \
             np.polynomial.hermite.hermgauss(self.DEG_GAUSS_HERMITE)
 
@@ -176,7 +182,18 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         self.glm = population.glm
         self.syms = population.get_variables()
 
-    def _precompute_currents(self, x, n_post):
+        # Get the weight model
+        self.mu_w = self.network.weights.prior.mu.get_value()
+        self.sigma_w = self.network.weights.prior.sigma.get_value()
+
+        if hasattr(self.network.weights, 'refractory_prior'):
+            self.mu_w_ref = self.network.weights.refractory_prior.mu.get_value()
+            self.sigma_w_ref = self.network.weights.refractory_prior.sigma.get_value()
+        else:
+            self.mu_w_ref = self.mu_w
+            self.sigma_w_ref = self.sigma_w
+
+    def _precompute_vars(self, x, n_post):
         """ Precompute currents for sampling A and W
         """
         nvars = self.population.extract_vars(x, n_post)
@@ -193,10 +210,14 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                       self.syms,
                       nvars)
 
-        return I_bias, I_stim, I_imp
+        p_A = seval(self.network.graph.pA,
+                    self.syms['net'],
+                    x['net'])
+
+        return I_bias, I_stim, I_imp, p_A
 
     def _lp_A(self, n_pre, n_post, v, x):
-        """ Compute the log probability for a given column A[:,n_post]
+        """ Compute the log probability for a given entry A[n_pre,n_post]
         """
 
         # Update A[n_pre, n_post]
@@ -214,12 +235,13 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         """
         # Set A in state dict x
         A = x['net']['graph']['A']
+        A_init = A[n_pre, n_post]
         A[n_pre, n_post] = 1
 
         # Set W in state dict x
         W = x['net']['weights']['W'].reshape(A.shape)
+        W_init = W[n_pre, n_post]
         W[n_pre, n_post] = w
-
 
         # Get the likelihood of the GLM under A and W
         s = [self.network.graph.A] + \
@@ -239,7 +261,9 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             _flatten(x['glms'][n_post]['nlin'])
 
         ll = self.glm.ll.eval(dict(zip(s, xv)))
-
+        # Reset A and W
+        A[n_pre, n_post] = A_init
+        W[n_pre, n_post] = W_init
         return ll
 
     def _glm_ll_noA(self, n_pre, n_post, x, I_bias, I_stim, I_imp):
@@ -247,6 +271,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         """
         # Set A in state dict x
         A = x['net']['graph']['A']
+        A_init = A[n_pre, n_post]
         A[n_pre, n_post] = 0
 
         # Get the likelihood of the GLM under A and W
@@ -267,58 +292,71 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             _flatten(x['glms'][n_post]['nlin'])
 
         ll = self.glm.ll.eval(dict(zip(s, xv)))
+        A[n_pre, n_post] = A_init
 
         return ll
 
     def _collapsed_sample_AW(self, n_pre, n_post, x,
-                             I_bias, I_stim, I_imp):
+                             I_bias, I_stim, I_imp, p_A):
         """
         Do collapsed Gibbs sampling for an entry A_{n,n'} and W_{n,n'} where
         n = n_pre and n' = n_post.
         """
-        # import pdb; pdb.set_trace()
-        # TODO: Set sigma_w and mu_w
+        # Set sigma_w and mu_w
         if n_pre == n_post:
-            sigma_w = 0.5
-            mu_w = -2.0
+            mu_w = self.mu_w_ref
+            sigma_w = self.sigma_w_ref
         else:
-            mu_w = 0.0
-            sigma_w = 2.0
+            mu_w = self.mu_w
+            sigma_w = self.sigma_w
 
         A = x['net']['graph']['A']
         W = x['net']['weights']['W'].reshape(A.shape)
 
+        # Propose from the prior and see if A would change.
+        prior_lp_A = np.log(p_A[n_pre, n_post])
+        prior_lp_noA = np.log(1.0-p_A[n_pre, n_post])
+
         # Approximate G = \int_0^\infty p({s,c} | A, W) p(W_{n,n'}) dW_{n,n'}
         log_L = np.zeros(self.DEG_GAUSS_HERMITE)
+        weighted_log_L = np.zeros(self.DEG_GAUSS_HERMITE)
         W_nns = np.sqrt(2) * sigma_w * self.GAUSS_HERMITE_ABSCISSAE + mu_w
         for i in np.arange(self.DEG_GAUSS_HERMITE):
             w = self.GAUSS_HERMITE_WEIGHTS[i]
             W_nn = W_nns[i]
-            log_L[i] = np.log(w/np.sqrt(np.pi)) + \
-                       self._glm_ll_A(n_pre, n_post, W_nn,
+            log_L[i] = self._glm_ll_A(n_pre, n_post, W_nn,
                                       x, I_bias, I_stim, I_imp)
 
             # Handle NaNs in the GLM log likelihood
-            if np.isnan(log_L[i]):
-                log_L[i] = -np.Inf
+            if np.isnan(weighted_log_L[i]):
+                weighted_log_L[i] = -np.Inf
+
+            weighted_log_L[i] = log_L[i] + np.log(w/np.sqrt(np.pi))
+
+            # Handle NaNs in the GLM log likelihood
+            if np.isnan(weighted_log_L[i]):
+                weighted_log_L[i] = -np.Inf
 
         # compute log pr(A_nn) and log pr(\neg A_nn) via log G
         from scipy.misc import logsumexp
-        log_G = logsumexp(log_L)
+        log_G = logsumexp(weighted_log_L)
+        if not np.isfinite(log_G):
+            import pdb; pdb.set_trace()
 
-        # if n_pre == 3 and n_post == 1:
-        #     import pdb; pdb.set_trace()
         # Compute log Pr(A_nn=1) given prior and estimate of log lkhd after integrating out W
-        log_pr_A = self._lp_A(n_pre, n_post, 1, x) + log_G
+        log_pr_A = prior_lp_A + log_G
         # Compute log Pr(A_nn = 0 | {s,c}) = log Pr({s,c} | A_nn = 0) + log Pr(A_nn = 0)
-        log_pr_noA = self._lp_A(n_pre, n_post, 0, x) + \
+        log_pr_noA = prior_lp_noA + \
                      self._glm_ll_noA(n_pre, n_post, x,
                                       I_bias, I_stim, I_imp)
+        if np.isnan(log_pr_noA):
+            log_pr_noA = -np.Inf
 
         # Sample A
         try:
-            A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+            A[n_pre, n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
         except Exception as e:
+            import pdb; pdb.set_trace()
             raise e
             # import pdb; pdb.set_trace()
         set_vars('A', x['net']['graph'], A)
@@ -326,6 +364,176 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # Sample W from its posterior, i.e. log_L with denominator log_G
         # If A_nn = 0, we don't actually need to resample W since it has no effect
         if A[n_pre,n_post] == 1:
+            W_centers = np.concatenate(([mu_w-6.0*sigma_w],
+                                        (W_nns[1:]+W_nns[:-1])/2.0,
+                                        [mu_w+6.0*sigma_w]))
+            W_bin_sizes = W_nns[1:]-W_nns[:-1]
+
+            log_prior_W = -0.5/sigma_w**2 * (W_nns-mu_w)**2
+            log_posterior_W = log_prior_W + log_L
+            log_p_W = log_posterior_W - logsumexp(log_posterior_W)
+
+            # Approximate the posterior at the W_centers by averaging
+            log_posterior_avg = np.array([logsumexp(log_posterior_W[i:i+2]) for \
+                                          i in range(self.DEG_GAUSS_HERMITE-1)]) \
+                                - np.log(2.0)
+
+            log_posterior_mass = log_posterior_avg + np.log(W_bin_sizes)
+
+            # Normalize the posterior mass
+            log_posterior_mass -= logsumexp(log_posterior_mass)
+
+            # Compute the log CDF
+            log_F_W = np.array([-np.Inf] +
+                               [logsumexp(log_posterior_mass[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] +
+                               [0.0])
+
+            # Compute the log CDF
+            # log_F_W = np.array([logsumexp(log_p_W[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] + [0])
+
+            # Sample via inverse CDF. Since log is concave, this overestimates.
+            W[n_pre, n_post] = np.interp(np.log(np.random.rand()),
+                                         log_F_W,
+                                         W_centers)
+
+            assert np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp))
+
+            # if n_pre==n_post:
+            #     import pdb; pdb.set_trace()
+        else:
+            # Sample W from the prior
+            W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
+
+        # Set W in state dict x
+        x['net']['weights']['W'] = W.ravel()
+
+    def _slice_sample_W(self, n_pre, n_post, x, W_nns, lp_W_nns, I_bias, I_stim, I_imp):
+        """
+        Use slice sampling to choose the next W
+        """
+        # Set sigma_w and mu_w
+        if n_pre == n_post:
+            mu_w = self.mu_w_ref
+            sigma_w = self.sigma_w_ref
+        else:
+            mu_w = self.mu_w
+            sigma_w = self.sigma_w
+
+        lp_fn = lambda w: self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp) \
+                          -0.5/sigma_w**2 * (w-mu_w)**2
+
+        # Randomly choose a height in [0, p(curr_W)]
+        A = x['net']['graph']['A']
+        W = x['net']['weights']['W'].reshape(A.shape)
+        W_curr = W[n_pre, n_post]
+        lp_curr = lp_fn(W_curr)
+        h = lp_curr + np.log(np.random.rand())
+
+        # Find W_nns with lp > h
+        valid_W_nns = W_nns[lp_W_nns>h]
+        if len(valid_W_nns) > 0:
+            lb = np.amin(valid_W_nns)
+            lb = np.minimum(lb, W_curr)
+            ub = np.amax(valid_W_nns)
+            ub = np.maximum(ub, W_curr)
+        else:
+            lb = None
+            ub = None
+
+        from inference.slicesample import slicesample
+        W_next, _ = slicesample(W_curr.reshape((1,)), lp_fn, last_llh=lp_curr, step=sigma_w/10.0, x_l=lb, x_r=ub)
+        return W_next[0]
+
+    def _collapsed_sample_AW_with_prior(self, n_pre, n_post, x,
+                                        I_bias, I_stim, I_imp, p_A):
+        """
+        Do collapsed Gibbs sampling for an entry A_{n,n'} and W_{n,n'} where
+        n = n_pre and n' = n_post.
+        """
+        # Set sigma_w and mu_w
+        if n_pre == n_post:
+            mu_w = self.mu_w_ref
+            sigma_w = self.sigma_w_ref
+        else:
+            mu_w = self.mu_w
+            sigma_w = self.sigma_w
+
+        A = x['net']['graph']['A']
+        W = x['net']['weights']['W'].reshape(A.shape)
+
+        # Propose from the prior and see if A would change.
+        prior_lp_A = np.log(p_A[n_pre, n_post])
+        prop_A = np.int8(np.log(np.random.rand()) < prior_lp_A)
+
+        # We only need to compute the acceptance probability if the proposal
+        # would change A
+        A_init = A[n_pre, n_post]
+        W_init = W[n_pre, n_post]
+        if A[n_pre, n_post] != prop_A:
+
+            # Approximate G = \int_0^\infty p({s,c} | A, W) p(W_{n,n'}) dW_{n,n'}
+            log_L = np.zeros(self.DEG_GAUSS_HERMITE)
+            W_nns = np.sqrt(2) * sigma_w * self.GAUSS_HERMITE_ABSCISSAE + mu_w
+            for i in np.arange(self.DEG_GAUSS_HERMITE):
+                w = self.GAUSS_HERMITE_WEIGHTS[i]
+                W_nn = W_nns[i]
+                log_L[i] = np.log(w/np.sqrt(np.pi)) + \
+                           self._glm_ll_A(n_pre, n_post, W_nn,
+                                          x, I_bias, I_stim, I_imp)
+
+                # Handle NaNs in the GLM log likelihood
+                if np.isnan(log_L[i]):
+                    log_L[i] = -np.Inf
+
+            # compute log pr(A_nn) and log pr(\neg A_nn) via log G
+            from scipy.misc import logsumexp
+            log_G = logsumexp(log_L)
+
+            # Compute log Pr(A_nn=1) given prior and estimate of log lkhd after integrating out W
+            log_lkhd_A = log_G
+            # Compute log Pr(A_nn = 0 | {s,c}) = log Pr({s,c} | A_nn = 0) + log Pr(A_nn = 0)
+            log_lkhd_noA = self._glm_ll_noA(n_pre, n_post, x, I_bias, I_stim, I_imp)
+
+            # Decide whether or not to accept
+            log_pr_accept = log_lkhd_A - log_lkhd_noA if prop_A else log_lkhd_noA - log_lkhd_A
+            if np.log(np.random.rand()) < log_pr_accept:
+                # Update A
+                A[n_pre, n_post] = prop_A
+
+                # Update W if there is an edge in A
+                if A[n_pre, n_post]:
+                    # Update W if there is an edge
+                    log_p_W = log_L - log_G
+                    # Compute the log CDF
+                    log_F_W = [logsumexp(log_p_W[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] + [0]
+                    # Sample via inverse CDF
+                    W[n_pre, n_post] = np.interp(np.log(np.random.rand()),
+                                                 log_F_W,
+                                             W_nns)
+
+        elif A[n_pre, n_post]:
+            assert A[n_pre, n_post] == A_init
+            # If we propose not to change A then we accept with probability 1, but we
+            # still need to update W
+            # Approximate G = \int_0^\infty p({s,c} | A, W) p(W_{n,n'}) dW_{n,n'}
+            log_L = np.zeros(self.DEG_GAUSS_HERMITE)
+            W_nns = np.sqrt(2) * sigma_w * self.GAUSS_HERMITE_ABSCISSAE + mu_w
+            for i in np.arange(self.DEG_GAUSS_HERMITE):
+                w = self.GAUSS_HERMITE_WEIGHTS[i]
+                W_nn = W_nns[i]
+                log_L[i] = np.log(w/np.sqrt(np.pi)) + \
+                           self._glm_ll_A(n_pre, n_post, W_nn,
+                                          x, I_bias, I_stim, I_imp)
+
+                # Handle NaNs in the GLM log likelihood
+                if np.isnan(log_L[i]):
+                    log_L[i] = -np.Inf
+
+            # compute log pr(A_nn) and log pr(\neg A_nn) via log G
+            from scipy.misc import logsumexp
+            log_G = logsumexp(log_L)
+
+            # Update W if there is an edge
             log_p_W = log_L - log_G
             # Compute the log CDF
             log_F_W = [logsumexp(log_p_W[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] + [0]
@@ -333,9 +541,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             W[n_pre, n_post] = np.interp(np.log(np.random.rand()),
                                          log_F_W,
                                          W_nns)
-        else:
-            # Sample W from the prior
-            W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
 
         # Set W in state dict x
         x['net']['weights']['W'] = W.ravel()
@@ -345,15 +550,18 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         """
         A = x['net']['graph']['A']
         N = A.shape[0]
-        I_bias, I_stim, I_imp = self._precompute_currents(x, n)
+        I_bias, I_stim, I_imp, p_A = self._precompute_vars(x, n)
 
         order = np.arange(N)
         np.random.shuffle(order)
         for n_pre in order:
             # print "Sampling %d->%d" % (n_pre, n_post)
-            self._collapsed_sample_AW(n_pre, n, x,
-                                      I_bias, I_stim, I_imp)
-
+            if self.propose_from_prior:
+                self._collapsed_sample_AW_with_prior(n_pre, n, x,
+                                                     I_bias, I_stim, I_imp, p_A)
+            else:
+                self._collapsed_sample_AW(n_pre, n, x,
+                                          I_bias, I_stim, I_imp, p_A)
         return x
 
 class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
@@ -523,6 +731,12 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
 
                 # Sample A[n_pre,n_post]
                 A[n_pre,n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+
+                if not np.isfinite(log_pr_noA) or not np.isfinite(log_pr_A):
+                    import pdb; pdb.set_trace()
+
+                if n_pre == n_post and not A[n_pre, n_post]:
+                    import pdb; pdb.set_trace()
 
     def _sample_column_of_W(self, n_post, x, I_bias, I_stim, I_imp):
         # Sample W if it exists

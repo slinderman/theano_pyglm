@@ -49,17 +49,20 @@ class ErdosRenyiGraphModel(Component):
         self.model = model
         self.prms = model['network']['graph']
         N = model['N']
+
         self.rho = self.prms['rho'] * np.ones((N, N))
 
         if 'rho_refractory' in self.prms:
             self.rho[np.diag_indices(N)] = self.prms['rho_refractory']
 
+        self.pA = theano.shared(value=self.rho, name='pA')
+
         # Define complete adjacency matrix
         self.A = T.bmatrix('A')
 
         # Define log probability
-        self.log_p = T.sum(self.A * np.log(np.minimum(0.999, self.rho)) +
-                           (1 - self.A) * np.log(np.maximum(0.001, 1.0 - self.rho)))
+        self.log_p = T.sum(self.A * np.log(np.minimum(1.0-1e-8, self.rho)) +
+                           (1 - self.A) * np.log(np.maximum(1e-8, 1.0 - self.rho)))
 
     def get_variables(self):
         """ Get the theano variables associated with this model.

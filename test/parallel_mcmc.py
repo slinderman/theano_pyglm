@@ -59,14 +59,16 @@ def run_synth_test():
     smpl_frac = 0.5
 
     # Only plot the impulse response matrix for small N
+    do_plot = data['N'] < 20
     do_plot_imp_responses = data['N'] < 30
 
-    plot_results(popn,
-                x_smpls[-1*int(smpl_frac*N_samples):],
-                popn_true,
-                x_true,
-                do_plot_imp_responses=do_plot_imp_responses,
-                resdir=options.resultsDir)
+    if do_plot:
+        plot_results(popn,
+                    x_smpls[-1*int(smpl_frac*N_samples):],
+                    popn_true,
+                    x_true,
+                    do_plot_imp_responses=do_plot_imp_responses,
+                    resdir=options.resultsDir)
 
 if __name__ == "__main__":
     run_synth_test()

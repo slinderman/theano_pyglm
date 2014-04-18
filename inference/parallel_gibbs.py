@@ -136,64 +136,13 @@ def parallel_gibbs_sample(client,
         global serial_updates
         global parallel_updates
         serial_updates, parallel_updates = initialize_updates(popn)
-        
-        # TODO: Remove this
-        #global net_sampler
-        #net_sampler = GibbsNetworkColumnUpdate()
-        #net_sampler.preprocess(popn)
-
-        #global glm_sampler
-        #glm_sampler = HmcGlmUpdate()
-        #glm_sampler.preprocess(popn)
 
         # Return the number of parallel_updates 
         return len(serial_updates), len(parallel_updates)
 
     n_serial_updates, n_parallel_updates = dview.apply(_create_samplers).get()[0]
 
-    # TODO: Remove this
-    # Create serial samplers for host
-    #@interactive
-    #def _create_serial_samplers():
-    #    global loc_sampler
-    #    loc_sampler = LatentDistanceNetworkUpdate()
-    #    loc_sampler.preprocess(popn)
-
-    #master.apply(_create_serial_samplers).get()
-
-    # Compute log prob, gradient, and hessian wrt network parameters
-    #dview.execute('net_inf_prms = prep_collapsed_network_inference(popn)',
-    #              block=True)
-    #
-    ## Compute gradients of the log prob wrt the GLM parameters
-    #dview.execute('glm_inf_prms = prep_glm_inference(popn)',
-    #              block=True)
-
-
     # Create map-able functions to sample in parallel
-    # Parallel function to sample network
-    @interactive
-    def _parallel_sample_network_col(n_post, x):
-        # TODO: Specify collapsed vs regular in options
-        #return collapsed_sample_network_column(n_post,
-        #                             x,
-        #                             net_inf_prms)
-        return net_sampler.update(x, n_post)
-
-    # TODO: Remove this
-    # Parallel function to sample GLMs
-    @interactive
-    def _parallel_sample_glm(n, x):
-        #nvars = popn.extract_vars(x, n)
-        #single_glm_gibbs_step(nvars, n, glm_inf_prms)
-        #return nvars['glm']
-        return glm_sampler.update(x, n)
-
-    # TODO: Remove this
-    @interactive
-    def _sample_distance_model(x):
-        return loc_sampler.update(x)
-    
     @interactive
     def _parallel_update(i, x, n):
         return parallel_updates[i].update(x, n)
@@ -209,6 +158,8 @@ def parallel_gibbs_sample(client,
     ## END DEBUG
 
     # Alternate fitting the network and fitting the GLMs
+    lp_smpls = np.zeros(N_samples+1)
+    lp_smpls[0] = parallel_compute_log_p(dview, master, x0, N)
     x_smpls = [x0]
     x = x0
 
@@ -221,6 +172,13 @@ def parallel_gibbs_sample(client,
                                     master,
                                     x,
                                     N)
+        lp_smpls[smpl+1] = lp
+
+        # DEBUG: Look for sharp drops in LP
+        if lp - lp_smpls[smpl] > 500:
+            import pdb; pdb.set_trace()
+        # END DEBUG
+
         # Compute iters per second
         stop_time = time.clock()
         if stop_time - start_time == 0:
@@ -236,27 +194,6 @@ def parallel_gibbs_sample(client,
             periodically_save_results(x_smpls, smpl+1-save_interval, smpl+1, results_dir)
 
         # Go through variables, sampling one at a time, in parallel where possible
-        
-        # TODO: Remove this
-        # Sample the network
-        #x_net = dview.map_async(_parallel_sample_network_col,
-        #                        range(N),
-        #                        [x]*N)
-        #interval = 0.1
-        #wait_watching_stdout(x_net, interval=interval)
-        #
-        # Incorporate the results back into a single network
-        #x_net_res = x_net.get()
-        #concatenate_network_results(x_net_res, x, N)
-
-        # Sample the GLM parameters
-        #x_glms = dview.map_async(_parallel_sample_glm,
-        #                         range(N),
-        #                         [x]*N)
-        #wait_watching_stdout(x_glms, interval=interval)
-        #
-        #x['glms'] = x_glms.get()
-    
         interval = 0.1
         for i in range(n_parallel_updates):
             xs = dview.map_async(_parallel_update,
@@ -268,13 +205,12 @@ def parallel_gibbs_sample(client,
             
             concatenate_parallel_updates(xs.get(), x)
 
-        # Sample network hyperparameters
-        #x = master.apply(_sample_distance_model, x).get()
-
         # Sample serial updates
         for i in range(n_serial_updates):
             x = master.apply(_serial_update, i, x).get()
-        
+
+        # DEBUG
+        print "Num changes in A: %d" % np.abs(x['net']['graph']['A']-x_smpls[-1]['net']['graph']['A'])
         x_smpls.append(copy.deepcopy(x))
 
     ## DEBUG Profile the Gibbs sampling loop
@@ -282,7 +218,7 @@ def parallel_gibbs_sample(client,
     # s = StringIO.StringIO()
     # sortby = 'cumulative'
     # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    # ps.print_stats()
+    # ps.print_stats()p
     #
     # with open('mcmc.prof.txt', 'w') as f:
     #     f.write(s.getvalue())
