@@ -220,7 +220,7 @@ def run_synth_test():
         popn.set_data(data)
 
         # Perform inference
-        N_samples = 200
+        N_samples = 1000
         x_smpls = geweke_test(popn, data, N_samples=N_samples)
 
         # Save results

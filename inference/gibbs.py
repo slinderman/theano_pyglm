@@ -168,7 +168,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         self.propose_from_prior = False
 
         # Define constants for Sampling
-        self.DEG_GAUSS_HERMITE = 20
+        self.DEG_GAUSS_HERMITE = 100
         self.GAUSS_HERMITE_ABSCISSAE, self.GAUSS_HERMITE_WEIGHTS = \
             np.polynomial.hermite.hermgauss(self.DEG_GAUSS_HERMITE)
 
@@ -328,8 +328,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                                       x, I_bias, I_stim, I_imp)
 
             # Handle NaNs in the GLM log likelihood
-            if np.isnan(weighted_log_L[i]):
-                weighted_log_L[i] = -np.Inf
+            if np.isnan(log_L[i]):
+                log_L[i] = -np.Inf
 
             weighted_log_L[i] = log_L[i] + np.log(w/np.sqrt(np.pi))
 
@@ -364,42 +364,23 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # Sample W from its posterior, i.e. log_L with denominator log_G
         # If A_nn = 0, we don't actually need to resample W since it has no effect
         if A[n_pre,n_post] == 1:
-            W_centers = np.concatenate(([mu_w-6.0*sigma_w],
-                                        (W_nns[1:]+W_nns[:-1])/2.0,
-                                        [mu_w+6.0*sigma_w]))
-            W_bin_sizes = W_nns[1:]-W_nns[:-1]
-
             log_prior_W = -0.5/sigma_w**2 * (W_nns-mu_w)**2
             log_posterior_W = log_prior_W + log_L
             log_p_W = log_posterior_W - logsumexp(log_posterior_W)
+            p_W = np.exp(log_p_W)
 
-            # Approximate the posterior at the W_centers by averaging
-            log_posterior_avg = np.array([logsumexp(log_posterior_W[i:i+2]) for \
-                                          i in range(self.DEG_GAUSS_HERMITE-1)]) \
-                                - np.log(2.0)
+            from scipy.integrate import cumtrapz
+            F_W = cumtrapz(p_W, W_nns, initial=0.0)
+            F_W = F_W / F_W[-1]
 
-            log_posterior_mass = log_posterior_avg + np.log(W_bin_sizes)
+            # Sample W_rv
+            W[n_pre, n_post] = np.interp(np.random.rand(),
+                                         F_W,
+                                         W_nns)
 
-            # Normalize the posterior mass
-            log_posterior_mass -= logsumexp(log_posterior_mass)
-
-            # Compute the log CDF
-            log_F_W = np.array([-np.Inf] +
-                               [logsumexp(log_posterior_mass[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] +
-                               [0.0])
-
-            # Compute the log CDF
-            # log_F_W = np.array([logsumexp(log_p_W[:i]) for i in range(1,self.DEG_GAUSS_HERMITE)] + [0])
-
-            # Sample via inverse CDF. Since log is concave, this overestimates.
-            W[n_pre, n_post] = np.interp(np.log(np.random.rand()),
-                                         log_F_W,
-                                         W_centers)
-
-            assert np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp))
-
-            # if n_pre==n_post:
-            #     import pdb; pdb.set_trace()
+            if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
+                import pdb; pdb.set_trace()
+                raise Exception("Invalid weight sample")
         else:
             # Sample W from the prior
             W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
