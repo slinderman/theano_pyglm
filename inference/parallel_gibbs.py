@@ -7,6 +7,10 @@ import numpy as np
 from IPython.parallel.util import interactive
 from utils.progress_report import wait_watching_stdout
 
+from utils.parallel_util import parallel_compute_ll, \
+                                parallel_compute_log_p, \
+                                parallel_compute_log_prior
+
 def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
     """
@@ -15,54 +19,6 @@ def initialize_imports(dview):
     dview.execute('from inference.gibbs import *')
     dview.execute('from log_sum_exp import log_sum_exp_sample')
     dview.execute('from hmc import hmc')
-
-
-def parallel_compute_log_p(dview,
-                           master,
-                           v,
-                           N):
-    """ Compute the log prob in parallel
-    """
-
-    # Compute the log probabaility of global variables
-    # (e.g. the network) on the first node
-    lp_tot = 0
-
-    @interactive
-    def _compute_network_lp(vs):
-        print "Computing log prob for network"
-        syms = popn.get_variables()
-        nvars = popn.extract_vars(vs,0)
-        lp = seval(popn.network.log_p,
-                   syms,
-                   nvars)
-        #lp = popn.network.log_p.eval(dict(zip(_flatten(tmpsyms),
-                                     #        _flatten(tmpnvars))),
-                                     #on_unused_input='ignore')
-        return lp
-
-    lp_tot += master.apply_sync(_compute_network_lp, v)
-
-    # Decorate with @interactive to ensure that the function runs
-    # in the __main__ namespace that contains 'popn'
-    @interactive
-    def _compute_glm_lp(n, vs):
-        print "Computing lp for GLM %d" % n
-        syms = popn.get_variables()
-        nvars = popn.extract_vars(vs, n)
-        lp = seval(popn.glm.log_p,
-                   syms,
-                   nvars)
-        return lp
-
-    lp_glms = dview.map_async(_compute_glm_lp,
-                              range(N),
-                              [v]*N)
-    # print lp_glms.get()
-    # lp_glms.display_outputs()
-
-    lp_tot += sum(lp_glms.get())
-    return lp_tot
 
 def concatenate_parallel_updates(xs, x):
     # Concatenate results into x
@@ -114,7 +70,8 @@ def parallel_gibbs_sample(client,
                           x0=None,
                           init_from_mle=True,
                           save_interval=-1,
-                          results_dir='.'):
+                          results_dir='.',
+                          callback=None):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -160,6 +117,12 @@ def parallel_gibbs_sample(client,
     # Alternate fitting the network and fitting the GLMs
     lp_smpls = np.zeros(N_samples+1)
     lp_smpls[0] = parallel_compute_log_p(dview, master, x0, N)
+
+    ll_smpls = np.zeros(N_samples+1)
+    ll_smpls[0] = parallel_compute_ll(dview, x0, N)
+
+    lprior = parallel_compute_log_prior(dview, master, x0, N)
+
     x_smpls = [x0]
     x = x0
 
@@ -168,25 +131,27 @@ def parallel_gibbs_sample(client,
 
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
+        ll = parallel_compute_ll(dview, x0, N)
         lp = parallel_compute_log_p(dview,
                                     master,
                                     x,
                                     N)
+        ll_smpls[smpl+1] = ll
         lp_smpls[smpl+1] = lp
 
         # DEBUG: Look for sharp drops in LP
-        if lp - lp_smpls[smpl] > 500:
-            import pdb; pdb.set_trace()
+        # if lp - lp_smpls[smpl] < -25:
+        #     import pdb; pdb.set_trace()
         # END DEBUG
 
         # Compute iters per second
         stop_time = time.clock()
         if stop_time - start_time == 0:
-            print "Gibbs iteration %d. Iter/s exceeds time resolution. Log prob: %.3f" % (smpl, lp)
+            print "Gibbs iteration %d. Iter/s exceeds time resolution. LL: %.3f   Log prob: %.3f" % (smpl, ll, lp)
         else:
-            print "Gibbs iteration %d. Iter/s = %f. Log prob: %.3f" % (smpl,
+            print "Gibbs iteration %d. Iter/s = %f. LL: %.3f  Log prob: %.3f" % (smpl,
                                                                        1.0/(stop_time-start_time),
-                                                                       lp)
+                                                                       ll, lp)
         start_time = stop_time
 
         # Periodically save results
@@ -209,8 +174,15 @@ def parallel_gibbs_sample(client,
         for i in range(n_serial_updates):
             x = master.apply(_serial_update, i, x).get()
 
+        # Call the callback with the current sample
+        if callback is not None:
+            try:
+                callback(x)
+            except:
+                print "Callback failed"
+
         # DEBUG
-        print "Num changes in A: %d" % np.abs(x['net']['graph']['A']-x_smpls[-1]['net']['graph']['A'])
+        #print "Num changes in A: %d" % np.abs(x['net']['graph']['A']-x_smpls[-1]['net']['graph']['A'])
         x_smpls.append(copy.deepcopy(x))
 
     ## DEBUG Profile the Gibbs sampling loop

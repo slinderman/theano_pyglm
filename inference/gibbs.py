@@ -168,7 +168,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         self.propose_from_prior = False
 
         # Define constants for Sampling
-        self.DEG_GAUSS_HERMITE = 100
+        self.DEG_GAUSS_HERMITE = 20
         self.GAUSS_HERMITE_ABSCISSAE, self.GAUSS_HERMITE_WEIGHTS = \
             np.polynomial.hermite.hermgauss(self.DEG_GAUSS_HERMITE)
 
@@ -215,20 +215,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                     x['net'])
 
         return I_bias, I_stim, I_imp, p_A
-
-    def _lp_A(self, n_pre, n_post, v, x):
-        """ Compute the log probability for a given entry A[n_pre,n_post]
-        """
-
-        # Update A[n_pre, n_post]
-        A = x['net']['graph']['A']
-        A[n_pre, n_post] = v
-
-        # Get the prior probability of A
-        lp = seval(self.network.log_p,
-                   self.syms['net'],
-                   x['net'])
-        return lp
 
     def _glm_ll_A(self, n_pre, n_post, w, x, I_bias, I_stim, I_imp):
         """ Compute the log likelihood of the GLM with A=True and given W
@@ -310,6 +296,23 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             mu_w = self.mu_w
             sigma_w = self.sigma_w
 
+        # # DEBUG See how much the lp changes
+        # def _compute_lp():
+        #     if x['net']['graph']['A'][n_pre, n_post]:
+        #         w = x['net']['weights']['W'].reshape(p_A.shape)[n_pre,n_post]
+        #         lp = self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp)
+        #         lp += np.log(p_A[n_pre, n_post])
+        #     else:
+        #         lp = self._glm_ll_noA(n_pre, n_post, x, I_bias, I_stim, I_imp)
+        #         lp += np.log(1.0 - p_A[n_pre, n_post])
+        #     return lp
+        #
+        # A_before = x['net']['graph']['A'][n_pre, n_post]
+        # W_before = x['net']['weights']['W'].reshape(p_A.shape)[n_pre, n_post]
+        # lp_before = _compute_lp()
+        # print "LP before: %.3f" % lp_before
+        # # END DEBUG
+
         A = x['net']['graph']['A']
         W = x['net']['weights']['W'].reshape(A.shape)
 
@@ -350,6 +353,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                      self._glm_ll_noA(n_pre, n_post, x,
                                       I_bias, I_stim, I_imp)
         if np.isnan(log_pr_noA):
+            import pdb; pdb.set_trace()
             log_pr_noA = -np.Inf
 
         # Sample A
@@ -367,63 +371,65 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             log_prior_W = -0.5/sigma_w**2 * (W_nns-mu_w)**2
             log_posterior_W = log_prior_W + log_L
             log_p_W = log_posterior_W - logsumexp(log_posterior_W)
-            p_W = np.exp(log_p_W)
+
+            # Interpolate the log posterior at a dense grid of points
+            valid_ws = np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)]
+            # iwmin = np.amin(np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)])
+            # iwmax = np.amax(np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)])
+            iwmin = valid_ws[0]
+            iwmax = valid_ws[-1]
+            ws = np.linspace(W_nns[iwmin], W_nns[iwmax],1000)
+            log_p_ws = np.interp(ws, W_nns, log_posterior_W)
+            log_p_ws -= logsumexp(log_p_ws)
+
+            # p_W = np.exp(log_p_W)
+            #
+            # from scipy.integrate import cumtrapz
+            # F_W = cumtrapz(p_W, W_nns, initial=0.0)
+            # F_W = F_W / F_W[-1]
+            #
+            # # Sample W_rv
+            # v = np.random.rand()
+            # W[n_pre, n_post] = np.interp(v,
+            #                              F_W,
+            #                              W_nns)
+
+            p_W = np.exp(log_p_ws)
 
             from scipy.integrate import cumtrapz
-            F_W = cumtrapz(p_W, W_nns, initial=0.0)
+            F_W = cumtrapz(p_W, ws, initial=0.0)
             F_W = F_W / F_W[-1]
 
             # Sample W_rv
-            W[n_pre, n_post] = np.interp(np.random.rand(),
+            v = np.random.rand()
+            W[n_pre, n_post] = np.interp(v,
                                          F_W,
-                                         W_nns)
+                                         ws)
 
             if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
                 import pdb; pdb.set_trace()
                 raise Exception("Invalid weight sample")
+
+            # print "p_W: %.3f (v=%.3f)" % (np.interp(W[n_pre, n_post], ws, p_W) ,v)
         else:
             # Sample W from the prior
             W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
 
+        # # DEBUG
+        # A_after = x['net']['graph']['A'][n_pre, n_post]
+        # W_after = x['net']['weights']['W'].reshape(p_A.shape)[n_pre, n_post]
+        # lp_after = _compute_lp()
+        # print "LP after: %.2f" % lp_after
+        #
+        # if lp_before - lp_after > 10:
+        #     print "ERROR: LP decreased by exp(10)!"
+        #     print "A: %d->%d" % (A_before, A_after)
+        #     print "W: %.2f->%.2f" % (W_before, W_after)
+        #     import pdb; pdb.set_trace()
+        # # END DEBUG
+
         # Set W in state dict x
         x['net']['weights']['W'] = W.ravel()
-
-    def _slice_sample_W(self, n_pre, n_post, x, W_nns, lp_W_nns, I_bias, I_stim, I_imp):
-        """
-        Use slice sampling to choose the next W
-        """
-        # Set sigma_w and mu_w
-        if n_pre == n_post:
-            mu_w = self.mu_w_ref
-            sigma_w = self.sigma_w_ref
-        else:
-            mu_w = self.mu_w
-            sigma_w = self.sigma_w
-
-        lp_fn = lambda w: self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp) \
-                          -0.5/sigma_w**2 * (w-mu_w)**2
-
-        # Randomly choose a height in [0, p(curr_W)]
-        A = x['net']['graph']['A']
-        W = x['net']['weights']['W'].reshape(A.shape)
-        W_curr = W[n_pre, n_post]
-        lp_curr = lp_fn(W_curr)
-        h = lp_curr + np.log(np.random.rand())
-
-        # Find W_nns with lp > h
-        valid_W_nns = W_nns[lp_W_nns>h]
-        if len(valid_W_nns) > 0:
-            lb = np.amin(valid_W_nns)
-            lb = np.minimum(lb, W_curr)
-            ub = np.amax(valid_W_nns)
-            ub = np.maximum(ub, W_curr)
-        else:
-            lb = None
-            ub = None
-
-        from inference.slicesample import slicesample
-        W_next, _ = slicesample(W_curr.reshape((1,)), lp_fn, last_llh=lp_curr, step=sigma_w/10.0, x_l=lb, x_r=ub)
-        return W_next[0]
 
     def _collapsed_sample_AW_with_prior(self, n_pre, n_post, x,
                                         I_bias, I_stim, I_imp, p_A):
@@ -536,13 +542,14 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         order = np.arange(N)
         np.random.shuffle(order)
         for n_pre in order:
-            # print "Sampling %d->%d" % (n_pre, n_post)
+            # print "Sampling %d->%d" % (n_pre, n)
             if self.propose_from_prior:
                 self._collapsed_sample_AW_with_prior(n_pre, n, x,
                                                      I_bias, I_stim, I_imp, p_A)
             else:
                 self._collapsed_sample_AW(n_pre, n, x,
                                           I_bias, I_stim, I_imp, p_A)
+
         return x
 
 class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):

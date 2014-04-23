@@ -198,6 +198,20 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
         ax.plot(bincenters, y, 'r--', linewidth=1)
     f.savefig(os.path.join(resdir,'geweke_bias.pdf'))
 
+    # Plot the gamma distributed latent vars of the normalized impulse resp
+    gs0 = [[np.exp(x['glms'][n]['imp']['w_lng'][0]) for n in range(N)] for x in x_smpls]
+    gs0 = np.array(gs0)
+    f = plt.figure()
+    for n in range(N):
+        ax = f.add_subplot(1,N,1+n)
+        c, bins, patches = ax.hist(gs0[:,n], 20, normed=1)
+        bincenters = 0.5*(bins[1:]+bins[:-1])
+
+        from scipy.stats import gamma
+        y = gamma(model['impulse']['alpha']).pdf(bincenters)
+        ax.plot(bincenters, y, 'r--', linewidth=1)
+    f.savefig(os.path.join(resdir,'geweke_g.pdf'))
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MCMC inference

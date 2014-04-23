@@ -521,6 +521,20 @@ def plot_results(population,
         f.savefig(os.path.join(resdir, 'log_lkhd.pdf'))
         plt.close(f)
 
+        if 'logprior' in s_inf[0]:
+            f = plt.figure()
+            plot_log_prob(s_inf, key='logprior', s_true=s_true, color='r')
+            plt.ylabel('Log prior')
+            f.savefig(os.path.join(resdir, 'log_prior.pdf'))
+            plt.close(f)
+
+        if 'predll' in x_inf[0]:
+            f = plt.figure()
+            plot_log_prob(x_inf, key='predll', s_true=x_true, color='r')
+            plt.ylabel('Pred. Log Likelihood')
+            f.savefig(os.path.join(resdir, 'pred_ll.pdf'))
+            plt.close(f)
+
     print "Plots can be found in directory: %s" % resdir
 
 def parse_cmd_line_args():

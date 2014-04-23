@@ -3,12 +3,13 @@ import cPickle
 import numpy as np
 import copy
 import os
+import time
 
 from inference.parallel_coord_descent import parallel_coord_descent
-from parallel_harness import initialize_parallel_test_harness, \
-                             set_data_on_engines, \
-                             set_hyperparameters_on_engines, \
-                             parallel_compute_ll
+from parallel_harness import initialize_parallel_test_harness
+from utils.parallel_util import set_data_on_engines, \
+                                set_hyperparameters_on_engines, \
+                                parallel_compute_ll
 from plotting.plot_results import plot_results
 from models.model_factory import make_model
 from synth_harness import get_xv_models
@@ -40,7 +41,9 @@ def run_parallel_map():
     best_x = x0
     best_model = None
 
-    use_existing = True
+    use_existing = False
+
+    start_time = time.clock()
 
     # Fit each model using the optimum of the previous models
     train_lls = np.zeros(len(models))
@@ -116,15 +119,21 @@ def run_parallel_map():
     print "True LL: %f" % popn_true.compute_ll(x_true)
 
 
+    stop_time = time.clock()
+
     # Save results
     with open(os.path.join(options.resultsDir, 'results.pkl'),'w') as f:
         cPickle.dump(best_x, f, protocol=-1)
 
+    # Save runtime
+    with open(os.path.join(options.resultsDir, 'runtime.pkl'),'w') as f:
+        cPickle.dump(stop_time-start_time, f, protocol=-1)
+
     # Plot results
-    plot_results(popn, best_x,
-                 popn_true, x_true,
-                 do_plot_imp_responses=(model['N']<64),
-                 resdir=options.resultsDir)
+    # plot_results(popn, best_x,
+    #              popn_true, x_true,
+    #              do_plot_imp_responses=(model['N']<64),
+    #              resdir=options.resultsDir)
 
 if __name__ == "__main__":
     run_parallel_map()

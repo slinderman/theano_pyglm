@@ -55,7 +55,7 @@ StandardGlm = \
                     'type' : 'group_lasso',
                     # 'type' : 'gaussian',
                     'mu' : 0.0,
-                    'sigma' : 5.0,
+                    'sigma' : 10.0,
                     'lam' : 1.0
                 },
             'basis' :

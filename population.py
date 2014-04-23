@@ -34,6 +34,28 @@ class Population:
         lp = 0.0
 
         # Get set of symbolic variables
+        # syms = self.get_variables()
+        #
+        # lp += seval(self.network.log_p,
+        #             syms['net'],
+        #             vars['net'])
+        # for n in range(self.N):
+        #     nvars = self.extract_vars(vars, n)
+        #     lp += seval(self.glm.log_p,
+        #                 syms,
+        #                 nvars)
+
+        lp += self.compute_ll(vars)
+        lp += self.compute_log_prior(vars)
+
+        return lp
+
+    def compute_log_prior(self, vars):
+        """ Compute the log joint probability under a given set of variables
+        """
+        lp = 0.0
+
+        # Get set of symbolic variables
         syms = self.get_variables()
 
         lp += seval(self.network.log_p,
@@ -41,7 +63,7 @@ class Population:
                     vars['net'])
         for n in range(self.N):
             nvars = self.extract_vars(vars, n)
-            lp += seval(self.glm.log_p,
+            lp += seval(self.glm.log_prior,
                         syms,
                         nvars)
 
@@ -86,8 +108,10 @@ class Population:
         state['glms'] = glm_states
 
         # Finally, evaluate the log probability and the log likelihood
-        state['logp'] = self.compute_log_p(vars)
+        # state['logp'] = self.compute_log_p(vars)
+        state['logprior'] = self.compute_log_prior(vars)
         state['ll'] = self.compute_ll(vars)
+        state['logp'] = state['ll'] + state['logprior']
         return state
 
     def _eval_state_helper(self, syms, d, vars):

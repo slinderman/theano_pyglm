@@ -57,7 +57,8 @@ class Glm:
         lp_bkgd = self.bkgd_model.log_p
         lp_imp = self.imp_model.log_p
         lp_nlin = self.nlin_model.log_p
-        self.log_p = self.ll + lp_bias + lp_bkgd + lp_imp + lp_nlin
+        self.log_prior = lp_bias + lp_bkgd + lp_imp + lp_nlin
+        self.log_p = self.ll + self.log_prior
 
 
     def get_variables(self):

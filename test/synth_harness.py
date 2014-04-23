@@ -75,7 +75,7 @@ def get_xv_models(model):
     #         ('network', 'weight', 'sigma') : (0.05, 0.5, 1.0, 2.0),
     #         ('network', 'weight', 'sigma_refractory') : (0.05, 0.5, 1.0, 2.0)}
 
-    prms = {('impulse', 'prior', 'lam') : (0.5, 1.0, 2.0, 5.0, 10.0, 15.0)}
+    prms = {('impulse', 'prior', 'lam') : (0.5, 1.0, 2.0, 3.0, 5.0, 7.5, 10.0)}
     # prms = {('impulse', 'prior', 'lam') : (15.0, 10.0, 5.0, 2.0, 1.0, 0.5)}
 
     # Only keep those settings which exist in the model

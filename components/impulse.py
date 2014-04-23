@@ -169,10 +169,13 @@ class NormalizedBasisImpulses(Component):
         # all time points
         self.I_imp = T.sum(self.ir*self.w_ir3, axis=2)
 
-        # Log probability
-        self.log_p = -self.B*self.N*scipy.special.gammaln(self.alpha) + \
-                      T.sum((self.alpha-1.0)*self.g) + \
-                      T.sum(-1.0*self.g)
+        # Log probability of a set of independent log-gamma r.v.'s
+        # This is log p(log(g)) under the prior. Since we are taking the
+        # log, we multiply by a factor of g to ensure normalization and
+        # thus the \alpha-1 in the exponent becomes \alpha
+        self.log_p = -self.B*self.N*scipy.special.gammaln(self.alpha) \
+                     + T.sum(self.alpha*self.lng) \
+                     - T.sum(self.g)
 
         # Define a helper variable for the impulse response
         # after projecting onto the basis
