@@ -29,15 +29,15 @@ def hmc(U,
     # Start at current state
     q = np.copy(q_curr)
     # Moment is simplest for a normal rv
-    p = 0.25 * np.random.randn(np.size(q))
-    p_curr = p
+    p = np.random.randn(np.size(q))
+    p_curr = np.copy(p)
     
     # Evaluate potential and kinetic energies at start of trajectory
     U_curr = U(q_curr)
-    K_curr = np.sum(p_curr**2)/2
+    K_curr = np.sum(p_curr**2)/2.0
     
     # Make a half step in the momentum variable
-    p -= step_sz*grad_U(q)/2
+    p -= step_sz*grad_U(q)/2.0
     
     # Alternate L full steps for position and momentum
     for i in np.arange(n_steps):
@@ -47,14 +47,14 @@ def hmc(U,
         if i < n_steps-1:
             p -= step_sz*grad_U(q)
         else:
-            p -= step_sz*grad_U(q)/2
+            p -= step_sz*grad_U(q)/2.0
     
     # Negate the momentum at the end of the trajectory to make proposal symmetric?
     p = -p
     
     # Evaluate potential and kinetic energies at end of trajectory
     U_prop = U(q)
-    K_prop = np.sum(p**2)/2
+    K_prop = np.sum(p**2)/2.0
     
     # Accept or reject new state with probability proportional to change in energy.
     # Ideally this will be nearly 0, but forward Euler integration introduced errors.

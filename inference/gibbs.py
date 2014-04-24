@@ -4,6 +4,9 @@
 
 import copy
 
+from scipy.misc import logsumexp
+from scipy.integrate import cumtrapz
+
 from utils.theano_func_wrapper import seval, _flatten
 from utils.packvec import *
 from utils.grads import *
@@ -156,6 +159,311 @@ class HmcGlmUpdate(ParallelMetropolisHastingsUpdate):
         return x
 
 
+class HmcBiasUpdate(ParallelMetropolisHastingsUpdate):
+    """
+    Update the continuous and unconstrained bias parameters using Hamiltonian
+    Monte Carlo. Stochastically follow the gradient of the parameters using
+    Hamiltonian dynamics.
+    """
+    def __init__(self):
+        super(HmcBiasUpdate, self).__init__()
+
+        self.n_steps = 10
+        self.avg_accept_rate = 0.9
+        self.step_sz = 0.1
+
+    def preprocess(self, population):
+        """ Initialize functions that compute the gradient and Hessian of
+            the log probability with respect to the differentiable GLM
+            parameters, e.g. the weight matrix if it exists.
+        """
+        self.population = population
+        self.glm = population.glm
+        self.syms = population.get_variables()
+        self.bias_syms = differentiable(self.syms['glm']['bias'])
+
+        # Compute gradients of the log prob wrt the GLM parameters
+        self.glm_logp = self.glm.log_p
+        self.g_glm_logp_wrt_bias, _ = grad_wrt_list(self.glm_logp,
+                                                   _flatten(self.bias_syms))
+
+        # Get the shape of the parameters from a sample of variables
+        self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm']['bias'],
+                                     self.bias_syms)
+
+    def _glm_logp(self, x_vec, x_all):
+        """
+        Compute the log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_bias = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.bias_syms, x_all['glm']['bias'], x_bias)
+        lp = seval(self.glm_logp,
+                   self.syms,
+                   x_all)
+        return lp
+
+    def _grad_glm_logp(self, x_vec, x_all):
+        """
+        Compute the negative log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_bias = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.bias_syms, x_all['glm']['bias'], x_bias)
+        glp = seval(self.g_glm_logp_wrt_bias,
+                    self.syms,
+                    x_all)
+        return glp
+
+    def update(self, x, n):
+        """ Gibbs sample the GLM parameters. These are mostly differentiable
+            so we use HMC wherever possible.
+        """
+
+        xn = self.population.extract_vars(x, n)
+
+        # Get the differentiable variables suitable for HMC
+        dxn = get_vars(self.bias_syms, xn['glm']['bias'])
+        x_glm_0, shapes = packdict(dxn)
+
+        # Create lambda functions to compute the nll and its gradient
+        nll = lambda x_glm_vec: -1.0 * self._glm_logp(x_glm_vec, xn)
+        grad_nll = lambda x_glm_vec: -1.0 * self._grad_glm_logp(x_glm_vec, xn)
+
+        # HMC with automatic parameter tuning
+        x_bias, new_step_sz, new_accept_rate = hmc(nll,
+                                                  grad_nll,
+                                                  self.step_sz,
+                                                  self.n_steps,
+                                                  x_glm_0,
+                                                  adaptive_step_sz=True,
+                                                  avg_accept_rate=self.avg_accept_rate)
+
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+        # x_bias = hmc(nll,
+        #              grad_nll,
+        #              self.step_sz,
+        #              self.n_steps,
+        #              x_glm_0)
+
+        # Unpack the optimized parameters back into the state dict
+        x_bias_n = unpackdict(x_bias, shapes)
+        set_vars(self.bias_syms, xn['glm']['bias'], x_bias_n)
+        x['glms'][n] = xn['glm']
+        return x
+
+
+class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
+    """
+    Update the continuous and unconstrained bkgd parameters using Hamiltonian
+    Monte Carlo. Stochastically follow the gradient of the parameters using
+    Hamiltonian dynamics.
+    """
+    def __init__(self):
+        super(HmcImpulseUpdate, self).__init__()
+
+        self.n_steps = 2
+        self.avg_accept_rate = 0.9
+        self.step_sz = 0.1
+
+    def preprocess(self, population):
+        """ Initialize functions that compute the gradient and Hessian of
+            the log probability with respect to the differentiable GLM
+            parameters, e.g. the weight matrix if it exists.
+        """
+        self.population = population
+        self.glm = population.glm
+        self.syms = population.get_variables()
+        self.bkgd_syms = differentiable(self.syms['glm']['bkgd'])
+
+        # Compute gradients of the log prob wrt the GLM parameters
+        self.glm_logp = self.glm.log_p
+        self.g_glm_logp_wrt_bkgd, _ = grad_wrt_list(self.glm_logp,
+                                                   _flatten(self.bkgd_syms))
+
+        # Get the shape of the parameters from a sample of variables
+        self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm']['bkgd'],
+                                     self.bkgd_syms)
+
+    def _glm_logp(self, x_vec, x_all):
+        """
+        Compute the log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_imp = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.bkgd_syms, x_all['glm']['bkgd'], x_imp)
+        lp = seval(self.glm_logp,
+                   self.syms,
+                   x_all)
+        return lp
+
+    def _grad_glm_logp(self, x_vec, x_all):
+        """
+        Compute the negative log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_imp = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.bkgd_syms, x_all['glm']['bkgd'], x_imp)
+        glp = seval(self.g_glm_logp_wrt_bkgd,
+                    self.syms,
+                    x_all)
+        return glp
+
+    def update(self, x, n):
+        """ Gibbs sample the GLM parameters. These are mostly differentiable
+            so we use HMC wherever possible.
+        """
+
+        xn = self.population.extract_vars(x, n)
+
+        # Get the differentiable variables suitable for HMC
+        dxn = get_vars(self.bkgd_syms, xn['glm']['bkgd'])
+        x_glm_0, shapes = packdict(dxn)
+
+        # Create lambda functions to compute the nll and its gradient
+        nll = lambda x_glm_vec: -1.0*self._glm_logp(x_glm_vec, xn)
+        grad_nll = lambda x_glm_vec: -1.0*self._grad_glm_logp(x_glm_vec, xn)
+
+        # HMC with automatic parameter tuning
+        x_imp, new_step_sz, new_accept_rate = hmc(nll,
+                                                  grad_nll,
+                                                  self.step_sz,
+                                                  self.n_steps,
+                                                  x_glm_0,
+                                                  adaptive_step_sz=True,
+                                                  avg_accept_rate=self.avg_accept_rate)
+
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+
+
+        # Unpack the optimized parameters back into the state dict
+        x_imp_n = unpackdict(x_imp, shapes)
+        set_vars(self.bkgd_syms, xn['glm']['bkgd'], x_imp_n)
+
+
+        x['glms'][n] = xn['glm']
+        return x
+
+
+class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
+    """
+    Update the continuous and unconstrained bias parameters using Hamiltonian
+    Monte Carlo. Stochastically follow the gradient of the parameters using
+    Hamiltonian dynamics.
+    """
+    def __init__(self):
+        super(HmcImpulseUpdate, self).__init__()
+
+        self.avg_accept_rate = 0.9
+        self.step_sz = 0.1
+
+    def preprocess(self, population):
+        """ Initialize functions that compute the gradient and Hessian of
+            the log probability with respect to the differentiable GLM
+            parameters, e.g. the weight matrix if it exists.
+        """
+        self.population = population
+        self.glm = population.glm
+        self.syms = population.get_variables()
+        self.impulse_syms = differentiable(self.syms['glm']['imp'])
+
+        # Compute gradients of the log prob wrt the GLM parameters
+        self.glm_logp = self.glm.log_p
+        self.g_glm_logp_wrt_imp, _ = grad_wrt_list(self.glm_logp,
+                                                   _flatten(self.impulse_syms))
+
+        # Get the shape of the parameters from a sample of variables
+        self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm']['imp'],
+                                     self.impulse_syms)
+
+    def _glm_logp(self, x_vec, x_all):
+        """
+        Compute the log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_imp = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
+        lp = seval(self.glm_logp,
+                   self.syms,
+                   x_all)
+        return lp
+
+    def _grad_glm_logp(self, x_vec, x_all):
+        """
+        Compute the negative log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_imp = unpackdict(x_vec, self.glm_shapes)
+        set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
+        glp = seval(self.g_glm_logp_wrt_imp,
+                    self.syms,
+                    x_all)
+        return glp
+
+    def update(self, x, n):
+        """ Gibbs sample the GLM parameters. These are mostly differentiable
+            so we use HMC wherever possible.
+        """
+
+        xn = self.population.extract_vars(x, n)
+
+        # Get the differentiable variables suitable for HMC
+        dxn = get_vars(self.impulse_syms, xn['glm']['imp'])
+        x_glm_0, shapes = packdict(dxn)
+
+        # Create lambda functions to compute the nll and its gradient
+        nll = lambda x_glm_vec: -1.0*self._glm_logp(x_glm_vec, xn)
+        grad_nll = lambda x_glm_vec: -1.0*self._grad_glm_logp(x_glm_vec, xn)
+
+        # HMC with automatic parameter tuning
+        n_steps = 2
+        x_imp, new_step_sz, new_accept_rate = hmc(nll,
+                                                  grad_nll,
+                                                  self.step_sz,
+                                                  n_steps,
+                                                  x_glm_0,
+                                                  adaptive_step_sz=True,
+                                                  avg_accept_rate=self.avg_accept_rate)
+
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+
+
+        # Unpack the optimized parameters back into the state dict
+        x_imp_n = unpackdict(x_imp, shapes)
+        set_vars(self.impulse_syms, xn['glm']['imp'], x_imp_n)
+
+
+        x['glms'][n] = xn['glm']
+        return x
+
+
 class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
 
     def __init__(self):
@@ -230,23 +538,25 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         W[n_pre, n_post] = w
 
         # Get the likelihood of the GLM under A and W
-        s = [self.network.graph.A] + \
-             _flatten(self.syms['net']['weights']) + \
-            [self.glm.n,
-             self.glm.bias_model.I_bias,
-             self.glm.bkgd_model.I_stim,
-             self.glm.imp_model.I_imp] + \
-            _flatten(self.syms['glm']['nlin'])
+        s = {'A' : self.network.graph.A,
+             'W' : self.syms['net']['weights']['W'],
+             'n' :self.glm.n,
+             'I_bias' : self.glm.bias_model.I_bias,
+             'I_stim' : self.glm.bkgd_model.I_stim,
+             'I_imp' : self.glm.imp_model.I_imp,
+             'nlin' : self.syms['glm']['nlin']
+            }
 
-        xv = [A] + \
-             [W.ravel()] + \
-             [n_post,
-              I_bias,
-              I_stim,
-              I_imp] + \
-            _flatten(x['glms'][n_post]['nlin'])
+        xv = {'A' : A,
+              'W' : W.ravel(),
+              'n' : n_post,
+              'I_bias' : I_bias,
+              'I_stim' : I_stim,
+              'I_imp' : I_imp,
+              'nlin' : x['glms'][n_post]['nlin']
+             }
 
-        ll = self.glm.ll.eval(dict(zip(s, xv)))
+        ll = seval(self.glm.ll, s, xv)
         # Reset A and W
         A[n_pre, n_post] = A_init
         W[n_pre, n_post] = W_init
@@ -260,24 +570,28 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         A_init = A[n_pre, n_post]
         A[n_pre, n_post] = 0
 
+        W = x['net']['weights']['W']
+
         # Get the likelihood of the GLM under A and W
-        s = [self.network.graph.A] + \
-             _flatten(self.syms['net']['weights']) + \
-            [self.glm.n,
-             self.glm.bias_model.I_bias,
-             self.glm.bkgd_model.I_stim,
-             self.glm.imp_model.I_imp] + \
-            _flatten(self.syms['glm']['nlin'])
+        s = {'A' : self.network.graph.A,
+             'W' : self.syms['net']['weights']['W'],
+             'n' :self.glm.n,
+             'I_bias' : self.glm.bias_model.I_bias,
+             'I_stim' : self.glm.bkgd_model.I_stim,
+             'I_imp' : self.glm.imp_model.I_imp,
+             'nlin' : self.syms['glm']['nlin']
+            }
 
-        xv = [A] + \
-             _flatten(x['net']['weights']) + \
-             [n_post,
-              I_bias,
-              I_stim,
-              I_imp] + \
-            _flatten(x['glms'][n_post]['nlin'])
+        xv = {'A' : A,
+              'W' : W.ravel(),
+              'n' : n_post,
+              'I_bias' : I_bias,
+              'I_stim' : I_stim,
+              'I_imp' : I_imp,
+              'nlin' : x['glms'][n_post]['nlin']
+             }
 
-        ll = self.glm.ll.eval(dict(zip(s, xv)))
+        ll = seval(self.glm.ll, s, xv)
         A[n_pre, n_post] = A_init
 
         return ll
@@ -295,23 +609,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         else:
             mu_w = self.mu_w
             sigma_w = self.sigma_w
-
-        # # DEBUG See how much the lp changes
-        # def _compute_lp():
-        #     if x['net']['graph']['A'][n_pre, n_post]:
-        #         w = x['net']['weights']['W'].reshape(p_A.shape)[n_pre,n_post]
-        #         lp = self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp)
-        #         lp += np.log(p_A[n_pre, n_post])
-        #     else:
-        #         lp = self._glm_ll_noA(n_pre, n_post, x, I_bias, I_stim, I_imp)
-        #         lp += np.log(1.0 - p_A[n_pre, n_post])
-        #     return lp
-        #
-        # A_before = x['net']['graph']['A'][n_pre, n_post]
-        # W_before = x['net']['weights']['W'].reshape(p_A.shape)[n_pre, n_post]
-        # lp_before = _compute_lp()
-        # print "LP before: %.3f" % lp_before
-        # # END DEBUG
 
         A = x['net']['graph']['A']
         W = x['net']['weights']['W'].reshape(A.shape)
@@ -341,7 +638,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                 weighted_log_L[i] = -np.Inf
 
         # compute log pr(A_nn) and log pr(\neg A_nn) via log G
-        from scipy.misc import logsumexp
         log_G = logsumexp(weighted_log_L)
         if not np.isfinite(log_G):
             import pdb; pdb.set_trace()
@@ -353,7 +649,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                      self._glm_ll_noA(n_pre, n_post, x,
                                       I_bias, I_stim, I_imp)
         if np.isnan(log_pr_noA):
-            import pdb; pdb.set_trace()
             log_pr_noA = -np.Inf
 
         # Sample A
@@ -368,43 +663,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # Sample W from its posterior, i.e. log_L with denominator log_G
         # If A_nn = 0, we don't actually need to resample W since it has no effect
         if A[n_pre,n_post] == 1:
-            log_prior_W = -0.5/sigma_w**2 * (W_nns-mu_w)**2
-            log_posterior_W = log_prior_W + log_L
-            log_p_W = log_posterior_W - logsumexp(log_posterior_W)
-
-            # Interpolate the log posterior at a dense grid of points
-            valid_ws = np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)]
-            # iwmin = np.amin(np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)])
-            # iwmax = np.amax(np.arange(self.DEG_GAUSS_HERMITE)[np.isfinite(log_posterior_W)])
-            iwmin = valid_ws[0]
-            iwmax = valid_ws[-1]
-            ws = np.linspace(W_nns[iwmin], W_nns[iwmax],1000)
-            log_p_ws = np.interp(ws, W_nns, log_posterior_W)
-            log_p_ws -= logsumexp(log_p_ws)
-
-            # p_W = np.exp(log_p_W)
-            #
-            # from scipy.integrate import cumtrapz
-            # F_W = cumtrapz(p_W, W_nns, initial=0.0)
-            # F_W = F_W / F_W[-1]
-            #
-            # # Sample W_rv
-            # v = np.random.rand()
-            # W[n_pre, n_post] = np.interp(v,
-            #                              F_W,
-            #                              W_nns)
-
-            p_W = np.exp(log_p_ws)
-
-            from scipy.integrate import cumtrapz
-            F_W = cumtrapz(p_W, ws, initial=0.0)
-            F_W = F_W / F_W[-1]
-
-            # Sample W_rv
-            v = np.random.rand()
-            W[n_pre, n_post] = np.interp(v,
-                                         F_W,
-                                         ws)
+            W[n_pre, n_post] = self._inverse_cdf_sample_w(mu_w, sigma_w, W_nns, log_L)
 
             if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
                 import pdb; pdb.set_trace()
@@ -415,21 +674,57 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             # Sample W from the prior
             W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
 
-        # # DEBUG
-        # A_after = x['net']['graph']['A'][n_pre, n_post]
-        # W_after = x['net']['weights']['W'].reshape(p_A.shape)[n_pre, n_post]
-        # lp_after = _compute_lp()
-        # print "LP after: %.2f" % lp_after
-        #
-        # if lp_before - lp_after > 10:
-        #     print "ERROR: LP decreased by exp(10)!"
-        #     print "A: %d->%d" % (A_before, A_after)
-        #     print "W: %.2f->%.2f" % (W_before, W_after)
-        #     import pdb; pdb.set_trace()
-        # # END DEBUG
-
         # Set W in state dict x
         x['net']['weights']['W'] = W.ravel()
+
+    def _inverse_cdf_sample_w(self, mu_w, sigma_w, W_nns, log_L):
+        """
+        Sample weight w using inverse CDF method. We have already evaluated the
+        log likelihood log_L at a set of points W_nns. Use these to approximate
+        the probability density.
+        """
+        log_prior_W = -0.5/sigma_w**2 * (W_nns-mu_w)**2
+        log_posterior_W = log_prior_W + log_L
+        log_p_W = log_posterior_W - logsumexp(log_posterior_W)
+
+        p_W = np.exp(log_p_W)
+        F_W = cumtrapz(p_W, W_nns, initial=0.0)
+        F_W = F_W / F_W[-1]
+
+        # Sample W_rv
+        v = np.random.rand()
+        w = np.interp(v, F_W, W_nns)
+        return w
+
+    def _adaptive_rejection_sample_w(self, mu_w, sigma_w, ws, log_L):
+        N = len(ws)
+        log_prior_W = -0.5/sigma_w**2 * (ws-mu_w)**2
+        log_posterior_W = log_prior_W + log_L
+        log_f = log_posterior_W - logsumexp(log_posterior_W)
+
+        # Define the envelope. For each interval (W_nns[1:2]), ..., (W_nns[N-3:N-2])
+        # compute the chords joining log_L[1:2], ..., log_L[N-3:N-2]
+        i = np.arange(1,N-2)
+        # dws[j] = W_nns[j+1]-W_nns[j] for j = 0...N-2
+        dws = ws[1:] - ws[:-1]
+        # dfs[j] = log_f[j+1]-log_f[j] for j = 0...N-2
+        dfs = log_f[1:] - log_f[:-1]
+        slopes = dfs / dws
+
+        # We extrapolate tangent curves from W_nns[0:1],...,W_nns[N-4:N-3] on the left
+        # and W_nns[3:2],...,W_nns[N-1:N-2] on the right to upper bound the interval.
+        # These tangent curves intersect at points z_1...z_{N-2}
+        # Doing some algebra yields
+        zs = (log_f[i+1] - ws[i+1]/dws[i+1]*dfs[i+1] - log_f[i-1] + ws[i-1]/dws[i-1]*dfs[i-1])
+        zs /= (slopes[i-1] - slopes[i+1])
+
+        # The envelope is now piecewise linear with knots at W_nns and zs
+        # Evaluate the envelope at the zs
+        log_f_zs = log_f[i] + slopes*(zs-ws[i])
+
+
+
+
 
     def _collapsed_sample_AW_with_prior(self, n_pre, n_post, x,
                                         I_bias, I_stim, I_imp, p_A):
@@ -841,25 +1136,35 @@ def initialize_updates(population):
     serial_updates = []
     parallel_updates = []
     # All populations have a parallel GLM sampler
-    print "Initializing GLM sampler"
-    glm_sampler = HmcGlmUpdate()
-    glm_sampler.preprocess(population)
-    parallel_updates.append(glm_sampler)
+    print "Initializing GLM samplers"
+    # glm_sampler = HmcGlmUpdate()
+    # glm_sampler.preprocess(population)
+    # parallel_updates.append(glm_sampler)
+
+    bias_sampler = HmcBiasUpdate()
+    bias_sampler.preprocess(population)
+    parallel_updates.append(bias_sampler)
+
+    imp_sampler = HmcImpulseUpdate()
+    imp_sampler.preprocess(population)
+    parallel_updates.append(imp_sampler)
+
+    # TODO Make stim sampler
 
     # All populations have a network sampler
     # TODO: Decide between collapsed and standard Gibbs
     print "Initializing network sampler"
-    # net_sampler = GibbsNetworkColumnUpdate()
-    net_sampler = CollapsedGibbsNetworkColumnUpdate()
+    net_sampler = GibbsNetworkColumnUpdate()
+    # net_sampler = CollapsedGibbsNetworkColumnUpdate()
     net_sampler.preprocess(population)
     parallel_updates.append(net_sampler)
 
     # If the graph model is a latent distance model, add its update
-    from components.graph import LatentDistanceGraphModel
-    if isinstance(population.network.graph, LatentDistanceGraphModel):
-        loc_sampler = LatentDistanceNetworkUpdate()
-        loc_sampler.preprocess(population)
-        serial_updates.append(loc_sampler)
+    # from components.graph import LatentDistanceGraphModel
+    # if isinstance(population.network.graph, LatentDistanceGraphModel):
+    #     loc_sampler = LatentDistanceNetworkUpdate()
+    #     loc_sampler.preprocess(population)
+    #     serial_updates.append(loc_sampler)
 
     return serial_updates, parallel_updates
 

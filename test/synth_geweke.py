@@ -189,27 +189,38 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
     # Plot the background rates
     biases = [[s['glms'][n]['bias']['bias'][0] for n in range(N)] for s in s_smpls]
     biases = np.array(biases)
+    from scipy.stats import norm
+    mu_bias = model['bias']['mu']
+    sig_bias = model['bias']['sigma']
+    pbias = norm(mu_bias, sig_bias).pdf(bincenters)
+
     f = plt.figure()
     for n in range(N):
         ax = f.add_subplot(1,N,1+n)
         c, bins, patches = ax.hist(biases[:,n], 20, normed=1)
         bincenters = 0.5*(bins[1:]+bins[:-1])
-        y = mlab.normpdf(bincenters, model['bias']['mu'], model['bias']['sigma'])
-        ax.plot(bincenters, y, 'r--', linewidth=1)
+        ax.plot(bincenters, pbias, 'r--', linewidth=1)
+        plt.title("x_{%d}~N(%.1f,%.1f)" % (n,mu_bias,sig_bias))
     f.savefig(os.path.join(resdir,'geweke_bias.pdf'))
 
     # Plot the gamma distributed latent vars of the normalized impulse resp
-    gs0 = [[np.exp(x['glms'][n]['imp']['w_lng'][0]) for n in range(N)] for x in x_smpls]
-    gs0 = np.array(gs0)
+    gs = [[np.exp(x['glms'][n]['imp']['w_lng']) for n in range(N)] for x in x_smpls]
+    gs = np.array(gs)
+    (_,N,B) = gs.shape
+
+    # Get the true dist
+    from scipy.stats import gamma
+    g_alpha = model['impulse']['alpha']
+    pg = gamma(g_alpha).pdf(bincenters)
+
     f = plt.figure()
     for n in range(N):
-        ax = f.add_subplot(1,N,1+n)
-        c, bins, patches = ax.hist(gs0[:,n], 20, normed=1)
-        bincenters = 0.5*(bins[1:]+bins[:-1])
-
-        from scipy.stats import gamma
-        y = gamma(model['impulse']['alpha']).pdf(bincenters)
-        ax.plot(bincenters, y, 'r--', linewidth=1)
+        for b in range(B):
+            ax = f.add_subplot(N,B,1 + n*B +b)
+            c, bins, patches = ax.hist(gs[:,n,b], 20, normed=1)
+            bincenters = 0.5*(bins[1:]+bins[:-1])
+            ax.plot(bincenters, pg, 'r--', linewidth=1)
+            plt.title("G_{%d,%d}~Gamma(%.1f,1)" % (n,b,g_alpha))
     f.savefig(os.path.join(resdir,'geweke_g.pdf'))
 
 

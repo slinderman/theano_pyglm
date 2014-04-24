@@ -52,30 +52,30 @@ def run_synth_test():
     else:
         N_samples = 1000
 
-        # # Define a callback to evaluate log likelihoods and predictive log likelihoods
-        # print "Creating synthetic test data"
-        # T_test = 15
-        # popn_test = Population(popn.model)
-        # test_data = gen_synth_data(data['N'], T_test, popn_true, x_true)
-        # popn_test.set_data(test_data)
-        #
-        # # Compute pred ll under true model
-        # popn_true.set_data(test_data)
-        # x_true['predll'] = popn_true.compute_ll(x_true)
-        # popn_true.set_data(data)
-        #
-        # # Compute the predictive log likelihood under a homogeneous PP model wiht MLE
-        # # homog_pred_lls[j] = compute_homog_pp(train_data, test_data)
-        #
-        # pred_lls = np.zeros(N_samples)
-        # smpl = [0]
-        # def pred_ll_cbk(x):
-        #     pred_ll = popn_test.compute_ll(x)
-        #     pred_lls[smpl[0]] = pred_ll
-        #     x['predll'] = pred_ll
-        #     smpl[0] += 1
-        #     print "Pred LL: %.2f" % pred_ll
-        pred_ll_cbk = None
+        # Define a callback to evaluate log likelihoods and predictive log likelihoods
+        print "Creating synthetic test data"
+        T_test = 15
+        popn_test = Population(popn.model)
+        test_data = gen_synth_data(data['N'], T_test, popn_true, x_true)
+        popn_test.set_data(test_data)
+
+        # Compute pred ll under true model
+        popn_true.set_data(test_data)
+        x_true['predll'] = popn_true.compute_ll(x_true)
+        popn_true.set_data(data)
+
+        # Compute the predictive log likelihood under a homogeneous PP model wiht MLE
+        # homog_pred_lls[j] = compute_homog_pp(train_data, test_data)
+
+        pred_lls = np.zeros(N_samples)
+        smpl = [0]
+        def pred_ll_cbk(x):
+            pred_ll = popn_test.compute_ll(x)
+            pred_lls[smpl[0]] = pred_ll
+            x['predll'] = pred_ll
+            smpl[0] += 1
+            print "Pred LL: %.2f" % pred_ll
+        # pred_ll_cbk = None
 
         # Perform inference
         print "Performing parallel inference"
