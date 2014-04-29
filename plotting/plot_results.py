@@ -107,7 +107,7 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
             plt.plot(stim_t + 2*stim_t_std, color=color, linestyle='--') 
             plt.plot(stim_t - 2*stim_t_std, color=color, linestyle='--')
 
-def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-'):
+def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-', dt=0.001):
     """ Plot the impulse responses plus or minus two standard devs
     """ 
 
@@ -145,8 +145,9 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
     else:
         s_imps_std = np.zeros_like(s_imps)
     imp_max = np.amax(np.abs(s_imps+2*s_imps_std))
-        
-    W_imp = np.sum(s_imps,2)
+
+    t_imp = dt*np.arange(s_imps.shape[2])
+    W_imp = np.trapz(s_imps,t_imp, axis=2)
     W_imp_max = np.amax(W_imp)
 
     # Create a figure if necessary
@@ -192,6 +193,19 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
                 ax.set_yticks([])
                 ax.set_ylabel("")
             ax.set_ylim(-imp_max,imp_max)
+
+    # Add a colorbar
+    fig.subplots_adjust(right=0.8)
+    cbar_ax = fig.add_axes([0.85, 0.1, 0.05, 0.8])
+
+    # Rather than using the colorbar method, directly
+    # instantiate a colorbar
+    from matplotlib.colorbar import ColorbarBase
+    cbar_ticks = np.array([-0.9*W_imp_max, 0.0, 0.9*W_imp_max]).round(2)
+    cbar = ColorbarBase(cbar_ax, cmap=cmap,
+                        values=np.linspace(-W_imp_max, W_imp_max, 500),
+                        boundaries=np.linspace(-W_imp_max, W_imp_max, 500),
+                        ticks=cbar_ticks)
 
     return fig
 
@@ -578,4 +592,10 @@ if __name__ == "__main__":
                  x,
                  popn_true=popn_true,
                  x_true=x_true,
-                 resdir=options.resultsDir)
+                 resdir=options.resultsDir,
+                 do_plot_connectivity=False,
+                 do_plot_stim_resp=False,
+                 do_plot_imp_responses=True,
+                 do_plot_firing_rates=False,
+                 do_plot_ks=False,
+                 do_plot_logpr=False)
