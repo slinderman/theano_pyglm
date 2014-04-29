@@ -135,6 +135,22 @@ class Hull:
         self.left = None
         self.right = None
         self.pr = None
+        self.lpr = None
+
+def _signed_lse(m, b, a1, a2):
+    """
+    Compute log[ e^{b}/m * (e^{m*a1} - e^{m*a2}) ]
+    """
+    # Make sure that the term inside the log is postiive.
+    # If m>0: m*a1 > m*a2, aka a1 > a2
+    # if m<0: m*a1 < m*a2, aka a1 > a2
+    sgn = np.sign(m)
+    assert a1 > a2, "a1 must be greater than a2!"
+
+    # Now we can work with absolute value of m and e^{a1} - e^{a2}
+    am = np.maximum(m*a1, m*a2)
+    se = np.exp(m*a1-am)-np.exp(m*a2-am)
+    return b - np.log(m*sgn) + am + np.log(se*sgn)
 
 def _ars_compute_hulls(S, fS, domain):
     # compute lower piecewise-linear hull
@@ -157,16 +173,11 @@ def _ars_compute_hulls(S, fS, domain):
         m = (fS[1]-fS[0])/(S[1]-S[0])
         b = fS[0] - m*S[0]
         # pro = np.exp(b)/m * ( np.exp(m*S[0]) - 0 ) # integrating in from -infinity
-        pr = np.exp(m*S[0]+b)/m
-        # assert np.allclose(pr, pro)
-        if not pr >= 0:
-            import pdb; pdb.set_trace()
-            raise Exception("Invalid probability in ARS")
-            # import pdb; pdb.set_trace()
+        lnpr = b - np.log(m) + m*S[0]
         h = Hull()
         h.m = m
         h.b = b
-        h.pr = pr
+        h.lnpr = lnpr
         h.left = -np.Inf
         h.right = S[0]
         upperHull.append(h)
@@ -175,18 +186,12 @@ def _ars_compute_hulls(S, fS, domain):
     m = (fS[2]-fS[1])/(S[2]-S[1])
     b = fS[1] - m*S[1]
     # pro = np.exp(b)/m * ( np.exp(m*S[1]) - np.exp(m*S[0]) )
-    pr = np.exp(m*S[1]+b)/m * (1.0 - np.exp(m*(S[0]-S[1])))
-    if not pr >= 0:
-        import pdb; pdb.set_trace()
-        raise Exception("Invalid probability in ARS")
-        # import pdb; pdb.set_trace()
-    # if not np.allclose(pr, pro):
-    #     import pdb; pdb.set_trace()
+    lnpr = _signed_lse(m, b, S[1], S[0])
     # Append upper hull for second line
     h = Hull()
     h.m = m
     h.b = b
-    h.pr = pr
+    h.lnpr = lnpr
     h.left = S[0]
     h.right = S[1]
     upperHull.append(h)
@@ -204,53 +209,34 @@ def _ars_compute_hulls(S, fS, domain):
         ix = (b1-b2)/(m2-m1) # compute the two lines' intersection
     
         # pro = np.exp(b1)/m1 * ( np.exp(m1*ix) - np.exp(m1*S[li]) )
-        pr1 = np.exp(m1*ix+b1)/m1 * (1.0 - np.exp(m1*(S[li]-ix)))
-        if not pr >= 0:
-            import pdb; pdb.set_trace()
-            raise Exception("Invalid probability in ARS")
-            # import pdb; pdb.set_trace()
-        # if not np.allclose(pr1, pro):
-        #     import pdb; pdb.set_trace()
-
+        lnpr1 = _signed_lse(m1, b1, ix, S[li])
         h = Hull()
         h.m = m1
         h.b = b1
-        h.pr = pr1
+        h.lnpr = lnpr1
         h.left = S[li]
         h.right = ix
         upperHull.append(h)
     
         # pro = np.exp(b2)/m2 * ( np.exp(m2*S[li+1]) - np.exp(m2*ix) )
-        pr2 = np.exp(m2*S[li+1]+b2)/m2 * (1.0 - np.exp(m2*(ix-S[li+1])))
-        if not pr >= 0:
-            import pdb; pdb.set_trace()
-            raise Exception("Invalid probability in ARS")
-            # import pdb; pdb.set_trace()
-        # if not np.allclose(pr2, pro):
-        #     import pdb; pdb.set_trace()
+        lnpr2 = _signed_lse(m2, b2, S[li+1], ix)
         h = Hull()
         h.m = m2
         h.b = b2
-        h.pr = pr2
+        h.lnpr = lnpr2
         h.left = ix
         h.right = S[li+1]
         upperHull.append(h)
 
-    # second to last line
+    # second to last line (m<0)
     m = (fS[-2]-fS[-3])/(S[-2]-S[-3])
     b = fS[-2] - m*S[-2]
     # pro = np.exp(b)/m * ( np.exp(m*S[-1]) - np.exp(m*S[-2]) )
-    pr = np.exp(m*S[-1]+b)/m * (1.0 - np.exp(m*(S[-2]-S[-1])))
-    if not pr >= 0:
-        import pdb; pdb.set_trace()
-        raise Exception("Invalid probability in ARS")
-        # import pdb; pdb.set_trace()
-    # if not np.allclose(pr, pro):
-    #     import pdb; pdb.set_trace()
+    lnpr = _signed_lse(m, b, S[-1], S[-2])
     h = Hull()
     h.m = m
     h.b = b
-    h.pr = pr
+    h.lnpr = lnpr
     h.left = S[-2]
     h.right = S[-1]
     upperHull.append(h)
@@ -260,39 +246,34 @@ def _ars_compute_hulls(S, fS, domain):
         m = (fS[-1]-fS[-2])/(S[-1]-S[-2])
         b = fS[-1] - m*S[-1]
         # pro = np.exp(b)/m * ( 0 - np.exp(m*S[-1]) )
-        assert m < 0
-        pr = -np.exp(m*S[-1]+b)/m
-        if not pr >= 0:
-            import pdb; pdb.set_trace()
-            raise Exception("Invalid probability in ARS")
-            # import pdb; pdb.set_trace()
-        # assert np.allclose(pr, pro)
+        lnpr = b - np.log(np.abs(m)) + m*S[-1]
         h = Hull()
         h.m = m
         h.b = b
-        h.pr = pr
+        h.lnpr = lnpr
         h.left = S[-1]
         h.right = np.Inf
         upperHull.append(h)
 
 
-    # TODO: Make these reductions and maps
-    Z = 0
-    for h in upperHull:
-        Z += h.pr
-
-    for h in upperHull:
-        h.pr /= Z
+    lnprs = np.array([h.lnpr for h in upperHull])
+    lnZ = logsumexp(lnprs)
+    prs = np.exp(lnprs - lnZ)
+    for (i,h) in enumerate(upperHull):
+        h.pr = prs[i]
 
     return lowerHull, upperHull
 
 def _ars_sample_upper_hull(upperHull):
     prs = np.array([h.pr for h in upperHull])
     if not np.all(np.isfinite(prs)):
+        print prs
         raise Exception("ARS prs contains Inf or NaN")
+
     cdf = np.cumsum(prs)
     if not np.all(np.isfinite(cdf)):
-        raise Exception("ARS prs contains Inf or NaN")
+        print cdf
+        raise Exception("ARS cumsum Inf or NaN")
     
     # randomly choose a line segment
     U = np.random.rand()

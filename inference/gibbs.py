@@ -641,7 +641,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # compute log pr(A_nn) and log pr(\neg A_nn) via log G
         log_G = logsumexp(weighted_log_L)
         if not np.isfinite(log_G):
-            import pdb; pdb.set_trace()
+            print weighted_log_L
+            raise Exception("log_G not finie")
 
         # Compute log Pr(A_nn=1) given prior and estimate of log lkhd after integrating out W
         log_pr_A = prior_lp_A + log_G
@@ -656,9 +657,11 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         try:
             A[n_pre, n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
             if np.allclose(p_A[n_pre, n_post], 1.0) and not A[n_pre, n_post]:
-                import pdb; pdb.set_trace()
+                print log_pr_noA
+                print log_pr_A
+                raise Exception("Sampled no self edge")
         except Exception as e:
-            import pdb; pdb.set_trace()
+
             raise e
             # import pdb; pdb.set_trace()
         set_vars('A', x['net']['graph'], A)
@@ -671,7 +674,6 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                                                                  W_nns, log_L, I_bias, I_stim, I_imp)
 
             if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
-                import pdb; pdb.set_trace()
                 raise Exception("Invalid weight sample")
 
             # print "p_W: %.3f (v=%.3f)" % (np.interp(W[n_pre, n_post], ws, p_W) ,v)
