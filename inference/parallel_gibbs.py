@@ -35,7 +35,6 @@ def concatenate_parallel_updates(xs, x):
             W_curr[:,n] = W_inf[:,n]
             x['net']['weights']['W'] = np.ravel(W_curr)
 
-# TODO: Remove this
 def concatenate_network_results(x_net, x, N):
     """ Concatenate the list of results from the parallel
         sampling of network columns
@@ -124,14 +123,13 @@ def parallel_gibbs_sample(client,
     lprior = parallel_compute_log_prior(dview, master, x0, N)
 
     x_smpls = [x0]
-    x = x0
+    x = copy.deepcopy(x0)
 
     import time
     start_time = time.clock()
-
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
-        ll = parallel_compute_ll(dview, x0, N)
+        ll = parallel_compute_ll(dview, x, N)
         lp = parallel_compute_log_p(dview,
                                     master,
                                     x,
@@ -166,8 +164,7 @@ def parallel_gibbs_sample(client,
                                  [x]*N,
                                  range(N))
             
-            wait_watching_stdout(xs, interval=interval)
-            
+            # wait_watching_stdout(xs, interval=interval)
             concatenate_parallel_updates(xs.get(), x)
 
         # Sample serial updates
@@ -182,7 +179,8 @@ def parallel_gibbs_sample(client,
                 print "Callback failed"
 
         # DEBUG
-        #print "Num changes in A: %d" % np.abs(x['net']['graph']['A']-x_smpls[-1]['net']['graph']['A'])
+        # print "Num edges: %d" % np.sum(x['net']['graph']['A'])
+        # print "Num changes in A: %d" % np.abs(x['net']['graph']['A']-x_smpls[-1]['net']['graph']['A']).sum()
         x_smpls.append(copy.deepcopy(x))
 
     ## DEBUG Profile the Gibbs sampling loop

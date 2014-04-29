@@ -192,13 +192,14 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
     from scipy.stats import norm
     mu_bias = model['bias']['mu']
     sig_bias = model['bias']['sigma']
-    pbias = norm(mu_bias, sig_bias).pdf(bincenters)
+
 
     f = plt.figure()
     for n in range(N):
         ax = f.add_subplot(1,N,1+n)
         c, bins, patches = ax.hist(biases[:,n], 20, normed=1)
         bincenters = 0.5*(bins[1:]+bins[:-1])
+        pbias = norm(mu_bias, sig_bias).pdf(bincenters)
         ax.plot(bincenters, pbias, 'r--', linewidth=1)
         plt.title("x_{%d}~N(%.1f,%.1f)" % (n,mu_bias,sig_bias))
     f.savefig(os.path.join(resdir,'geweke_bias.pdf'))
@@ -211,7 +212,6 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
     # Get the true dist
     from scipy.stats import gamma
     g_alpha = model['impulse']['alpha']
-    pg = gamma(g_alpha).pdf(bincenters)
 
     f = plt.figure()
     for n in range(N):
@@ -219,6 +219,7 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
             ax = f.add_subplot(N,B,1 + n*B +b)
             c, bins, patches = ax.hist(gs[:,n,b], 20, normed=1)
             bincenters = 0.5*(bins[1:]+bins[:-1])
+            pg = gamma(g_alpha).pdf(bincenters)
             ax.plot(bincenters, pg, 'r--', linewidth=1)
             plt.title("G_{%d,%d}~Gamma(%.1f,1)" % (n,b,g_alpha))
     f.savefig(os.path.join(resdir,'geweke_g.pdf'))
@@ -233,7 +234,6 @@ def run_synth_test():
     model = make_model(options.model, N=options.N)
     popn = Population(model)
 
-
     results_file = os.path.join(options.resultsDir, 'geweke_results.pkl')
     if os.path.exists(results_file) and not options.force_recompute:
         with open(results_file) as f:
@@ -245,7 +245,7 @@ def run_synth_test():
         popn.set_data(data)
 
         # Perform inference
-        N_samples = 1000
+        N_samples = 10000
         x_smpls = geweke_test(popn, data, N_samples=N_samples)
 
         # Save results

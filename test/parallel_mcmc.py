@@ -75,7 +75,7 @@ def run_synth_test():
             x['predll'] = pred_ll
             smpl[0] += 1
             print "Pred LL: %.2f" % pred_ll
-        # pred_ll_cbk = None
+        pred_ll_cbk = None
 
         # Perform inference
         print "Performing parallel inference"

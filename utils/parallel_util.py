@@ -188,8 +188,9 @@ def create_population_on_engines(dview,
         m = make_model(model_type, N=N)
     else:
         raise Exception("Create_population_on_engines requires model to be either str type or dict")
+    stabilize_sparsity(m)
     dview['model'] = m
-
+    
 
     # Create a population object on each engine
     #@interactive

@@ -2,161 +2,11 @@
 Adaptive rejection sampling
 """
 import numpy as np
+from scipy.misc import logsumexp
 
-def adaptive_rejection_sample(f, xs, v_xs, _rejects=0):
-    """
-    Recurisve implementation of derivative-free adaptive rejection sampling
-    for 1-dimensional log-concave distributions.
-    Parameters:
-    f:  function that computes log probability
-    xs: points where the log prob has previously been computed. Must contain
-        at least two points, the lower bound for x and the upper bound for x.
-    vs: log prob at xs
-
-    Private params:
-    _rejects: Depth of recursion
-    """
-    N = len(xs)
-    assert N >= 2
-    assert xs.ndim == 1
-
-    # Make sure xs is sorted
-    if not np.all(xs[1:] > xs[:-1]):
-        perm = np.argsort(xs)
-        xs = xs[perm]
-        v_xs = v_xs[perm]
-
-    # If N < 3, evaluate at the midpoint
-    if N < 5:
-        x_props = xs[0] + (xs[-1]-xs[0])*np.random.rand(5-N)
-        v_props = np.zeros_like(x_props)
-        for j in range(N-5):
-            v_props[j] = f(x_props[j])
-
-        # x_mid = (xs[1]+xs[0])/2.0
-        # v_mid = f(x_mid)
-        return adaptive_rejection_sample(f,
-                                         np.concatenate((xs, x_props)),
-                                         np.concatenate((v_xs, v_props)))
-
-    # # Define the envelope. For each interval (W_nns[1:2]), ..., (W_nns[N-3:N-2])
-    # # compute the chords joining log_L[1:2], ..., log_L[N-3:N-2]
-    # i = np.arange(1, N - 2)
-    # # dxs[j] = W_nns[j+1]-W_nns[j] for j = 0...N-2
-    # dxs = xs[1:] - xs[:-1]
-    # # dfs[j] = log_f[j+1]-log_f[j] for j = 0...N-2
-    # dfs = v_xs[1:] - v_xs[:-1]
-    # slopes = dfs / dxs
-    #
-    # # We extrapolate tangent curves from W_nns[0:1],...,W_nns[N-4:N-3] on the left
-    # # and W_nns[3:2],...,W_nns[N-1:N-2] on the right to upper bound the interval.
-    # # These tangent curves intersect at points z_1...z_{N-2}
-    # # Doing some algebra yields
-    # zs = (v_xs[i + 1] - xs[i + 1] / dxs[i + 1] * dfs[i + 1] - v_xs[i - 1] + xs[i - 1] / dxs[i - 1] * dfs[i - 1])
-    # zs /= (slopes[i - 1] - slopes[i + 1])
-    #
-    # # The envelope is now piecewise linear with knots at W_nns and zs
-    # # Evaluate the envelope at the zs
-    # v_zs = v_xs[i] + slopes * (zs - xs[i])
-    #
-    # knots = np.concatenate((xs, zs))
-    # v_knots = np.concatenate((v_xs, v_zs))
-    # perm = np.argsort(knots)
-    # knots = knots[perm]
-    # v_knots = v_knots[perm]
-    #
-    # # Offsets are the left knots
-    # bs = knots[:-1]
-    #
-    # # Compute the slopes at all knots but the last
-    # dknots = knots[1:] - knots[:-1]
-    # dv_knots = v_knots[1:] - v_knots[:-1]
-    # ms = dv_knots / dv_knots
-    knots, v_knots, bs, ms = _compute_envelope(xs, v_xs)
-    dknots = knots[1:] - knots[:-1]
-
-    # Now compute the area under each exponentiated line segment
-    prs = np.exp(bs)/ms *(np.exp(ms*dknots) - 1.0)
-    Z = np.sum(prs)
-    prs /= Z
-
-    # Compute the CDF
-    # TODO: Handle boundaries
-    cdf = np.cumsum(prs)
-
-    # Sample a line segment
-    u1 = np.random.rand()
-    seg = len(knots)-1
-    for j in range(len(knots)):
-        if u1 < cdf[j]:
-            seg = j
-            break
-
-
-    # Inverse sample the cdf
-    u2 = np.random.rand()
-    x_prop = np.log(u2*(np.exp(ms[seg]*knots[seg+1]) - np.exp(ms[seg]*knots[seg])) +
-                    np.exp(ms[seg]*knots[seg]) ) \
-             / ms[seg]
-
-    # Sample under the envelope and accept or reject
-    px_prop = np.exp(bs[seg] + ms[seg]*(x_prop-knots[seg])) / Z
-    fx_prop = f(x_prop)
-    u3 = np.random.rand() * px_prop
-    if u3 > fx_prop:
-        # Reject: add x_prop and fx_prop to our list of points
-        return adaptive_rejection_sample(f,
-                                         np.concatenate((xs, x_prop)),
-                                         np.concatenate((v_xs, fx_prop)),
-                                         _rejects=_rejects+1)
-    else:
-        # DEBUG
-        print "Accepted after #d rejects." # _rejects
-        return x_prop
-
-def _compute_envelope(xs, v_xs):
-    """
-    Compute an envelope that upper bounds the log-concave function
-    """
-    N = len(xs)
-    # Define the envelope. For each interval (W_nns[1:2]), ..., (W_nns[N-3:N-2])
-    # compute the chords joining log_L[1:2], ..., log_L[N-3:N-2]
-    i = np.arange(1, N -1)
-    # dxs[j] = W_nns[j+1]-W_nns[j] for j = 0...N-2
-    dxs = xs[1:] - xs[:-1]
-    # dfs[j] = log_f[j+1]-log_f[j] for j = 0...N-2
-    dfs = v_xs[1:] - v_xs[:-1]
-    slopes = dfs / dxs
-
-    # We extrapolate tangent curves from W_nns[0:1],...,W_nns[N-4:N-3] on the left
-    # and W_nns[3:2],...,W_nns[N-1:N-2] on the right to upper bound the interval.
-    # These tangent curves intersect at points z_1...z_{N-2}
-    # Doing some algebra yields
-    zs = (v_xs[i + 1] - xs[i + 1] / dxs[i + 1] * dfs[i + 1] - v_xs[i - 1] + xs[i - 1] / dxs[i - 1] * dfs[i - 1])
-    zs /= (slopes[i - 1] - slopes[i + 1])
-
-    # The envelope is now piecewise linear with knots at W_nns and zs
-    # Evaluate the envelope at the zs
-    v_zs = v_xs[i] + slopes[i] * (zs - xs[i])
-
-    knots = np.concatenate((xs, zs))
-    v_knots = np.concatenate((v_xs, v_zs))
-    perm = np.argsort(knots)
-    knots = knots[perm]
-    v_knots = v_knots[perm]
-
-    # Offsets are the values left knots
-    bs = v_knots[:-1]
-
-    # Compute the slopes at all knots but the last
-    dknots = knots[1:] - knots[:-1]
-    dv_knots = v_knots[1:] - v_knots[:-1]
-    ms = dv_knots / dv_knots
-
-    return knots, v_knots, bs, ms
-
-def ars_pmtk(func, xs, v_xs, domain, debug=True):
-    #   Copied from Probabilistic Machine Learning Toolkit, see below.
+def adaptive_rejection_sample(func, xs, v_xs, domain, debug=False, check_inputs=True):
+    #   Modified from Probabilistic Machine Learning Toolkit by Scott Linderman.
+    #   See below for original author info.
     #    ARS - Adaptive Rejection Sampling
     #          sample perfectly & efficiently from a univariate log-concave
     #          function
@@ -184,7 +34,7 @@ def ars_pmtk(func, xs, v_xs, domain, debug=True):
     # PMTKauthor   Daniel Eaton
     #  danieljameseaton@gmail.com
     # PMTKdate 2006
-
+    
     if domain[0] >= domain[1]:
         raise Exception('invalid domain')
 
@@ -192,24 +42,27 @@ def ars_pmtk(func, xs, v_xs, domain, debug=True):
     b = xs[-1]
     if a>=b or np.isinf(a) or np.isinf(b) or a<domain[0] or b>domain[1]:
         raise Exception('invalid a & b')
-    
-    # Check gradients at left and right boundary of domain
-    # numDerivStep = 1e-3
-    # S = np.array([a, a+numDerivStep, b-numDerivStep, b])
-    #
-    # if domain[0] == -np.Inf:
-    #     # ensure the derivative there is positive
-    #     f = func(S[0:2])
-    #     if (f[1]-f[0])<=0:
-    #         raise Exception('derivative at a must be positive, since the domain is unbounded to the left')
-    #
-    #
-    # if domain[1]== np.Inf:
-    #     # ensure the derivative there is negative
-    #     f = func(S[2:])
-    #     if (f[1]-f[0]) >= 0:
-    #         raise Exception('derivative at b must be negative, since the domain is unbounded to the right')
-    
+
+    if check_inputs:
+        _check_concavity(xs, v_xs)
+
+        # Check gradients at left and right boundary of domain
+        numDerivStep = 1e-3
+        S = np.array([a, a+numDerivStep, b-numDerivStep, b])
+
+        if domain[0] == -np.Inf:
+            # ensure the derivative there is positive
+            f = func(S[0:2])
+            if (f[1]-f[0])<=0:
+                raise Exception('derivative at a must be positive, since the domain is unbounded to the left')
+
+
+        if domain[1]== np.Inf:
+            # ensure the derivative there is negative
+            f = func(S[2:])
+            if (f[1]-f[0]) >= 0:
+                raise Exception('derivative at b must be negative, since the domain is unbounded to the right')
+
     # initialize a mesh on which to create upper & lower hulls
     if len(xs) < 5:
         x_prop = a + (b-a)*np.random.rand(5-len(xs))
@@ -220,25 +73,23 @@ def ars_pmtk(func, xs, v_xs, domain, debug=True):
         xs = xs[perm]
         v_xs = v_xs[perm]
 
-    lowerHull, upperHull = arsComputeHulls(xs, v_xs, domain)
+    # Compute the hull at xs
+    lowerHull, upperHull = _ars_compute_hulls(xs, v_xs, domain)
 
     rejects = 0
     while True:
         if debug:
-            arsPlot(upperHull, lowerHull, domain, xs, v_xs, func)
+            _ars_plot(upperHull, lowerHull, domain, xs, v_xs, func)
 
-        import pdb; pdb.set_trace()
         # sample x from Hull
-        x = arsSampleUpperHull( upperHull )
+        x = _ars_sample_upper_hull( upperHull )
+        # Evaluate upper and lower hull at x
+        lhVal, uhVal = _ars_eval_hulls( x, lowerHull, upperHull )
 
-        lhVal, uhVal = arsEvalHulls( x, lowerHull, upperHull )
-    
-        U = np.random.rand()
-    
-        meshChanged = False # flag to indicate if a new point has been added to the mesh
-    
-        # three cases for acception/rejection
-        if U<=lhVal/uhVal:
+        # Sample under the upper hull at x and see if we accept or reject
+        u = np.log(np.random.rand())
+        # Three cases for acception/rejection
+        if u <= lhVal - uhVal:
             # accept, u is below lower bound
             if debug:
                 print "Sample found after %d rejects" % rejects
@@ -246,30 +97,36 @@ def ars_pmtk(func, xs, v_xs, domain, debug=True):
 
         # Otherwise we must compute the actual function
         vx = func(x)
-        if U<=vx/uhVal:
+        if u <= vx - uhVal:
             # accept, u is between lower bound and f
             if debug:
                 print "Sample found after %d rejects" % rejects
             return x
-        else:
-            # reject, u is between f and upper bound
-            meshChanged = True
-    
-        if meshChanged:
-            xs = np.concatenate((xs, [x]))
-            v_xs = np.concatenate((v_xs, [vx]))
-            perm = np.argsort(xs)
-            xs = xs[perm]
-            v_xs = v_xs[perm]
 
-            # Recompute the hulls
-            lowerHull, upperHull = arsComputeHulls(xs, v_xs, domain)
+        # If we made it this far, we rejected.
+        # Now we have another evaluation that we can add to our hull though.
+        xs = np.concatenate((xs, [x]))
+        v_xs = np.concatenate((v_xs, [vx]))
+        perm = np.argsort(xs)
+        xs = xs[perm]
+        v_xs = v_xs[perm]
+
+        # Recompute the hulls
+        lowerHull, upperHull = _ars_compute_hulls(xs, v_xs, domain)
     
         if debug:
             print 'reject %d' % rejects
             
         rejects += 1
 
+def _check_concavity(xs, v_xs):
+    """ 
+    Check whether a set of points is concave according to second derivative test
+    """
+    g = np.diff(v_xs)/np.diff(xs)
+    g2 = np.diff(g)/np.diff(xs[:-1])
+    if not np.all(g2<=0):
+        raise Exception("It looks like the function to be sampled is not log concave!")
 
 class Hull:
     def __init__(self):
@@ -279,11 +136,10 @@ class Hull:
         self.right = None
         self.pr = None
 
-def arsComputeHulls(S, fS, domain):
+def _ars_compute_hulls(S, fS, domain):
     # compute lower piecewise-linear hull
     # if the domain of func is unbounded to the left or right, then the lower
     # hull takes on -inf to the left or right of the end points of S
-
     lowerHull = []
     for li in np.arange(len(S)-1):
         h = Hull()
@@ -292,7 +148,7 @@ def arsComputeHulls(S, fS, domain):
         h.left = S[li]
         h.right = S[li+1]
         lowerHull.append(h)
-    
+
     # compute upper piecewise-linear hull
     upperHull = []
     
@@ -300,7 +156,13 @@ def arsComputeHulls(S, fS, domain):
         # first line (from -infinity)
         m = (fS[1]-fS[0])/(S[1]-S[0])
         b = fS[0] - m*S[0]
-        pr = np.exp(b)/m * ( np.exp(m*S[0]) - 0 ) # integrating in from -infinity
+        # pro = np.exp(b)/m * ( np.exp(m*S[0]) - 0 ) # integrating in from -infinity
+        pr = np.exp(m*S[0]+b)/m
+        # assert np.allclose(pr, pro)
+        if not pr >= 0:
+            import pdb; pdb.set_trace()
+            raise Exception("Invalid probability in ARS")
+            # import pdb; pdb.set_trace()
         h = Hull()
         h.m = m
         h.b = b
@@ -312,7 +174,14 @@ def arsComputeHulls(S, fS, domain):
     # second line
     m = (fS[2]-fS[1])/(S[2]-S[1])
     b = fS[1] - m*S[1]
-    pr = np.exp(b)/m * ( np.exp(m*S[1]) - np.exp(m*S[0]) )
+    # pro = np.exp(b)/m * ( np.exp(m*S[1]) - np.exp(m*S[0]) )
+    pr = np.exp(m*S[1]+b)/m * (1.0 - np.exp(m*(S[0]-S[1])))
+    if not pr >= 0:
+        import pdb; pdb.set_trace()
+        raise Exception("Invalid probability in ARS")
+        # import pdb; pdb.set_trace()
+    # if not np.allclose(pr, pro):
+    #     import pdb; pdb.set_trace()
     # Append upper hull for second line
     h = Hull()
     h.m = m
@@ -334,7 +203,15 @@ def arsComputeHulls(S, fS, domain):
     
         ix = (b1-b2)/(m2-m1) # compute the two lines' intersection
     
-        pr1 = np.exp(b1)/m1 * ( np.exp(m1*ix) - np.exp(m1*S[li]) )
+        # pro = np.exp(b1)/m1 * ( np.exp(m1*ix) - np.exp(m1*S[li]) )
+        pr1 = np.exp(m1*ix+b1)/m1 * (1.0 - np.exp(m1*(S[li]-ix)))
+        if not pr >= 0:
+            import pdb; pdb.set_trace()
+            raise Exception("Invalid probability in ARS")
+            # import pdb; pdb.set_trace()
+        # if not np.allclose(pr1, pro):
+        #     import pdb; pdb.set_trace()
+
         h = Hull()
         h.m = m1
         h.b = b1
@@ -343,7 +220,14 @@ def arsComputeHulls(S, fS, domain):
         h.right = ix
         upperHull.append(h)
     
-        pr2 = np.exp(b2)/m2 * ( np.exp(m2*S[li+1]) - np.exp(m2*ix) )
+        # pro = np.exp(b2)/m2 * ( np.exp(m2*S[li+1]) - np.exp(m2*ix) )
+        pr2 = np.exp(m2*S[li+1]+b2)/m2 * (1.0 - np.exp(m2*(ix-S[li+1])))
+        if not pr >= 0:
+            import pdb; pdb.set_trace()
+            raise Exception("Invalid probability in ARS")
+            # import pdb; pdb.set_trace()
+        # if not np.allclose(pr2, pro):
+        #     import pdb; pdb.set_trace()
         h = Hull()
         h.m = m2
         h.b = b2
@@ -352,10 +236,17 @@ def arsComputeHulls(S, fS, domain):
         h.right = S[li+1]
         upperHull.append(h)
 
-    # second last line
+    # second to last line
     m = (fS[-2]-fS[-3])/(S[-2]-S[-3])
     b = fS[-2] - m*S[-2]
-    pr = np.exp(b)/m * ( np.exp(m*S[-1]) - np.exp(m*S[-2]) )
+    # pro = np.exp(b)/m * ( np.exp(m*S[-1]) - np.exp(m*S[-2]) )
+    pr = np.exp(m*S[-1]+b)/m * (1.0 - np.exp(m*(S[-2]-S[-1])))
+    if not pr >= 0:
+        import pdb; pdb.set_trace()
+        raise Exception("Invalid probability in ARS")
+        # import pdb; pdb.set_trace()
+    # if not np.allclose(pr, pro):
+    #     import pdb; pdb.set_trace()
     h = Hull()
     h.m = m
     h.b = b
@@ -368,7 +259,14 @@ def arsComputeHulls(S, fS, domain):
         # last line (to infinity)
         m = (fS[-1]-fS[-2])/(S[-1]-S[-2])
         b = fS[-1] - m*S[-1]
-        pr = np.exp(b)/m * ( 0 - np.exp(m*S[-1]) )
+        # pro = np.exp(b)/m * ( 0 - np.exp(m*S[-1]) )
+        assert m < 0
+        pr = -np.exp(m*S[-1]+b)/m
+        if not pr >= 0:
+            import pdb; pdb.set_trace()
+            raise Exception("Invalid probability in ARS")
+            # import pdb; pdb.set_trace()
+        # assert np.allclose(pr, pro)
         h = Hull()
         h.m = m
         h.b = b
@@ -388,9 +286,14 @@ def arsComputeHulls(S, fS, domain):
 
     return lowerHull, upperHull
 
-def arsSampleUpperHull(upperHull):
-    cdf = np.cumsum(np.array([h.pr for h in upperHull]))
-
+def _ars_sample_upper_hull(upperHull):
+    prs = np.array([h.pr for h in upperHull])
+    if not np.all(np.isfinite(prs)):
+        raise Exception("ARS prs contains Inf or NaN")
+    cdf = np.cumsum(prs)
+    if not np.all(np.isfinite(cdf)):
+        raise Exception("ARS prs contains Inf or NaN")
+    
     # randomly choose a line segment
     U = np.random.rand()
     for li in np.arange(len(upperHull)):
@@ -405,14 +308,42 @@ def arsSampleUpperHull(upperHull):
     left = upperHull[li].left
     right = upperHull[li].right
 
-    x = np.log( U*(np.exp(m*right) - np.exp(m*left)) + np.exp(m*left) ) / m
+    # x = np.log( U*(np.exp(m*right) - np.exp(m*left)) + np.exp(m*left) ) / m
+    # If we sampled an interior edge then we can do the sampling in a more 
+    # stable manner.
+    if np.isfinite(left) and np.isfinite(right):
+        # x = np.log( U*(np.exp(m*right) - np.exp(m*left)) + np.exp(m*left) ) / m
+        # x = left + np.log(U*(np.exp(m*(right-left))-1) + 1) / m
+        # x = left + np.log(np.exp(np.log(U) + m*(right-left))-np.exp(np.log(U)) + np.exp(0))/ m
+        # lnu = np.log(U)
+        # v = lnu + m*(right-left)
+        # x = left + np.log(np.exp(v) - np.exp(lnu) + np.exp(0))/ m
+        # vmax = np.amax([v, lnu, 0])
+        # x = left + np.log(np.exp(vmax)*(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax)))/m
+        # x = left + vmax + np.log(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax))/m
+
+        lnu = np.log(U)
+        v = lnu + m*(right-left)
+        vmax = np.amax([v, lnu, 0])
+        x = left + vmax/m + np.log(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax))/m
+
+    # If the left edge is -Inf, we need to be smarter
+    elif np.isinf(left):
+        x = right + np.log(U) / m
+    # Same for the right edge being +Inf
+    else:
+        # x = np.log( U*(- np.exp(m*left)) + np.exp(m*left) ) / m
+        # x = np.log( np.exp(m*left)*(1-U)) / m
+        x = left + np.log(1-U) / m
 
     if np.isinf(x) or np.isnan(x):
-        raise Exception('sampled an infinite or NaN x')
+        # import pdb; pdb.set_trace()
+        
+        raise Exception('sampled an infinite or NaN x. Left=%.3f. Right=%.3f. m=%.3f. b=%.3f. cdf=%s. U=%.3f' % (left, right, m, b, str(cdf), U))
 
     return x
 
-def arsEvalHulls( x, lowerHull, upperHull ):
+def _ars_eval_hulls( x, lowerHull, upperHull ):
 
     # lower bound
     lhVal = None
@@ -441,7 +372,7 @@ def arsEvalHulls( x, lowerHull, upperHull ):
 
     return lhVal, uhVal
 
-def arsPlot(upperHull, lowerHull, domain, S, fS, func):
+def _ars_plot(upperHull, lowerHull, domain, S, fS, func):
     import matplotlib.pyplot as plt
 
     Swidth = S[-1]-S[0]
@@ -505,21 +436,24 @@ def test_ars():
     sig = 1
     p = norm(mu, sig).pdf
 
-    f = lambda x: -x**2
+    f = lambda x: -0.5*x**2
     x_init = np.array([-2, -1.999, -0.995, 0, 0.995, 1.999, 2.0])
     v_init = f(x_init)
 
-    N_samples = 1000
+    N_samples = 20000
     smpls = np.zeros(N_samples)
     for s in np.arange(N_samples):
-        smpls[s] =  ars_pmtk(f, x_init, v_init, (-np.Inf, np.Inf), debug=False)
+        smpls[s] =  adaptive_rejection_sample(f, x_init, v_init, (-np.Inf, np.Inf), debug=False)
 
     import matplotlib.pyplot as plt
-    plt.figure()
+    f = plt.figure()
     _, bins, _ = plt.hist(smpls, 20, normed=True)
     bincenters = 0.5*(bins[1:]+bins[:-1])
     plt.plot(bincenters, p(bincenters), 'r--', linewidth=1)
     plt.show()
+    f.savefig('ars_test.pdf')
+    plt.close(f)
+
     # knots, v_knots, bs, ms = _compute_envelope(x_init, v_init)
     #
     # import matplotlib.pyplot as plt

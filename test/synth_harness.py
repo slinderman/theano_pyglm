@@ -24,6 +24,7 @@ def initialize_test_harness():
     
     print "Creating master population object"
     model = make_model(options.model, N=data['N'])
+    stabilize_sparsity(model)
     popn = Population(model)
     popn.set_data(data) 
     

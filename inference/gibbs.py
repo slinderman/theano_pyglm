@@ -11,6 +11,7 @@ from utils.theano_func_wrapper import seval, _flatten
 from utils.packvec import *
 from utils.grads import *
 
+from ars import adaptive_rejection_sample
 from hmc import hmc
 from coord_descent import coord_descent
 from log_sum_exp import log_sum_exp_sample
@@ -654,6 +655,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # Sample A
         try:
             A[n_pre, n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
+            if np.allclose(p_A[n_pre, n_post], 1.0) and not A[n_pre, n_post]:
+                import pdb; pdb.set_trace()
         except Exception as e:
             import pdb; pdb.set_trace()
             raise e
@@ -663,7 +666,9 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         # Sample W from its posterior, i.e. log_L with denominator log_G
         # If A_nn = 0, we don't actually need to resample W since it has no effect
         if A[n_pre,n_post] == 1:
-            W[n_pre, n_post] = self._inverse_cdf_sample_w(mu_w, sigma_w, W_nns, log_L)
+            # W[n_pre, n_post] = self._inverse_cdf_sample_w(mu_w, sigma_w, W_nns, log_L)
+            W[n_pre, n_post] = self._adaptive_rejection_sample_w(n_pre, n_post, x, mu_w, sigma_w,
+                                                                 W_nns, log_L, I_bias, I_stim, I_imp)
 
             if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
                 import pdb; pdb.set_trace()
@@ -696,35 +701,36 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         w = np.interp(v, F_W, W_nns)
         return w
 
-    def _adaptive_rejection_sample_w(self, mu_w, sigma_w, ws, log_L):
-        N = len(ws)
+    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws, log_L, I_bias, I_stim, I_imp):
+        """
+        Sample weights using adaptive rejection sampling.
+        This only works for log-concave distributions, which will
+        be the case if the nonlinearity is convex and log concave, and
+        when the prior on w is log concave (as it is when w~Gaussian).
+        """
+        # import pdb; pdb.set_trace()
         log_prior_W = -0.5/sigma_w**2 * (ws-mu_w)**2
         log_posterior_W = log_prior_W + log_L
-        log_f = log_posterior_W - logsumexp(log_posterior_W)
 
-        # Define the envelope. For each interval (W_nns[1:2]), ..., (W_nns[N-3:N-2])
-        # compute the chords joining log_L[1:2], ..., log_L[N-3:N-2]
-        i = np.arange(1,N-2)
-        # dws[j] = W_nns[j+1]-W_nns[j] for j = 0...N-2
-        dws = ws[1:] - ws[:-1]
-        # dfs[j] = log_f[j+1]-log_f[j] for j = 0...N-2
-        dfs = log_f[1:] - log_f[:-1]
-        slopes = dfs / dws
+        #  Define a function to evaluate the log posterior
+        # For numerical stability, try to normalize 
+        Z = np.amax(log_posterior_W)
+        def _log_posterior(ws):
+            shape = ws.shape
+            ws = np.atleast_1d(ws)
+            lp = np.zeros_like(ws)
+            for (i,w) in enumerate(ws):
+                lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
+                        self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp) \
+                        - Z
+            return lp.reshape(shape)
 
-        # We extrapolate tangent curves from W_nns[0:1],...,W_nns[N-4:N-3] on the left
-        # and W_nns[3:2],...,W_nns[N-1:N-2] on the right to upper bound the interval.
-        # These tangent curves intersect at points z_1...z_{N-2}
-        # Doing some algebra yields
-        zs = (log_f[i+1] - ws[i+1]/dws[i+1]*dfs[i+1] - log_f[i-1] + ws[i-1]/dws[i-1]*dfs[i-1])
-        zs /= (slopes[i-1] - slopes[i+1])
+        # Only use the valid ws
+        valid_ws = np.arange(len(ws))[np.isfinite(log_posterior_W)]
 
-        # The envelope is now piecewise linear with knots at W_nns and zs
-        # Evaluate the envelope at the zs
-        log_f_zs = log_f[i] + slopes*(zs-ws[i])
-
-
-
-
+        return adaptive_rejection_sample(_log_posterior,
+                                         ws[valid_ws], log_posterior_W[valid_ws] - Z,
+                                         (-np.Inf, np.Inf), debug=False)
 
     def _collapsed_sample_AW_with_prior(self, n_pre, n_post, x,
                                         I_bias, I_stim, I_imp, p_A):
@@ -1154,8 +1160,8 @@ def initialize_updates(population):
     # All populations have a network sampler
     # TODO: Decide between collapsed and standard Gibbs
     print "Initializing network sampler"
-    net_sampler = GibbsNetworkColumnUpdate()
-    # net_sampler = CollapsedGibbsNetworkColumnUpdate()
+    # net_sampler = GibbsNetworkColumnUpdate()
+    net_sampler = CollapsedGibbsNetworkColumnUpdate()
     net_sampler.preprocess(population)
     parallel_updates.append(net_sampler)
 
@@ -1238,7 +1244,9 @@ def gibbs_sample(population,
             serial_update.update(x)
 
         x_smpls.append(copy.deepcopy(x))
-
+        
+        if not np.all(x['net']['graph']['A'] > 0):
+            import pdb; pdb.set_trace()
     pr.disable()
     s = StringIO.StringIO()
     sortby = 'cumulative'

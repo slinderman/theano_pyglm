@@ -236,8 +236,8 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             # Threshold the adjacency matrix to start with the right level of sparsity
             if 'rho' in to_model['network']['graph'].keys():
                 W_sorted = np.sort(np.abs(W.ravel()))
-                thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)]
-                conv_vars['net']['graph']['A'] = (np.abs(W) > thresh).astype(np.int8)
+                thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)] 
+                conv_vars['net']['graph']['A'] = (np.abs(W) >= thresh).astype(np.int8)
             else:
                 conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
 
