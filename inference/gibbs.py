@@ -717,7 +717,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         #  Define a function to evaluate the log posterior
         # For numerical stability, try to normalize 
         Z = np.amax(log_posterior_W)
-        def _log_posterior(ws):
+        def _log_posterior(ws_in):
+            ws = np.asarray(ws_in)
             shape = ws.shape
             ws = np.atleast_1d(ws)
             lp = np.zeros_like(ws)
@@ -725,7 +726,11 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                 lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
                         self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp) \
                         - Z
-            return lp.reshape(shape)
+
+            if isinstance(ws_in, np.ndarray):
+                return lp.reshape(shape)
+            elif isinstance(ws_in, float) or isinstance(ws_in, np.float):
+                return np.float(lp)
 
         # Only use the valid ws
         valid_ws = np.arange(len(ws))[np.isfinite(log_posterior_W)]
@@ -1246,9 +1251,7 @@ def gibbs_sample(population,
             serial_update.update(x)
 
         x_smpls.append(copy.deepcopy(x))
-        
-        if not np.all(x['net']['graph']['A'] > 0):
-            import pdb; pdb.set_trace()
+
     pr.disable()
     s = StringIO.StringIO()
     sortby = 'cumulative'

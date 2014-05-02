@@ -82,9 +82,9 @@ def adaptive_rejection_sample(func, xs, v_xs, domain, debug=False, check_inputs=
             _ars_plot(upperHull, lowerHull, domain, xs, v_xs, func)
 
         # sample x from Hull
-        x = _ars_sample_upper_hull( upperHull )
+        x = _ars_sample_upper_hull(upperHull)
         # Evaluate upper and lower hull at x
-        lhVal, uhVal = _ars_eval_hulls( x, lowerHull, upperHull )
+        lhVal, uhVal = _ars_eval_hulls(x, lowerHull, upperHull)
 
         # Sample under the upper hull at x and see if we accept or reject
         u = np.log(np.random.rand())
@@ -137,7 +137,7 @@ class Hull:
         self.pr = None
         self.lpr = None
 
-def _signed_lse(m, b, a1, a2):
+def _signed_lse(m, b, a1, a0):
     """
     Compute log[ e^{b}/m * (e^{m*a1} - e^{m*a2}) ]
     """
@@ -145,12 +145,27 @@ def _signed_lse(m, b, a1, a2):
     # If m>0: m*a1 > m*a2, aka a1 > a2
     # if m<0: m*a1 < m*a2, aka a1 > a2
     sgn = np.sign(m)
-    assert a1 > a2, "a1 must be greater than a2!"
+    assert a1 > a0, "a1 must be greater than a2!"
+
+    if np.allclose(m,0.0):
+        return b + np.log(a1-a0)
 
     # Now we can work with absolute value of m and e^{a1} - e^{a2}
-    am = np.maximum(m*a1, m*a2)
-    se = np.exp(m*a1-am)-np.exp(m*a2-am)
-    return b - np.log(m*sgn) + am + np.log(se*sgn)
+    am = np.maximum(m*a1, m*a0)
+    se = np.exp(m*a1-am)-np.exp(m*a0-am)
+    lse = b - np.log(m*sgn) + am + np.log(se*sgn)
+
+    if not np.isfinite(lse):
+        print "LSE is not finite"
+        print "lse: %f" % lse
+        print "m: %f" % m
+        print "b: %f" % b
+        print "a1: %f" % a1
+        print "a2: %f" % a0
+        print "am: %f" % am
+        print "se: %f" % se
+    
+    return lse
 
 def _ars_compute_hulls(S, fS, domain):
     # compute lower piecewise-linear hull
@@ -202,11 +217,14 @@ def _ars_compute_hulls(S, fS, domain):
     
         m1 = (fS[li]-fS[li-1])/(S[li]-S[li-1])
         b1 = fS[li] - m1*S[li]
-    
+
         m2 = (fS[li+2]-fS[li+1])/(S[li+2]-S[li+1])
         b2 = fS[li+1] - m2*S[li+1]
-    
-        ix = (b1-b2)/(m2-m1) # compute the two lines' intersection
+
+        # compute the two lines' intersection
+        # Make sure it's in the valid range
+        ix = (b1-b2)/(m2-m1)
+        assert ix >= S[li] and ix <= S[li+1]
     
         # pro = np.exp(b1)/m1 * ( np.exp(m1*ix) - np.exp(m1*S[li]) )
         lnpr1 = _signed_lse(m1, b1, ix, S[li])
@@ -262,6 +280,13 @@ def _ars_compute_hulls(S, fS, domain):
     for (i,h) in enumerate(upperHull):
         h.pr = prs[i]
 
+    if not np.all(np.isfinite(prs)):
+        print "ARS prs contains Inf or NaN"
+        print lnprs
+        print lnZ
+        print prs
+        raise Exception("ARS prs contains Inf or NaN")
+
     return lowerHull, upperHull
 
 def _ars_sample_upper_hull(upperHull):
@@ -303,18 +328,26 @@ def _ars_sample_upper_hull(upperHull):
         # x = left + np.log(np.exp(vmax)*(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax)))/m
         # x = left + vmax + np.log(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax))/m
 
-        lnu = np.log(U)
-        v = lnu + m*(right-left)
-        vmax = np.amax([v, lnu, 0])
-        x = left + vmax/m + np.log(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax))/m
+        # First check if the slope is zero, because then our integrals are undefined
+        if np.allclose(m, 0.0):
+            # If so, the pdf is flat in this interval so sample uniformly
+            x = left + np.random.rand() * (right-left)
+        else:
+            # Otherwise, inverse sample an exponential distribution
+            lnu = np.log(U)
+            v = lnu + m*(right-left)
+            vmax = np.amax([v, lnu, 0])
+            x = left + vmax/m + np.log(np.exp(v-vmax) - np.exp(lnu-vmax) + np.exp(-vmax))/m
 
     # If the left edge is -Inf, we need to be smarter
     elif np.isinf(left):
+        assert m > 0
         x = right + np.log(U) / m
     # Same for the right edge being +Inf
     else:
         # x = np.log( U*(- np.exp(m*left)) + np.exp(m*left) ) / m
         # x = np.log( np.exp(m*left)*(1-U)) / m
+        assert m < 0
         x = left + np.log(1-U) / m
 
     if np.isinf(x) or np.isnan(x):
