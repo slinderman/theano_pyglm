@@ -24,9 +24,14 @@ def parse_cmd_line_args():
     parser.add_option("-x", "--x0", dest="x0_file", default=None,
                       help="Initial x to start inference algorithm.")
 
+    parser.add_option("--x1", dest="x1_file", default=None,
+                      help="Second sample file, e.g. for plotting")
+
+    parser.add_option("--x2", dest="x2_file", default=None,
+                      help="Third sample file.")
+
     parser.add_option("-u", "--unique_result", dest="unique_results", default="true",
                       help="Whether or not to create a unique results directory.")
-
 
     # Parallel-specific options for loading IPython profiles
     parser.add_option("-p", "--profile", dest="profile", default='default',

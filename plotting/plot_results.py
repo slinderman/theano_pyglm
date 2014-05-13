@@ -292,7 +292,6 @@ def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor
                                        color=tcolor,
                                        fill=True))
 
-
             # Plot the inferred impulse response
             ax.plot(x_aoff + np.arange(x_sz),
                     y_aoff + np.squeeze(s_imps[n_pre,n_post,:]),
