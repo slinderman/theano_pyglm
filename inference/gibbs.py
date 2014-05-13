@@ -1079,7 +1079,7 @@ class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
         super(LatentDistanceNetworkUpdate, self).__init__()
 
         self.avg_accept_rate = 0.9
-        self.step_sz = 0.05
+        self.step_sz = 0.001
 
     def preprocess(self, population):
         # Compute the log probability of the graph and
@@ -1173,11 +1173,12 @@ def initialize_updates(population):
     parallel_updates.append(net_sampler)
 
     # If the graph model is a latent distance model, add its update
-    # from components.graph import LatentDistanceGraphModel
-    # if isinstance(population.network.graph, LatentDistanceGraphModel):
-    #     loc_sampler = LatentDistanceNetworkUpdate()
-    #     loc_sampler.preprocess(population)
-    #     serial_updates.append(loc_sampler)
+    from components.graph import LatentDistanceGraphModel
+    if isinstance(population.network.graph, LatentDistanceGraphModel):
+        print "Initializing latent location sampler"
+        loc_sampler = LatentDistanceNetworkUpdate()
+        loc_sampler.preprocess(population)
+        serial_updates.append(loc_sampler)
 
     return serial_updates, parallel_updates
 

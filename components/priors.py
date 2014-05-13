@@ -195,7 +195,7 @@ class DeterminenalPointProcess(Component):
 
         assert np.all(np.isfinite(x))
 
-        return x
+        return x.reshape((N,D))
 
 def test_determinant():
     sigma = 5.0
@@ -241,8 +241,6 @@ def test_determinant():
         smpls.append(x_next)
 
     # Make a movie of the samples
-
-    import pdb; pdb.set_trace()
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

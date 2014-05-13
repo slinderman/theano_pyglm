@@ -90,10 +90,12 @@ DistanceWeightedModel = \
                     'N_dims' : 1,
                     'location_prior' :
                      {
-                         'type' : 'gaussian',
-                         'mu' : 0.0,
-                         'sigma' : 0.5
+                         'type' : 'dpp',
+                         'sigma' : 1.0,
+                         'bound' : 5.0
                      },
+                    # Sort neurons by the first coordinate of their latent location
+                     'sorted' : False
                 }
         },
 }

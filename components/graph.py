@@ -198,7 +198,7 @@ class LatentDistanceGraphModel(Component):
 
         # Define log probability
         self.log_p = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA)) + \
-                    self.location_prior.log_p(self.L)
+                    self.location_prior.log_p(self.Lm)
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -211,7 +211,16 @@ class LatentDistanceGraphModel(Component):
         N = self.model['N']
 
         #  Sample locations from prior
-        L = self.location_prior.sample(size=(self.N*self.N_dims,)).ravel()
+        L = self.location_prior.sample(size=(self.N,self.N_dims))
+
+        # DEBUG!  Permute the neurons such that they are sorted along the first dimension
+        # This is only for data generation
+        if self.prms['sorted']:
+            print "Warning: sorting the neurons by latent location. " \
+                  "Do NOT do this during inference!"
+            perm = np.argsort(L[:,0])
+            L = L[perm, :]
+        L = L.ravel()
 
         # TODO: Sample delta from prior
         delta = self.prms['delta']
