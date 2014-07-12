@@ -11,7 +11,8 @@ from utils.theano_func_wrapper import seval, _flatten
 from utils.packvec import *
 from utils.grads import *
 
-from ars import adaptive_rejection_sample
+# from ars import adaptive_rejection_sample
+from hips.inference.ars import adaptive_rejection_sample
 from hmc import hmc
 from coord_descent import coord_descent
 from log_sum_exp import log_sum_exp_sample
@@ -477,7 +478,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         self.propose_from_prior = False
 
         # Define constants for Sampling
-        self.DEG_GAUSS_HERMITE = 20
+        self.DEG_GAUSS_HERMITE = 10
         self.GAUSS_HERMITE_ABSCISSAE, self.GAUSS_HERMITE_WEIGHTS = \
             np.polynomial.hermite.hermgauss(self.DEG_GAUSS_HERMITE)
 
@@ -525,7 +526,39 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
 
         return I_bias, I_stim, I_imp, p_A
 
-    def _glm_ll_A(self, n_pre, n_post, w, x, I_bias, I_stim, I_imp):
+    def _precompute_other_current(self, x, I_imp, n_pre, n_post):
+        """
+        Precompute the weighted currents from neurons other than n_pre
+        """
+        # Set A[n_pre,n_post]=0 to omit this current
+        A = x['net']['graph']['A']
+        W = x['net']['weights']['W']
+        A_init = A[n_pre, n_post]
+        A[n_pre, n_post] = 0
+
+        # Get the likelihood of the GLM under A and W
+        s = {'A' : self.network.graph.A,
+             'W' : self.syms['net']['weights']['W'],
+             'n' :self.glm.n,
+             'I_imp' : self.glm.imp_model.I_imp,
+             'nlin' : self.syms['glm']['nlin']
+            }
+
+        xv = {'A' : A,
+              'W' : W,
+              'n' : n_post,
+              'I_imp' : I_imp,
+              'nlin' : x['glms'][n_post]['nlin']
+             }
+
+        I_net_other = seval(self.glm.I_net, s, xv)
+
+        # Reset A
+        A[n_pre, n_post] = A_init
+        return I_net_other
+
+
+    def _glm_ll_A_old(self, n_pre, n_post, w, x, I_bias, I_stim, I_imp):
         """ Compute the log likelihood of the GLM with A=True and given W
         """
         # Set A in state dict x
@@ -563,6 +596,30 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         W[n_pre, n_post] = W_init
         return ll
 
+    def _glm_ll(self, n_pre, n_post, w, x, I_bias, I_stim, I_imp, I_net_other):
+        """ Compute the log likelihood of the GLM with A=True and given W
+        """
+        # Compute the weighted network current
+        I_net = I_net_other + w*I_imp[:,n_pre]
+
+        # Get the likelihood of the GLM under A and W
+        s = {'n' :self.glm.n,
+             'I_bias' : self.glm.bias_model.I_bias,
+             'I_stim' : self.glm.bkgd_model.I_stim,
+             'I_net' : self.glm.I_net,
+             'nlin' : self.syms['glm']['nlin']
+            }
+
+        xv = {'n' : n_post,
+              'I_bias' : I_bias,
+              'I_stim' : I_stim,
+              'I_net' : I_net,
+              'nlin' : x['glms'][n_post]['nlin']
+             }
+
+        ll = seval(self.glm.ll, s, xv)
+        return ll
+
     def _glm_ll_noA(self, n_pre, n_post, x, I_bias, I_stim, I_imp):
         """ Compute the log likelihood of the GLM with A=True and given W
         """
@@ -598,7 +655,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         return ll
 
     def _collapsed_sample_AW(self, n_pre, n_post, x,
-                             I_bias, I_stim, I_imp, p_A):
+                             I_bias, I_stim, I_imp, I_other, p_A):
         """
         Do collapsed Gibbs sampling for an entry A_{n,n'} and W_{n,n'} where
         n = n_pre and n' = n_post.
@@ -618,6 +675,9 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         prior_lp_A = np.log(p_A[n_pre, n_post])
         prior_lp_noA = np.log(1.0-p_A[n_pre, n_post])
 
+        # TODO: We could make this faster by precomputing the other currents
+        # going into neuron n'.
+
         # Approximate G = \int_0^\infty p({s,c} | A, W) p(W_{n,n'}) dW_{n,n'}
         log_L = np.zeros(self.DEG_GAUSS_HERMITE)
         weighted_log_L = np.zeros(self.DEG_GAUSS_HERMITE)
@@ -625,8 +685,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         for i in np.arange(self.DEG_GAUSS_HERMITE):
             w = self.GAUSS_HERMITE_WEIGHTS[i]
             W_nn = W_nns[i]
-            log_L[i] = self._glm_ll_A(n_pre, n_post, W_nn,
-                                      x, I_bias, I_stim, I_imp)
+            log_L[i] = self._glm_ll(n_pre, n_post, W_nn,
+                                          x, I_bias, I_stim, I_imp, I_other)
 
             # Handle NaNs in the GLM log likelihood
             if np.isnan(log_L[i]):
@@ -648,8 +708,9 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         log_pr_A = prior_lp_A + log_G
         # Compute log Pr(A_nn = 0 | {s,c}) = log Pr({s,c} | A_nn = 0) + log Pr(A_nn = 0)
         log_pr_noA = prior_lp_noA + \
-                     self._glm_ll_noA(n_pre, n_post, x,
-                                      I_bias, I_stim, I_imp)
+                     self._glm_ll(n_pre, n_post, 0.0, x,
+                                      I_bias, I_stim, I_imp, I_other)
+
         if np.isnan(log_pr_noA):
             log_pr_noA = -np.Inf
 
@@ -671,10 +732,10 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         if A[n_pre,n_post] == 1:
             # W[n_pre, n_post] = self._inverse_cdf_sample_w(mu_w, sigma_w, W_nns, log_L)
             W[n_pre, n_post] = self._adaptive_rejection_sample_w(n_pre, n_post, x, mu_w, sigma_w,
-                                                                 W_nns, log_L, I_bias, I_stim, I_imp)
+                                                                 W_nns, log_L, I_bias, I_stim, I_imp, I_other)
 
-            if not np.isfinite(self._glm_ll_A(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
-                raise Exception("Invalid weight sample")
+            # if not np.isfinite(self._glm_ll(n_pre, n_post, W[n_pre, n_post], x, I_bias, I_stim, I_imp)):
+            #     raise Exception("Invalid weight sample")
 
             # print "p_W: %.3f (v=%.3f)" % (np.interp(W[n_pre, n_post], ws, p_W) ,v)
         else:
@@ -703,7 +764,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         w = np.interp(v, F_W, W_nns)
         return w
 
-    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws, log_L, I_bias, I_stim, I_imp):
+    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws, log_L, I_bias, I_stim, I_imp, I_other):
         """
         Sample weights using adaptive rejection sampling.
         This only works for log-concave distributions, which will
@@ -724,7 +785,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             lp = np.zeros_like(ws)
             for (i,w) in enumerate(ws):
                 lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
-                        self._glm_ll_A(n_pre, n_post, w, x, I_bias, I_stim, I_imp) \
+                        self._glm_ll(n_pre, n_post, w, x, I_bias, I_stim, I_imp, I_other) \
                         - Z
 
             if isinstance(ws_in, np.ndarray):
@@ -850,13 +911,16 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         order = np.arange(N)
         np.random.shuffle(order)
         for n_pre in order:
+            # Precompute the other currents
+            I_other = self._precompute_other_current(x, I_imp, n_pre, n)
+
             # print "Sampling %d->%d" % (n_pre, n)
             if self.propose_from_prior:
                 self._collapsed_sample_AW_with_prior(n_pre, n, x,
                                                      I_bias, I_stim, I_imp, p_A)
             else:
                 self._collapsed_sample_AW(n_pre, n, x,
-                                          I_bias, I_stim, I_imp, p_A)
+                                          I_bias, I_stim, I_imp, I_other, p_A)
 
         return x
 

@@ -85,7 +85,7 @@ SbmWeightedModel = \
             'graph' :
                 {
                     'type' : 'sbm',
-                    'R' : 3,
+                    'R' : 2,
                     'b0' : 1,
                     'b1' : 1,
                     'alpha0' : np.ones(3)
