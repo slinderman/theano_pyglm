@@ -86,13 +86,13 @@ DistanceWeightedModel = \
                 {
                     'type' : 'distance',
                     'rho_refractory' : 0.999,
-                    'delta' : 2,
-                    'N_dims' : 1,
+                    'delta' : 1.0,
+                    'N_dims' : 2,
                     'location_prior' :
                      {
                          'type' : 'dpp',
                          'sigma' : 1.0,
-                         'bound' : 5.0
+                         'bound' : 1.0
                      },
                     # Sort neurons by the first coordinate of their latent location
                      'sorted' : False
