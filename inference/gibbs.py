@@ -49,6 +49,7 @@ class MetropolisHastingsUpdate(object):
     def update(self, x_curr):
         """ Take a MH step
         """
+        return x_curr
 
 class ParallelMetropolisHastingsUpdate(MetropolisHastingsUpdate):
     """ Extending this class indicates that the updates can be
@@ -1164,6 +1165,7 @@ class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
 
         # Get the prior probability of A
         lp = seval(self.network.graph.log_p, self.syms['net']['graph'], x['net']['graph'])
+        # assert np.all(np.isfinite(lp))
         return lp
 
 
@@ -1175,6 +1177,8 @@ class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
         g_lp = seval(self.g_netlp_wrt_L,
                      self.syms['net']['graph'],
                      x['net']['graph'])
+        # if not np.all(np.isfinite(g_lp)):
+        #     import pdb; pdb.set_trace()
         return g_lp
 
     def update(self, x):
@@ -1199,7 +1203,9 @@ class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
 
             # Update step size and accept rate
             self.step_sz = new_step_sz
+            # print "Step: ", self.step_sz
             self.avg_accept_rate = new_accept_rate
+            # print "Accept: ", self.avg_accept_rate
 
             # Update current L
             x['net']['graph']['L'] = L.reshape(self.L_shape)

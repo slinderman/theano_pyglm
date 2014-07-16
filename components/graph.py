@@ -60,9 +60,16 @@ class ErdosRenyiGraphModel(Component):
         # Define complete adjacency matrix
         self.A = T.bmatrix('A')
 
+        # Allow for scaling the log likelihood of the graph so that we can do
+        # Annealed importance sampling
+        self.lkhd_scale = theano.shared(value=1.0, name='lkhd_scale')
+
+
         # Define log probability
-        self.log_p = T.sum(self.A * np.log(np.minimum(1.0-1e-8, self.rho)) +
+        self.lkhd = T.sum(self.A * np.log(np.minimum(1.0-1e-8, self.rho)) +
                            (1 - self.A) * np.log(np.maximum(1e-8, 1.0 - self.rho)))
+
+        self.log_p = self.lkhd_scale * self.lkhd
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -179,9 +186,12 @@ class LatentDistanceGraphModel(Component):
         #self.D = T.sqrt(T.sum((L1-L2)**2, axis=2))
         #self.D = T.sum((L1-L2)**2, axis=2)
 
-        # Bummer, to get the gradients to work we need to use L1 norm
-        # Theano isn't smart enough to handle the
-        self.D = (L1-L2).norm(1, axis=2)
+        # It seems we need to use L1 norm for now because
+        # Theano doesn't properly compute the gradients of the L2
+        # norm. (It gives NaNs because it doesn't realize that some
+        # terms will cancel out)
+        # self.D = (L1-L2).norm(1, axis=2)
+        self.D = T.pow(L1-L2,2).sum(axis=2)
 
         # There is a distance scale, \delta
         self.delta = T.dscalar(name='delta')
@@ -190,15 +200,20 @@ class LatentDistanceGraphModel(Component):
         self.A = T.bmatrix('A')
 
         # The probability of A is exponentially decreasing in delta
-        self.pA = T.exp(-1.0*self.D/self.delta)
+        # self.pA = T.exp(-1.0*self.D/self.delta)
+        self.pA = T.exp(-0.5*self.D/self.delta**2)
 
         if 'rho_refractory' in self.prms:
             self.pA += T.eye(self.N) * (self.prms['rho_refractory']-self.pA)
             # self.pA[np.diag_indices(self.N)] = self.prms['rho_refractory']
 
+        # Allow for scaling the log likelihood of the graph so that we can do
+        # Annealed importance sampling
+        self.lkhd_scale = theano.shared(value=1.0, name='lkhd_scale')
+
         # Define log probability
-        self.log_p = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA)) + \
-                    self.location_prior.log_p(self.Lm)
+        self.lkhd = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA))
+        self.log_p = self.lkhd_scale * self.lkhd + self.location_prior.log_p(self.Lm)
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
