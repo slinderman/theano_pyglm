@@ -86,8 +86,8 @@ DistanceWeightedModel = \
                 {
                     'type' : 'distance',
                     'rho_refractory' : 0.999,
-                    'delta' : 2,
-                    'N_dims' : 1,
+                    'delta' : 4,
+                    'N_dims' : 2,
                     'location_prior' :
                      {
                          'type' : 'dpp',
