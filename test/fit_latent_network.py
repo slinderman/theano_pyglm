@@ -372,5 +372,6 @@ def test_latent_distance_network_sampler(N, N_samples=10000):
         print "Dist Marg Lkhd: ", dist_marg_lkhd
 
 if __name__ == "__main__":
-    # fit_latent_network_to_mle()
-    test_latent_distance_network_sampler(16)
+    fit_latent_network_to_mle()
+    # test_latent_distance_network_sampler(16)
+
