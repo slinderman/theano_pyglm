@@ -44,9 +44,9 @@ DistanceWeightedModel = \
     # Parameters of the impulse responses
     'impulse' :
         {
-            'type' : 'normalized',
+            'type' : 'dirichlet',
             'dt_max' : 0.2,
-            'alpha' : 1,
+            'alpha' : 1.0,
             'basis' :
                 {
                     'type' : 'cosine',

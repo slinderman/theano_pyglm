@@ -234,8 +234,10 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
                     conv_vars['glms'][n2]['imp']['w_lng'] = np.log(w_ir_n2.flatten())
                 if to_model['impulse']['type'].lower() == 'dirichlet':
                     for n1 in range(N):
-                        # conv_vars['glms'][n2]['imp']['beta_%d' % n1] = w_ir_n2[n1,:]
-                        conv_vars['glms'][n2]['imp']['g_%d' % n1] = w_ir_n2[n1,:]
+                        # Scale up the weights such that the average is preserved
+                        alpha = to_popn.glm.imp_model.alpha
+                        B = to_popn.glm.imp_model.B
+                        conv_vars['glms'][n2]['imp']['g_%d' % n1] = alpha * B * w_ir_n2[n1,:]
 
             # Update to_vars
             conv_vars['net']['weights']['W'] = W.flatten()

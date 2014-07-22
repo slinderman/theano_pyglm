@@ -2,7 +2,7 @@ import cPickle
 import os
 from utils.io import segment_data
 
-data_dir = '/group/hips/scott/pyglm/data/synth/dist/N16T300/2014_07_16-17_07'
+data_dir = '/Users/scott/Projects/pyglm/data/synth/dist/N16T300/2014_07_22-10_01/'
 
 with open(os.path.join(data_dir, 'data.pkl')) as f:
     data = cPickle.load(f)

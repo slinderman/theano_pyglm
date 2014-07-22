@@ -304,7 +304,7 @@ class DirichletImpulses(Component):
         # self.log_p = (self.alpha-1) * T.sum(T.log(beta2))
         self.log_p = T.constant(0.0)
         for g in self.gs:
-            self.log_p += (self.alpha-1) * T.sum(T.log(abs(g))) - T.sum(abs(g))
+            self.log_p += (self.alpha-1.0) * T.sum(T.log(abs(g))) - T.sum(abs(g))
 
         # Define a helper variable for the impulse response
         # after projecting onto the basis

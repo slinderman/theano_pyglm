@@ -80,13 +80,13 @@ SparseWeightedModel = \
                      {
                          'type' : 'gaussian',
                          'mu' : 0.0,
-                         'sigma' : 0.5
+                         'sigma' : 2.0
                      },
                     'refractory_prior' :
                     {
                         'type' : 'gaussian',
-                        'mu' : -0.5,
-                        'sigma' : 0.25
+                        'mu' : -0.2,
+                        'sigma' : 0.5
                     }
                 },
 
