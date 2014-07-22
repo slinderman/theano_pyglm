@@ -66,7 +66,10 @@ class Glm:
         lp_imp = self.imp_model.log_p
         lp_nlin = self.nlin_model.log_p
         self.log_prior = lp_bias + lp_bkgd + lp_imp + lp_nlin
-        self.log_p = self.ll + self.log_prior
+
+        # Allow for a scaling of the likelihood to implement AIS
+        self.lkhd_scale = theano.shared(name='lkhd_scale', value=1.0)
+        self.log_p = self.lkhd_scale * self.ll + self.log_prior
 
     def get_variables(self):
         """ Get a list of all variables

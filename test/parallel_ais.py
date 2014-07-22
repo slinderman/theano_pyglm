@@ -4,12 +4,10 @@ import cPickle
 import time
 import numpy as np
 
-from generate_synth_data import gen_synth_data
 from models.model_factory import make_model, convert_model
 from population import Population
-from inference.parallel_gibbs import parallel_gibbs_sample
+from inference.parallel_ais import parallel_ais
 from parallel_harness import initialize_parallel_test_harness
-from plotting.plot_results import plot_results
 
 def run_synth_test():
     """ Run a test with synthetic data and MCMC inference
@@ -36,27 +34,30 @@ def run_synth_test():
                 x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
     use_existing = False
-    
+
+    fname = os.path.join(options.resultsDir, '%s_marginal_lkhd.pkl' % options.model)
     if use_existing and  \
-       os.path.exists(os.path.join(options.resultsDir, 'marginal_lkhd.pkl')):
+       os.path.exists(fname):
 
         print "Found existing results"
-        with open(os.path.join(options.resultsDir, 'marginal_lkhd.pkl')) as f:
+        with open(fname) as f:
             marg_lkhd = cPickle.load(f)
     else:
-        N_samples = 1000
+        N_samples = 10
         popn_true.set_data(data)
 
         # Estimate the marginal log likelihood
         print "Performing parallel inference"
-        marg_lkhd = parallel_gibbs_sample(client, data,
-                                          x0=x0, N_samples=N_samples,
-                                          )
+        marg_lkhd, log_weights = parallel_ais(client, data,
+                                              x0=x0, N_samples=N_samples,
+                                              steps_per_B=50,
+                                              resdir=options.resultsDir
+                                              )
 
         # Save results
-        print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
-        with open(os.path.join(options.resultsDir, 'marginal_lkhd.pkl'),'w') as f:
-            cPickle.dump(marg_lkhd, f, protocol=-1)
+        print "Saving results to %s" % fname
+        with open(fname,'w') as f:
+            cPickle.dump((marg_lkhd, log_weights), f, protocol=-1)
 
 if __name__ == "__main__":
     run_synth_test()

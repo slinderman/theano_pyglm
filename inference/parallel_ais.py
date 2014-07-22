@@ -50,15 +50,15 @@ def concatenate_network_results(x_net, x, N):
             W_curr[:,n] = W_inf[:,n]
             x['net']['weights']['W'] = np.reshape(W_curr, (N**2,))
 
-def periodically_save_results(x, start, stop, results_dir):
+def periodically_save_results(x,d,results_dir):
     """ Periodically save the MCMC samples
     """
-    fname = "results.partial.%d-%d.pkl" % (start,stop)
+    fname = "ais_results.partial.%d.pkl" % (d)
     import os
     import cPickle
     print "Saving partial results to %s" % os.path.join(results_dir, fname)
     with open(os.path.join(results_dir, fname),'w') as f:
-        cPickle.dump(x[start:stop], f, protocol=-1)
+        cPickle.dump(x, f, protocol=-1)
 
 def check_convergence(x):
     """ Check for convergence of the sampler
@@ -69,8 +69,9 @@ def parallel_ais(client,
                  data,
                  N_samples=1000,
                  x0=None,
-                 B=100,
-                 steps_per_B=100):
+                 B=200,
+                 steps_per_B=10,
+                 resdir='.'):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -107,19 +108,21 @@ def parallel_ais(client,
     def _serial_update(i, x):
         return serial_updates[i].update(x)
 
-    @interactive
-    def _set_beta(beta):
-        popn.glm.lkhd_scale.set_valule(beta)
+    def _set_beta(dview, beta):
+        dview.execute('popn.glm.lkhd_scale.set_value(%f)' % beta, block=True)
 
-    betas = np.linspace(0,1,B)
+    #betas = np.linspace(0,1,B)
+    betas = np.concatenate((np.linspace(0,0.01,B/5), 
+                            np.logspace(-2,0,4*B/5)))
+    B = len(betas)
 
     # Sample m points
-    log_weights = np.zeros(N_samples)
+    log_weights = np.zeros((N_samples,B))
     for m in range(N_samples):
         # Sample a new set of graph parameters from the prior
-        x = copy.deepcopy(x0)
-        # master.execute('x0 = popn.sample()', block=True)
-        # x0 = master['x0']
+        # x = copy.deepcopy(x0)
+        master.execute('x0 = popn.sample()', block=True)
+        x = master['x0']
 
         # print "M: %d" % m
         # Sample mus from each of the intermediate distributions,
@@ -131,14 +134,15 @@ def parallel_ais(client,
         # Sample the intermediate distributions
         for (n,beta) in zip(range(1,B), betas[1:]):
             # print "M: %d\tBeta: %.3f" % (m,beta)
-            sys.stdout.write("M: %d\tBeta: %.3f \r" % (m,beta))
-            sys.stdout.flush()
 
             # Set the likelihood scale (beta) in the graph model
-            dview.apply(_set_beta, beta)
+            _set_beta(dview, beta)
 
             # Take many samples to mix over this beta
             for s in range(steps_per_B):
+                sys.stdout.write("M: %d\tBeta: %.3f\tSample: %d \r" % (m,beta,s))
+                sys.stdout.flush()
+
                 # Go through variables, sampling one at a time, in parallel where possible
                 for i in range(n_parallel_updates):
                     xs = dview.map_async(_parallel_update,
@@ -157,17 +161,22 @@ def parallel_ais(client,
             # Compute the ratio of this sample under this distribution and the previous distribution
             curr_lkhd = parallel_compute_log_p(dview, master, x, N)
 
-            dview.apply(_set_beta, betas[n-1])
-            prev_lkhd = parallel_compute_log_p(dview, master, x0, N)
+            # import pdb; pdb.set_trace()
+            _set_beta(dview, betas[n-1])
+            prev_lkhd = parallel_compute_log_p(dview, master, x, N)
+
+            print ""
+            print "curr_lkhd", curr_lkhd
+            print "prev_lkhd", prev_lkhd
 
             ratios[n-1] = curr_lkhd - prev_lkhd
+            log_weights[m,n] = curr_lkhd - prev_lkhd
 
-        # Compute the log weight of this sample
-        log_weights[m] = np.sum(ratios)
+        if np.mod(m, 10) == 0:
+            periodically_save_results(log_weights[:(m+1)], m, resdir)
 
-        print ""
-        print "W: %f" % log_weights[m]
+        print "W: %f" % log_weights[m,:].sum()
 
     # Compute the mean of the weights to get an estimate of the normalization constant
-    log_Z = -np.log(N_samples) + logsumexp(log_weights)
-    return log_Z
+    log_Z = -np.log(N_samples) + logsumexp(log_weights.sum(axis=1))
+    return log_Z, log_weights
