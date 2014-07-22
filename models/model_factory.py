@@ -50,13 +50,13 @@ def make_model(template, N=None):
     if N is not None:
         model['N'] = N
 
-    # Update other parameters as necessary
-    if template.lower() == 'distance_weighted_model' or \
-       template.lower() == 'distanceweightedmodel':
-        #model['network']['graph']['location_prior']['sigma'] = N/2.0/3.0
-        model['network']['graph']['location_prior']['mu'] = \
-            np.tile(np.arange(N).reshape((N,1)),
-                    [1,model['network']['graph']['N_dims']]).ravel()
+    # # Update other parameters as necessary
+    # if template.lower() == 'distance_weighted_model' or \
+    #    template.lower() == 'distanceweightedmodel':
+    #     #model['network']['graph']['location_prior']['sigma'] = N/2.0/3.0
+    #     model['network']['graph']['location_prior']['mu'] = \
+    #         np.tile(np.arange(N).reshape((N,1)),
+    #                 [1,model['network']['graph']['N_dims']]).ravel()
 
     return model
 
@@ -150,7 +150,7 @@ def stabilize_sparsity(model):
         #
         # So, given the bandwidth of 4d and the matrix size N, we will scale the weight
         # distribution to hopefully achieve stability
-        b = 4.0 * graph_model['delta']
+        b = 8.0 * graph_model['delta']
 
         # Constant scaling factors
         # max eig ~= mu_ref + .25*sigma_W * (b+2*log(N))
@@ -193,7 +193,8 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
 
     conv_vars = None
     if from_model['impulse']['type'].lower() == 'basis':
-        if to_model['impulse']['type'].lower() == 'normalized':
+        if to_model['impulse']['type'].lower() == 'normalized' or \
+           to_model['impulse']['type'].lower() == 'dirichlet':
             import copy
             conv_vars = copy.deepcopy(to_vars)
 
@@ -224,11 +225,17 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
                     w_ir_n1n2 = np.clip(w_ir_n1n2,0.001,np.Inf)
                     # Normalize the impulse response to get a weight
                     W[n1,n2] = Wsgn*np.sum(w_ir_n1n2)
+
                     # Set impulse response to normalized impulse response
                     w_ir_n2[n1,:] = w_ir_n1n2 / np.sum(w_ir_n1n2)
 
                 # Update to_vars
-                conv_vars['glms'][n2]['imp']['w_lng'] = np.log(w_ir_n2.flatten())
+                if to_model['impulse']['type'].lower() == 'normalized':
+                    conv_vars['glms'][n2]['imp']['w_lng'] = np.log(w_ir_n2.flatten())
+                if to_model['impulse']['type'].lower() == 'dirichlet':
+                    for n1 in range(N):
+                        # conv_vars['glms'][n2]['imp']['beta_%d' % n1] = w_ir_n2[n1,:]
+                        conv_vars['glms'][n2]['imp']['g_%d' % n1] = w_ir_n2[n1,:]
 
             # Update to_vars
             conv_vars['net']['weights']['W'] = W.flatten()

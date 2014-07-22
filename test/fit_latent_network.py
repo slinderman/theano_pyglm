@@ -46,7 +46,7 @@ def fit_latent_network_given_A(x0, loc_sampler, N_samples=1000):
     return smpls
 
 def ais_latent_network_given_A(x0, graph_model, graph_sampler, N_samples=1000, B=100,
-                               steps_per_B=101):
+                               steps_per_B=11):
     """
     Use AIS to approximate the marginal likelihood of a latent network model
     """

@@ -138,7 +138,7 @@ def run_gen_synth_data():
     plot_results(popn, data['vars'],
                  resdir=options.resultsDir,
                  do_plot_stim_resp=False,
-                 do_plot_imp_responses=False)
+                 do_plot_imp_responses= int(options.N)<=16)
     
 if __name__ == "__main__":
     run_gen_synth_data()

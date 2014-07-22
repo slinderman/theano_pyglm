@@ -51,6 +51,7 @@ class Gaussian(Component):
         """ Sample from the prior
         """
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn(*size)
+
         return v
 
 class SphericalGaussian(Component):

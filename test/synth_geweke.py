@@ -205,8 +205,10 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
     f.savefig(os.path.join(resdir,'geweke_bias.pdf'))
 
     # Plot the gamma distributed latent vars of the normalized impulse resp
-    gs = [[np.exp(x['glms'][n]['imp']['w_lng']) for n in range(N)] for x in x_smpls]
+    # gs = [[np.exp(x['glms'][n]['imp']['w_lng']) for n in range(N)] for x in x_smpls]
+    gs = [[x['glms'][n]['imp']['g_%d'%n] for n in range(N)] for x in x_smpls]
     gs = np.array(gs)
+    gs = np.abs(gs)
     (_,N,B) = gs.shape
 
     # Get the true dist
@@ -245,7 +247,7 @@ def run_synth_test():
         popn.set_data(data)
 
         # Perform inference
-        N_samples = 10000
+        N_samples = 1000
         x_smpls = geweke_test(popn, data, N_samples=N_samples)
 
         # Save results

@@ -383,6 +383,7 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
             the log probability with respect to the differentiable GLM
             parameters, e.g. the weight matrix if it exists.
         """
+        import pdb; pdb.set_trace()
         self.population = population
         self.glm = population.glm
         self.syms = population.get_variables()
@@ -464,6 +465,112 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
 
 
         x['glms'][n] = xn['glm']
+        return x
+
+
+class HmcDirichletImpulseUpdate(ParallelMetropolisHastingsUpdate):
+    """
+    Update the Dirichlet impulse response parameters using Hamiltonian
+    Monte Carlo. Stochastically follow the gradient of the parameters using
+    Hamiltonian dynamics.
+    """
+    def __init__(self):
+        super(HmcDirichletImpulseUpdate, self).__init__()
+
+        self.avg_accept_rate = 0.9
+        self.step_sz = 0.1
+
+    def preprocess(self, population):
+        """ Initialize functions that compute the gradient and Hessian of
+            the log probability with respect to the differentiable GLM
+            parameters, e.g. the weight matrix if it exists.
+        """
+        self.population = population
+        self.glm = population.glm
+        self.syms = population.get_variables()
+
+
+        # Compute gradients of the log prob wrt the GLM parameters
+        self.glm_logp = self.glm.log_p
+        self.grads_wrt_imp = []
+        for g in self.glm.imp_model.gs:
+            grad,_ = grad_wrt_list(self.glm_logp, [g])
+            self.grads_wrt_imp.append(grad)
+
+        # Get the shape of the parameters from a sample of variables
+        # self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm']['imp'],
+        #                              self.impulse_syms)
+
+    def _glm_logp(self, n, g, x_all):
+        """
+        Compute the log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        # set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
+        x_all['glm']['imp']['g_%d' % n] = g
+        lp = seval(self.glm_logp,
+                   self.syms,
+                   x_all)
+        return lp
+
+    def _grad_glm_logp(self, n, g, x_all):
+        """
+        Compute the negative log probability (or gradients and Hessians thereof)
+        of the given GLM variables. We also need the rest of the population variables,
+        i.e. those that are not being sampled currently, in order to evaluate the log
+        probability.
+        """
+        # Extract the glm parameters
+        x_all['glm']['imp']['g_%d' % n] = g
+        glp = seval(self.grads_wrt_imp[n],
+                    self.syms,
+                    x_all)
+        return glp
+
+    def update(self, x, n_post):
+        """ Gibbs sample the GLM parameters. These are mostly differentiable
+            so we use HMC wherever possible.
+        """
+        xn = self.population.extract_vars(x, n_post)
+        A = x['net']['graph']['A']
+        for n_pre in range(self.population.N):
+            # Only sample if there is a connection from n_pre to n_post
+            if A[n_pre, n_post]:
+                # Get current g
+                g_0 = xn['glm']['imp']['g_%d' % n_pre]
+                # Create lambda functions to compute the nll and its gradient
+                nll = lambda g: -1.0*self._glm_logp(n_pre, g, xn)
+                grad_nll = lambda g: -1.0*self._grad_glm_logp(n_pre, g, xn)
+
+                # HMC with automatic parameter tuning
+                n_steps = 2
+                g_f, new_step_sz, new_accept_rate = hmc(nll,
+                                                        grad_nll,
+                                                        self.step_sz,
+                                                        n_steps,
+                                                        g_0,
+                                                        adaptive_step_sz=True,
+                                                        avg_accept_rate=self.avg_accept_rate)
+
+                # Update step size and accept rate
+                self.step_sz = new_step_sz
+                self.avg_accept_rate = new_accept_rate
+                # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+
+
+                # Unpack the optimized parameters back into the state dict
+                xn['glm']['imp']['g_%d' % n_pre] = g_f
+
+            else:
+                # No edge: Sample g from the prior
+                g_f = np.random.gamma(self.glm.imp_model.alpha,
+                                      np.ones(self.glm.imp_model.B))
+                xn['glm']['imp']['g_%d' % n_pre] = g_f
+
+        x['glms'][n_post] = xn['glm']
         return x
 
 
@@ -1228,7 +1335,11 @@ def initialize_updates(population):
     bias_sampler.preprocess(population)
     parallel_updates.append(bias_sampler)
 
-    imp_sampler = HmcImpulseUpdate()
+    from components.impulse import DirichletImpulses
+    if isinstance(population.glm.imp_model, DirichletImpulses):
+        imp_sampler = HmcDirichletImpulseUpdate()
+    else:
+        imp_sampler = HmcImpulseUpdate()
     imp_sampler.preprocess(population)
     parallel_updates.append(imp_sampler)
 

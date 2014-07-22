@@ -44,7 +44,8 @@ SparseWeightedModel = \
     # Parameters of the impulse responses
     'impulse' :
         {
-            'type' : 'normalized',
+            # 'type' : 'normalized',
+            'type' : 'dirichlet',
             'dt_max' : 0.2,
             'alpha' : 1,
             'basis' :
