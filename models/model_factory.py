@@ -6,6 +6,7 @@ from scipy.optimize import nnls
 
 from standard_glm import StandardGlm
 from spatiotemporal_glm import SpatiotemporalGlm
+from shared_tuningcurve_glm import SharedTuningCurveGlm
 from simple_weighted_model import SimpleWeightedModel
 from simple_sparse_model import SimpleSparseModel
 from sparse_weighted_model import SparseWeightedModel
@@ -24,6 +25,8 @@ def make_model(template, N=None):
             model = copy.deepcopy(StandardGlm)
         elif template.lower() == 'spatiotemporal_glm':
             model = copy.deepcopy(SpatiotemporalGlm)
+        elif template.lower() == 'shared_tuning_curve':
+            model = copy.deepcopy(SharedTuningCurveGlm)
         elif template.lower() == 'simple_weighted_model' or \
              template.lower() == 'simpleweightedmodel':
             model = copy.deepcopy(SimpleWeightedModel)

@@ -109,7 +109,7 @@ def run_gen_synth_data():
     # Set simulation parametrs
     dt = 0.001
     dt_stim = 0.1
-    D_stim = 1
+    D_stim = model['bkgd']['D_stim'] if 'D_stim' in model['bkgd'] else 0
     stim = np.random.randn(options.T_stop/dt_stim, D_stim)
 
     data = gen_synth_data(options.N, options.T_stop, popn, x_true, dt, dt_stim, D_stim, stim)
@@ -135,10 +135,11 @@ def run_gen_synth_data():
         cPickle.dump(data, f, protocol=-1)
 
     # Plot firing rates, stimulus responses, etc
+    do_plot_imp_resonses = int(options.N)<=16
     plot_results(popn, data['vars'],
                  resdir=options.resultsDir,
-                 do_plot_stim_resp=False,
-                 do_plot_imp_responses= int(options.N)<=16)
+                 do_plot_stim_resp=True,
+                 do_plot_imp_responses=do_plot_imp_resonses)
     
 if __name__ == "__main__":
     run_gen_synth_data()

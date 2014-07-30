@@ -15,6 +15,8 @@ def create_bkgd_component(model):
         bkgd = BasisStimulus(model)
     elif type == 'spatiotemporal':
         bkgd = SpatiotemporalStimulus(model)
+    elif type == 'sharedtuningcurve':
+        bkgd = NaiveSharedTuningCurveStimulus(model)
     else:
         raise Exception("Unrecognized backgound model: %s" % type)
     return bkgd
@@ -214,7 +216,7 @@ class SpatiotemporalStimulus(Component):
 
 
         # Create function handles for the stimulus responses
-        self.stim_resp_t = T.dot(self.ibasis_t,self.w_t)        
+        self.stim_resp_t = T.dot(self.ibasis_t,self.w_t)
         self.stim_resp_x = T.dot(self.ibasis_x,self.w_x)
 
     def get_variables(self):
@@ -222,7 +224,7 @@ class SpatiotemporalStimulus(Component):
         """
         return {str(self.w_x): self.w_x,
                 str(self.w_t): self.w_t}
-    
+
     def sample(self, n=None):
         """
         return a sample of the variables
@@ -232,14 +234,14 @@ class SpatiotemporalStimulus(Component):
         w_t = self.mu + self.sigma * np.random.randn(self.Bt)
         return {str(self.w_x) : w_x,
                 str(self.w_t) : w_t}
-    
+
     def get_state(self):
         """ Get the stimulus response
         """
         # The filters are non-identifiable as we can negate both the
         # temporal and the spatial filters and get the same net effect.
         # By convention, choose the sign that results in the most
-        # positive temporal filter. 
+        # positive temporal filter.
         sign = T.sgn(T.sum(self.stim_resp_t))
 
         # Similarly, we can trade a constant between the spatial and temporal
@@ -283,7 +285,7 @@ class SpatiotemporalStimulus(Component):
         ibasis_t = np.zeros((len(t_int), Bt))
         for b in np.arange(Bt):
             ibasis_t[:,b] = np.interp(t_int, t_bas, self.temporal_basis[:,b])
-        
+
         (Lx,Bx) = self.spatial_basis.shape
         Lx_int = self.prms['D_stim']
         x_int = np.linspace(0,1,Lx_int)
@@ -323,9 +325,171 @@ class SpatiotemporalStimulus(Component):
         # Permute output to get shape(T,Bt,Bx)
         assert fstim.shape == (nt,Bx,Bt)
         fstim = np.transpose(fstim, axes=[0,2,1])
-        
-        # Flatten the filtered stimulus 
+
+        # Flatten the filtered stimulus
         fstim2 = np.reshape(fstim,(nt,Bt*Bx))
 
         self.stim.set_value(fstim2)
+
+
+class NaiveSharedTuningCurveStimulus(Component):
+    """ Filter the stimulus with a set of shared tuning curves
+
+    """
+    def __init__(self, model):
+        """ Initialize the filtered stim model
+        """
+        self.prms = model['bkgd']
+        self.mu = self.prms['mu']
+        self.sigma = self.prms['sigma']
+        self.D_stim = self.prms['D_stim']
+
+        # Create a basis for the stimulus response
+        self.spatial_basis = create_basis(self.prms['spatial_basis'])
+        (_,Bx) = self.spatial_basis.shape
+
+        self.temporal_basis = create_basis(self.prms['temporal_basis'])
+        (_,Bt) = self.temporal_basis.shape
+
+        # Save the filter sizes
+        self.Bx = Bx
+        self.Bt = Bt
+
+        # Create a shared variable for the filtered stimulus. This is a 4D
+        # tensor with dimensions:
+        #   - time
+        #   - location (pixel)
+        #   - spatial basis
+        #   - temporal basis
+        # To get a stimulus current we need to select a location and take a
+        # weighted sum along both the spatial and temporal axes.
+        self.filtered_stim = theano.shared(name='stim',
+                                           value=np.ones((1,1,1,1)))
+
+        self.loc_index = T.iscalar('loc_index')
+        self.w_x = T.dvector('w_x')
+        self.w_t = T.dvector('w_t')
+
+
+        # Log probability
+        self.log_p = -0.5/self.sigma**2 *T.sum((self.w_x-self.mu)**2) + \
+                     -0.5/self.sigma**2 *T.sum((self.w_t-self.mu)**2)
+
+        # Expose outputs to the Glm class
+        I_x = T.tensordot(self.filtered_stim,
+                          self.w_x,
+                          axes=[[2],[0]])
+        # Extract only the loc_index column (Result is T x B_t)
+        I_x = I_x[:,self.loc_index,:]
+        self.I_stim = T.dot(I_x, self.w_t)
+
+        # Create function handles for the stimulus responses
+        self.stim_resp_t = T.dot(self.temporal_basis,self.w_t)
+        self.stim_resp_x = T.dot(self.spatial_basis,self.w_x)
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {str(self.loc_index) : self.loc_index,
+                str(self.w_x): self.w_x,
+                str(self.w_t): self.w_t}
+
+    def sample(self, n=None):
+        """
+        return a sample of the variables
+        """
+        loc_index = np.random.randint(self.D_stim)
+        w_x = self.mu + self.sigma * np.random.randn(self.Bx)
+        w_t = self.mu + self.sigma * np.random.randn(self.Bt)
+        return {str(self.loc_index) : loc_index,
+                str(self.w_x) : w_x,
+                str(self.w_t) : w_t}
+
+    def get_state(self):
+        """ Get the stimulus response
+        """
+        # The filters are non-identifiable as we can negate both the
+        # temporal and the spatial filters and get the same net effect.
+        # By convention, choose the sign that results in the most
+        # positive temporal filter.
+        sign = T.sgn(T.sum(self.stim_resp_t))
+
+        # Similarly, we can trade a constant between the spatial and temporal
+        # pieces. By convention, set the temporal filter to norm 1.
+        Z = self.stim_resp_t.norm(2)
+        stim_resp_t = sign*(1.0/Z)*self.stim_resp_t
+
+        # Finally, reshape the spatial component as necessary
+        if 'shape' in self.prms:
+            stim_resp_x = sign*Z*T.reshape(self.stim_resp_x, self.prms['shape'])
+        else:
+            stim_resp_x = sign*Z*self.stim_resp_x
+
+        return {'stim_response_x' : stim_resp_x,
+                'stim_response_t' : stim_resp_t}
+
+    def set_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        # Interpolate stimulus at the resolution of the data
+        dt = data['dt']
+        dt_stim = data['dt_stim']
+        t = np.arange(0, data['T'], dt)
+        nt = len(t)
+        D_stim = self.prms['D_stim']
+        assert data['stim'].shape[1] == D_stim, 'Improper D_stim specified in model.'
+
+        t_stim = dt_stim * np.arange(data['stim'].shape[0])
+        stim = np.zeros((nt, D_stim))
+        for d in np.arange(D_stim):
+            stim[:, d] = np.interp(t,
+                                   t_stim,
+                                   data['stim'][:, d])
+
+        # TODO Interpolate in spatial dimension as well?
+
+        # Interpolate basis at the resolution of the data
+        (Lt,Bt) = self.temporal_basis.shape
+        Lt_int = self.prms['dt_max']/dt
+        t_int = np.linspace(0,1,Lt_int)
+        t_bas = np.linspace(0,1,Lt)
+        ibasis_t = np.zeros((len(t_int), Bt))
+        for b in np.arange(Bt):
+            ibasis_t[:,b] = np.interp(t_int, t_bas, self.temporal_basis[:,b])
+
+        (Lx,Bx) = self.spatial_basis.shape
+        # Lx_int = D_stim
+        # x_int = np.linspace(0,1,Lx_int)
+        # x_bas = np.linspace(0,1,Lx)
+        # ibasis_x = np.zeros((len(x_int), Bx))
+        # for b in np.arange(Bx):
+        #     ibasis_x[:,b] = np.interp(x_int, x_bas, self.spatial_basis[:,b])
+
+        # Normalize so that the interpolated basis has unit L1 norm
+        if self.prms['temporal_basis']['norm']:
+            ibasis_t = ibasis_t / np.tile(np.sum(ibasis_t,0),[Lt_int,1])
+
+        # Save the interpolated bases
+        # self.ibasis_t.set_value(ibasis_t)
+        # self.ibasis_x.set_value(ibasis_x)
+
+        # Take all pairs of temporal and spatial basis vectors
+        (_,Bt) = ibasis_t.shape
+        # (_,Bx) = ibasis_x.shape
+
+        # Filter the stimulus with each spatiotemporal filter combo
+        fstim = np.empty((nt,D_stim,Bt,Bx))
+        for bt in np.arange(Bt):
+            for bx in np.arange(Bx):
+                # atleast_2d gives row vectors
+                bas = np.dot(np.atleast_2d(ibasis_t[:,bt]).T,
+                             np.atleast_2d(self.spatial_basis[:,bx]))
+                fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
+
+
+        # Permute output to get shape(T,Bt,Bx)
+        assert fstim.shape == (nt,D_stim,Bx,Bt)
+        fstim = np.transpose(fstim, axes=[0,1,3,2])
+
+        self.filtered_stim.set_value(fstim)
 

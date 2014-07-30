@@ -270,7 +270,7 @@ def convolve_with_low_rank_2d_basis(stim, basis_x, basis_t):
 
 _fft_cache = []
 
-def convolve_with_2d_basis(stim, basis):
+def convolve_with_2d_basis(stim, basis, shape=['first', 'valid']):
     """ Project stimulus onto a basis.
     :param stim   TxD matrix of inputs.
                   T is the number of time bins
@@ -283,7 +283,7 @@ def convolve_with_2d_basis(stim, basis):
     """
     (T,D) = stim.shape
     (R,Db) = basis.shape
-    assert D==Db, "Spatial dimension of basis must match spatial dimension of stimulus."
+    # assert D==Db, "Spatial dimension of basis must match spatial dimension of stimulus."
 
 #    import scipy.signal as sig
     import fftconv 
@@ -291,7 +291,7 @@ def convolve_with_2d_basis(stim, basis):
     # First, by convention, the impulse responses are apply to times
     # (t-R:t-1). That means we need to prepend a row of zeros to make
     # sure the basis remains causal
-    basis = np.vstack((np.zeros((1,D)),basis))
+    basis = np.vstack((np.zeros((1,Db)),basis))
 
     # Flip the spatial dimension for convolution
     # We are convolving the stimulus with the filter, so the temporal part does
@@ -316,9 +316,22 @@ def convolve_with_2d_basis(stim, basis):
         fstim,fft_stim,_ = fftconv.fftconvolve(stim, basis, 'full')
         _fft_cache.append((stim,fft_stim))
 
-    # Only keep the first T time bins and the D-th spatial vector
-    # This is the only vector for which the filter and stimulus completely overlap
-    return fstim[:T,D-1]
+    # Slice the result
+    assert len(shape) == 2
+    if shape[0] == 'first':
+        fstim = fstim[:T,:]
+    else:
+        raise Exception('Only supporting \'first\' slicing for dimension 0 (time)')
+
+    if shape[1] == 'valid':
+        assert Db == D, 'Dimension of basis must match that of stimuli for valid'
+    elif shape[1] == 'central':
+        sz = D + Db - 1
+        start = (sz - D)/2
+        stop = start + D
+        fstim = fstim[:,start:stop]
+
+    return fstim
 
 def project_onto_basis(f, basis, lam=0):
         """

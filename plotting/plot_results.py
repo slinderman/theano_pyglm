@@ -72,7 +72,7 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
             
         # Plot the spatial component of the stimulus response
         plt.subplot(1,2,1)
-        if len(stim_x.shape) >= 2:
+        if stim_x.ndim >= 2:
             px_per_node = 10
             stim_x_max = np.amax(np.abs(stim_x))
             plt.imshow(np.kron(stim_x,np.ones((px_per_node,px_per_node))),
@@ -91,7 +91,7 @@ def plot_stim_response(s_glm, s_glm_std=None, color=None):
                 plt.plot(stim_x - 2*stim_x_std, color=color, linestyle='--')
             
         plt.subplot(1,2,2)
-        plt.plot(stim_t,'-r')
+        plt.plot(stim_t, color=color)
         plt.hold(True)
         if s_glm_std is not None:
             stim_t_std = s_glm_std['bkgd']['stim_response_t']
@@ -202,10 +202,15 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
     # instantiate a colorbar
     from matplotlib.colorbar import ColorbarBase
     cbar_ticks = np.array([-0.9*W_imp_max, 0.0, 0.9*W_imp_max]).round(2)
-    cbar = ColorbarBase(cbar_ax, cmap=cmap,
-                        values=np.linspace(-W_imp_max, W_imp_max, 500),
-                        boundaries=np.linspace(-W_imp_max, W_imp_max, 500),
-                        ticks=cbar_ticks)
+    if np.allclose(cbar_ticks, 0.0):
+        cbar_ticks = None
+    try:
+        cbar = ColorbarBase(cbar_ax, cmap=cmap,
+                            values=np.linspace(-W_imp_max, W_imp_max, 500),
+                            boundaries=np.linspace(-W_imp_max, W_imp_max, 500),
+                            ticks=cbar_ticks)
+    except:
+        import pdb; pdb.set_trace()
 
     return fig
 
