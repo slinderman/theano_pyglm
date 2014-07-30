@@ -4,7 +4,7 @@ from utils.basis import *
 from component import Component
 from priors import create_prior
 
-def create_impulse_component(model):
+def create_impulse_component(model, glm, latent):
     typ = model['impulse']['type'].lower()
     if typ.lower() == 'basis': 
         return LinearBasisImpulses(model)
@@ -73,12 +73,12 @@ class LinearBasisImpulses(Component):
         """
         self.prior.set_hyperparameters(model['prior'])
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
         """
         # w = self.mu + self.sigma*np.random.randn(self.N*self.B)
-        w = self.prior.sample(size=(self.N, self.B)).ravel()
+        w = self.prior.sample(None, size=(self.N, self.B)).ravel()
         return {str(self.w_ir): w}
 
 
@@ -187,10 +187,10 @@ class NormalizedBasisImpulses(Component):
         """
         return {str(self.lng): self.lng}
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         g = np.random.gamma(self.alpha,np.ones(self.N*self.B))
         lng = np.log(g)
         return {str(self.lng): lng}
@@ -324,10 +324,10 @@ class DirichletImpulses(Component):
 
         return v
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         v = {}
         # for beta in self.betas:
         #     v[str(beta)] = np.random.dirichlet(self.alpha*np.ones(self.B))
@@ -443,10 +443,10 @@ class ExponentialImpulses(Component):
         """
         return {str(self.taus): self.taus}
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         #ln_taus = np.log(self.tau0) + self.sigma * np.random.randn(size=(self.N,))
         #taus = np.exp(ln_taus)
         taus = np.random.lognormal(np.log(self.tau0), self.sigma, size=(self.N,))

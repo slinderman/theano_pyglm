@@ -4,7 +4,7 @@ import numpy as np
 
 from component import Component
 
-def create_bias_component(model):
+def create_bias_component(model, glm, latent):
     type = model['bias']['type'].lower()
     if type == 'constant':
         bias = ConstantBias(model)
@@ -54,9 +54,9 @@ class ConstantBias(Component):
     def get_state(self):
         return {'bias': self.bias}
     
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         b = self.mu_bias + self.sig_bias * np.random.randn(1,)
         return {str(self.bias) : b}

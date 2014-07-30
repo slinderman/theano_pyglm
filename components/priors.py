@@ -47,9 +47,9 @@ class Gaussian(Component):
         self.mu.set_value(model['mu'])
         self.sigma.set_value(model['sigma'])
 
-    def sample(self, size=(1,)):
+    def sample(self, acc, size=(1,)):
         """ Sample from the prior
-        """
+                """
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn(*size)
 
         return v
@@ -75,9 +75,9 @@ class SphericalGaussian(Component):
         self.mu.set_value(model['mu'])
         self.sigma.set_value(model['sigma'])
 
-    def sample(self, size=(1,)):
+    def sample(self, acc):
         """ Sample from the prior
-        """
+                """
         # TODO Use size
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn(self.D)
         return {str(self.value): v}
@@ -109,9 +109,9 @@ class GroupLasso(Component):
         self.sigma.set_value(model['sigma'])
         self.lam.set_value(model['lam'])
         
-    def sample(self, size=(1,)):
+    def sample(self, acc, size=(1,)):
         """ Sample from the prior
-        """
+                """
         N = size[0]
         norms = np.random.laplace(0, self.lam.get_value(), size=(N,1))
         v = self.mu.get_value() + self.sigma.get_value() * np.random.randn(*size)
@@ -173,9 +173,9 @@ class DeterminenalPointProcess(Component):
         """
         self.sigma.set_value(model['sigma'])
 
-    def sample(self, size=(1,)):
+    def sample(self, acc, size=(1,)):
         """ Sample from the prior
-        """
+                """
         N,D = size
 
         # TODO: Actually sample a DPP

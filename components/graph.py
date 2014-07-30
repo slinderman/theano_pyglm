@@ -9,7 +9,7 @@ from priors import create_prior
 from inference.log_sum_exp import log_sum_exp_sample
 
 
-def create_graph_component(model):
+def create_graph_component(model, latent):
     type = model['network']['graph']['type'].lower()
     if type == 'complete':
         graph = CompleteGraphModel(model)
@@ -17,9 +17,9 @@ def create_graph_component(model):
                     type == 'erdosrenyi':
         graph = ErdosRenyiGraphModel(model)
     elif type == 'sbm':
-        graph = StochasticBlockGraphModel(model)
+        graph = StochasticBlockGraphModel(model, latent)
     elif type == 'distance':
-        graph = LatentDistanceGraphModel(model)
+        graph = LatentDistanceGraphModel(model, latent)
     else:
         raise Exception("Unrecognized graph model: %s" % type)
     return graph
@@ -77,7 +77,7 @@ class ErdosRenyiGraphModel(Component):
         return {str(self.A): self.A}
 
 
-    def sample(self):
+    def sample(self, acc):
         N = self.model['N']
         A = np.random.rand(N, N) < self.rho
         A = A.astype(np.int8)
@@ -88,80 +88,67 @@ class ErdosRenyiGraphModel(Component):
 
 
 class StochasticBlockGraphModel(Component):
-    def __init__(self, model):
+    def __init__(self, model, latent):
         """ Initialize the stochastic block model for the adjacency matrix
         """
         self.model = model
+        self.latent = latent
         self.prms = model['network']['graph']
         self.N = model['N']
 
-        # SBM has R latent clusters
-        self.R = self.prms['R']
+        # Get the number of latent types (R) and the latent type vector (Y)
+        self.type_name = self.prms['types']
+        self.R = self.latent[self.type_name].R
+        self.Y = self.latent[self.type_name].Y
+
         # A RxR matrix of connection probabilities per pair of clusters
         self.B = T.dmatrix('B')
-        # SBM has a latent block or cluster assignment for each node
-        self.Y = T.lvector('Y')
+
         # For indexing, we also need Y as a column vector and tiled matrix
         self.Yv = T.reshape(self.Y, [self.N, 1])
         self.Ym = T.tile(self.Yv, [1, self.N])
         self.pA = self.B[self.Ym, T.transpose(self.Ym)]
 
-        # A probability of each cluster
-        self.alpha = T.dvector('alpha')
-
         # Hyperparameters governing B and alpha
         self.b0 = self.prms['b0']
         self.b1 = self.prms['b1']
-        self.alpha0 = self.prms['alpha0']
 
         # Define complete adjacency matrix
         self.A = T.bmatrix('A')
 
         # Define log probability
         log_p_B = T.sum((self.b0 - 1) * T.log(self.B) + (self.b1 - 1) * T.log(1 - self.B))
-        log_p_alpha = T.sum((self.alpha0 - 1) * T.log(self.alpha))
         log_p_A = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA))
 
-        self.log_p = log_p_B + log_p_alpha + log_p_A
+        self.log_p = log_p_B + log_p_A
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
         """
         return {str(self.A): self.A,
-                str(self.Y): self.Y,
-                str(self.B): self.B,
-                str(self.alpha): self.alpha}
+                str(self.B): self.B}
 
-    def sample(self):
+    def sample(self, acc):
         N = self.model['N']
-
-        # Sample alpha from a Dirichlet prior
-        alpha = np.random.dirichlet(self.alpha0)
 
         # Sample B from a Beta prior
         B = np.random.beta(self.b0, self.b1, (self.R, self.R))
 
-        # Sample Y from categorical dist
-        Y = np.random.choice(self.R, size=self.N, p=alpha)
-
-        pA = self.pA.eval({self.B: B,
-                           self.Y: Y})
+        # We need a sample of Y in order to evaluate pA!
+        Y = acc['latent'][self.type_name]['Y']
+        pA = self.pA.eval({self.B: B})
 
         A = np.random.rand(N, N) < pA
         A = A.astype(np.int8)
         return {str(self.A): A,
-                str(self.Y): Y,
-                str(self.B): B,
-                str(self.alpha): alpha}
+                str(self.B): B}
 
     def get_state(self):
         return {str(self.A): self.A,
-                str(self.Y): self.Y,
-                str(self.B): self.B,
-                str(self.alpha): self.alpha}
+                str(self.B): self.B}
 
 class LatentDistanceGraphModel(Component):
-    def __init__(self, model):
+    def __init__(self, model, latent):
         """ Initialize the stochastic block model for the adjacency matrix
         """
         self.model = model
@@ -222,11 +209,11 @@ class LatentDistanceGraphModel(Component):
                 str(self.L): self.L,
                 str(self.delta): self.delta}
 
-    def sample(self):
+    def sample(self, acc):
         N = self.model['N']
 
         #  Sample locations from prior
-        L = self.location_prior.sample(size=(self.N,self.N_dims))
+        L = self.location_prior.sample(None)
 
         # DEBUG!  Permute the neurons such that they are sorted along the first dimension
         # This is only for data generation

@@ -10,7 +10,7 @@ from priors import create_prior
 from inference.hmc import hmc
 from inference.slicesample import slicesample
 
-def create_weight_component(model):
+def create_weight_component(model, latent):
         type = model['network']['weight']['type'].lower()
         if type == 'constant':
             weight = ConstantWeightModel(model)
@@ -72,24 +72,24 @@ class GaussianWeightModel(Component):
         else:
             self.log_p = self.prior.log_p(self.W)
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         N = self.model['N']
 
         if hasattr(self, 'refractory_prior'):
             W = np.zeros((N,N))
             # W_diags = np.array([self.refractory_prior.sample() for n in np.arange(N)])
-            W_diags = self.refractory_prior.sample(size=(N,))
+            W_diags = self.refractory_prior.sample(None, (N,) )
             # W_nondiags = np.array([self.prior.sample() for n in np.arange(N**2-N)])
-            W_nondiags = self.prior.sample(size=(N**2-N,))
+            W_nondiags = self.prior.sample(None, (N**2-N,))
             np.put(W, self.diags,  W_diags)
             np.put(W, self.nondiags, W_nondiags)
             W_flat = np.reshape(W,(N**2,))
         else:
-            W_flat = self.prior.sample(size=(N**2,))
-            # W_flat = np.array([self.prior.sample() for n in np.arange(N**2)])
+            W_flat = self.prior.sample(None, (N**2,))
+            # W_flat = np.array([self.prior.sample()for n in np.arange(N**2)])
 
         return {str(self.W_flat): W_flat}
 

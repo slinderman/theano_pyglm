@@ -9,8 +9,8 @@ from components.bias import *
 from components.impulse import *
 from components.nlin import *
 
-class Glm:
-    def __init__(self, model, network):
+class Glm(Component):
+    def __init__(self, model, network, latent):
         """
         Create a GLM for the spikes on the n-th neuron out of N
         This corresponds to the spikes in the n-th column of data["S"]
@@ -24,13 +24,13 @@ class Glm:
 
 
         # Define a bias to the membrane potential
-        self.bias_model = create_bias_component(model)
+        self.bias_model = create_bias_component(model, self, latent)
 
         # Define stimulus and stimulus filter
-        self.bkgd_model = create_bkgd_component(model)
+        self.bkgd_model = create_bkgd_component(model, self, latent)
 
         # Create a list of impulse responses for each incoming connections
-        self.imp_model = create_impulse_component(model)
+        self.imp_model = create_impulse_component(model, self, latent)
 
         # If a network is given, weight the impulse response currents and sum them up
         if network is not None:
@@ -114,14 +114,14 @@ class Glm:
         self.imp_model.set_hyperparameters(model['impulse'])
         self.bias_model.set_hyperparameters(model['bias'])
 
-    def sample(self):
+    def sample(self, acc):
         """ Sample a random set of parameters
         """
         v = {str(self.n) : -1}  # Doesn't make sense to sample n
 
-        v['bias'] = self.bias_model.sample()
-        v['bkgd'] = self.bkgd_model.sample()
-        v['imp'] = self.imp_model.sample()
-        v['nlin'] = self.nlin_model.sample()
+        v['bias'] = self.bias_model.sample(acc)
+        v['bkgd'] = self.bkgd_model.sample(acc)
+        v['imp'] = self.imp_model.sample(acc)
+        v['nlin'] = self.nlin_model.sample(acc)
 
         return v

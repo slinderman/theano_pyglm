@@ -31,7 +31,7 @@ def map_estimate(network_glm, x0=None):
     
     # Draw initial state from prior if not given
     if x0 is None:
-        x0 = network_glm.sample()
+        x0 = network_glm.sample(None)
 
     # Fit the GLMs.
     # TODO Parallelize this!

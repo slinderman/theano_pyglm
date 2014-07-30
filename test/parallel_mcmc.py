@@ -32,7 +32,7 @@ def run_synth_test():
                 mle_popn = Population(mle_model)
                 mle_popn.set_data(data)
 
-                x0 = popn.sample()
+                x0 = popn.sample(None)
                 x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
     # !!!!DEBUG!!!!!

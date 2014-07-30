@@ -5,6 +5,49 @@ SharedTuningCurveGlm = \
 {
     # Number of neurons (parametric model!)
     'N' : 2,
+
+    'latent' :
+        {
+            'sharedtuningcurves' :
+                {
+                    'type' : 'latent_type_with_tuning_curves',
+                    'name' : 'sharedtuningcurve_provider',
+
+                    # Latent type params
+                    'N' : 2,
+                    'R' : 2,
+                    'alpha0' : 1.0,
+
+                    # Tuning curve params
+                    'D_stim' : 5,       # Dimensionality of the stimulus
+                    'dt_max' : 0.3,
+                    'mu' : 0.0,
+                    'sigma' : 5.0,
+                    'temporal_basis' :
+                        {
+                            'type' : 'cosine',
+                            'n_eye' : 0,
+                            'n_cos' : 3,
+                            'a': 1.0/120,
+                            'b': 0.5,
+                            'orth' : False,
+                            'norm' : True
+                        },
+                    #'spatial_basis' :
+                    #    {
+                    #        'type' : 'gaussian',
+                    #        'n_eye' : 0,
+                    #        'n_gauss' : (3,),
+                    #        'orth' : False,
+                    #        'norm' : True
+                    #    }
+                    'spatial_basis' :
+                        {
+                            'type' : 'identity',
+                            'n_eye' : 3
+                        }
+                }
+        },
     
     # Parameters of the nonlinearity
     'nonlinearity' :
@@ -24,10 +67,11 @@ SharedTuningCurveGlm = \
     'bkgd' :
         {
             'type' : 'sharedtuningcurve',
+            'tuningcurves' : 'sharedtuningcurve_provider',
             'D_stim' : 5,       # Dimensionality of the stimulus
             'dt_max' : 0.3,
             'mu' : 0.0,
-            'sigma' : 1.0,
+            'sigma' : 5.0,
             'temporal_basis' :
                 {
                     'type' : 'cosine',
@@ -83,7 +127,7 @@ SharedTuningCurveGlm = \
             'weight' :
                 {
                     'type' : 'constant',
-                    'value' : 0.0
+                    'value' : 1.0
                 },
 
             'graph' :

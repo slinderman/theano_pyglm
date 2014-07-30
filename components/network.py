@@ -12,20 +12,21 @@ class Network(Component):
     and adjacency matrix of the spiking interactions.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, latent):
         """ Initialize the filtered stim model
         """
         self.model = model
+        self.latent = latent
         self.prms = model['network']
 
         # Keep track of the number of variables
         self.n_vars = 0
 
         # Create the graph model for the adjacency matrix
-        self.graph = create_graph_component(model)
+        self.graph = create_graph_component(model, latent)
 
         # Create the weight model for the weight matrix
-        self.weights = create_weight_component(model)
+        self.weights = create_weight_component(model, latent)
 
         # Compute log probability
         self.log_p = self.graph.log_p + self.weights.log_p
@@ -49,10 +50,10 @@ class Network(Component):
         self.graph.set_data(data)
         self.weights.set_data(data)
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
-        return {'graph' : self.graph.sample(),
-                'weights' : self.weights.sample()}
+                """
+        return {'graph' : self.graph.sample(acc),
+                'weights' : self.weights.sample(acc)}
     

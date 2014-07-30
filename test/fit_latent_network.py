@@ -124,7 +124,7 @@ def fit_latent_network_to_mle():
     loc_sampler.preprocess(popn)
 
     # Convert the mle results into a weighted adjacency matrix
-    x_aw = popn.sample()
+    x_aw = popn.sample(None)
     x_aw = convert_model(mle_popn, mle_model, mle_x, popn, popn.model, x_aw)
 
     # Get rid of unnecessary keys

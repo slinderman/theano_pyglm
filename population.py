@@ -1,7 +1,8 @@
 import numpy as np
 
-from glm import Glm
+from components.latent import LatentVariables
 from components.network import Network
+from glm import Glm
 
 from utils.theano_func_wrapper import seval
 
@@ -16,17 +17,17 @@ class Population:
         self.model = model
         self.N = model['N']
 
-        # TODO: Go through every key in the model and initialize the 
-        # top level components.
-        
+        # Initialize latent variables of the population
+        self.latent = LatentVariables(model)
+
         # Create a network model to connect the GLMs
-        self.network = Network(model)
+        self.network = Network(model, self.latent)
 
         # Create a single GLM that is shared across neurons
         # This is to simplify the model and reuse parameters. 
         # Basically it speeds up the gradient calculations since we 
         # can manually leverage conditional independencies among GLMs
-        self.glm = Glm(model, self.network)
+        self.glm = Glm(model, self.network, self.latent)
 
     def compute_log_p(self, vars):
         """ Compute the log joint probability under a given set of variables
@@ -58,9 +59,14 @@ class Population:
         # Get set of symbolic variables
         syms = self.get_variables()
 
+        lp += seval(self.latent.log_p,
+                    syms['latent'],
+                    vars['latent'])
+
         lp += seval(self.network.log_p,
                     syms['net'],
                     vars['net'])
+
         for n in range(self.N):
             nvars = self.extract_vars(vars, n)
             lp += seval(self.glm.log_prior,
@@ -95,7 +101,12 @@ class Population:
         # Get the symbolic state expression to evaluate
         state_vars = self.get_state()
         state = {}
-        state['net'] = self._eval_state_helper(syms['net'], 
+
+        state['latent'] = self._eval_state_helper(syms['latent'],
+                                                  state_vars['latent'],
+                                                  vars['latent'])
+
+        state['net'] = self._eval_state_helper(syms['net'],
                                                   state_vars['net'], 
                                                   vars['net'])
 
@@ -129,6 +140,7 @@ class Population:
         """ Get a list of all variables
         """
         v = {}
+        v['latent'] = self.latent.get_variables()
         v['net'] = self.network.get_variables()
         v['glm'] = self.glm.get_variables()
         return v
@@ -136,6 +148,7 @@ class Population:
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
         """
+        self.latent.set_hyperparameters(model)
         self.network.set_hyperparameters(model)
         self.glm.set_hyperparameters(model)
 
@@ -144,10 +157,11 @@ class Population:
         Sample parameters of the GLM from the prior
         """
         v = {}
-        v['net'] = self.network.sample()
+        v['latent'] = self.latent.sample(v)
+        v['net'] = self.network.sample(v)
         v['glms'] =[]
         for n in range(self.N):
-            xn = self.glm.sample()
+            xn = self.glm.sample(v)
             xn['n'] = n
             v['glms'].append(xn)
 
@@ -155,7 +169,7 @@ class Population:
 
     def extract_vars(self, vals, n):
         """ Hacky helper function to extract the variables for only the
-         n-th GLM.
+         n-th GLM.s
         """
 
         newvals = {}
@@ -170,6 +184,7 @@ class Population:
         """ Get the 'state' of the system in symbolic Theano variables
         """
         state = {}
+        state['latent'] = self.latent.get_state()
         state['net'] = self.network.get_state()
         state['glm'] = self.glm.get_state()
 
@@ -179,6 +194,7 @@ class Population:
         """
         Condition on the data
         """
+        self.latent.set_data(data)
         self.network.set_data(data)
         self.glm.set_data(data)
 

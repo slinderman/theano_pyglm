@@ -135,7 +135,7 @@ def run_gen_synth_data():
         cPickle.dump(data, f, protocol=-1)
 
     # Plot firing rates, stimulus responses, etc
-    do_plot_imp_resonses = int(options.N)<=16
+    do_plot_imp_resonses = int(options.N) <= 16
     plot_results(popn, data['vars'],
                  resdir=options.resultsDir,
                  do_plot_stim_resp=True,

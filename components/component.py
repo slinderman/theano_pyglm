@@ -1,4 +1,4 @@
-class Component:
+class Component(object):
     """
     """
     
@@ -26,8 +26,8 @@ class Component:
         """
         pass
 
-    def sample(self):
+    def sample(self, acc):
         """
         return a sample of the variables
-        """
+                """
         return {}

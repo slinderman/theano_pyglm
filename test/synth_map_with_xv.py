@@ -27,7 +27,7 @@ def run_synth_test():
     xv_data = segment_data(data, (T_split,data['T']))
     
     # Sample random initial state
-    x0 = popn.sample()
+    x0 = popn.sample(None)
 
     # Track the best model and parameters
     best_ind = -1

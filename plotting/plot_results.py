@@ -61,7 +61,58 @@ def plot_connectivity_matrix(s_smpls, s_true=None):
                cmap=cmap)
     plt.colorbar()
     plt.title('Inferred Network')
-    
+
+def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, color=None):
+    if 'sharedtuningcurve_provider' in s_mean['latent']:
+        tc_mean = s_mean['latent']['sharedtuningcurve_provider']
+        if s_std is not None:
+            tc_std = s_std['latent']['sharedtuningcurve_provider']
+
+        # Get the stimulus responses
+        tc_x = tc_mean['stim_response_x']
+        tc_t = tc_mean['stim_response_t']
+
+        R = tc_x.shape[-1]
+        assert tc_t.shape[-1] == R
+
+        # Plot each tuning curve
+        for r in range(R):
+            # Plot the spatial component of the stimulus response
+            plt.subplot(R,2,r*2+1)
+            if tc_x.ndim == 3:
+                px_per_node = 10
+                stim_x_max = np.amax(np.abs(tc_x[:,:,r]))
+                plt.imshow(np.kron(tc_x[:,r],np.ones((px_per_node,px_per_node))),
+                           vmin=-stim_x_max,vmax=stim_x_max,
+                           extent=[0,1,0,1],
+                           interpolation='nearest')
+                plt.colorbar()
+                plt.title('$f_{%d}(\\Delta x)$' % r)
+            elif tc_x.ndim == 2:
+                plt.plot(tc_x[:,r], color=color, linestyle='-')
+                plt.hold(True)
+
+                # If standard deviation is given, plot that as well
+                if s_std is not None:
+                    stim_x_std = tc_std['stim_response_x'][:,r]
+                    plt.plot(tc_x[:,r] + 2*stim_x_std, color=color, linestyle='--')
+                    plt.plot(tc_x [:,r]- 2*stim_x_std, color=color, linestyle='--')
+
+                plt.title('$f_{%d}(\\Delta x)$' % r)
+
+            else:
+                raise Exception('Invalid TC dimension.')
+
+            plt.subplot(R,2,r*2+2)
+            plt.plot(tc_t[:,r], color=color)
+            plt.hold(True)
+            if s_std is not None:
+                stim_t_std = tc_std['stim_response_t'][:,r]
+                plt.plot(tc_t[:,r] + 2*stim_t_std, color=color, linestyle='--')
+                plt.plot(tc_t[:,r] - 2*stim_t_std, color=color, linestyle='--')
+
+            plt.title('$f_{%d}(\\Delta t)$' % r)
+
 def plot_stim_response(s_glm, s_glm_std=None, color=None):
     if 'stim_response_t' in s_glm['bkgd'].keys() and \
        'stim_response_x' in s_glm['bkgd'].keys():
@@ -453,6 +504,23 @@ def plot_results(population,
         plot_connectivity_matrix(s_inf, s_true)
         f.savefig(os.path.join(resdir,'conn.pdf'))
         plt.close(f)
+
+    # Plot shared tuning curves
+    if True:
+        print "Plotting shared tuning curves"
+        for n in range(N):
+            f = plt.figure()
+            plot_spatiotemporal_tuning_curves(
+                s_avg,
+                s_std=s_std,
+                color='r')
+            if true_given:
+                plot_spatiotemporal_tuning_curves(
+                    s_true,
+                    color='k')
+
+            f.savefig(os.path.join(resdir,'tuning_curves.pdf'))
+            plt.close(f)
 
     # Plot stimulus response functions
     if do_plot_stim_resp:
