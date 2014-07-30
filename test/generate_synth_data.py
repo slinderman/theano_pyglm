@@ -109,8 +109,11 @@ def run_gen_synth_data():
     # Set simulation parametrs
     dt = 0.001
     dt_stim = 0.1
-    D_stim = model['bkgd']['D_stim'] if 'D_stim' in model['bkgd'] else 0
-    stim = np.random.randn(options.T_stop/dt_stim, D_stim)
+    D_stim = (3,3)
+    # D_stim = model['bkgd']['D_stim'] if 'D_stim' in model['bkgd'] else 0
+    if isinstance(D_stim, int):
+        D_stim = [D_stim]
+    stim = np.random.randn(options.T_stop/dt_stim, *D_stim)
 
     data = gen_synth_data(options.N, options.T_stop, popn, x_true, dt, dt_stim, D_stim, stim)
     # Set the data so that the population state can be evaluated

@@ -1,6 +1,7 @@
 import numpy as np
 import scipy
 import os
+import fftconv
 
 def create_basis(prms):
     """ Create a basis for impulse response functions
@@ -275,14 +276,14 @@ def convolve_with_2d_basis(stim, basis, shape=['first', 'valid']):
     :param stim   TxD matrix of inputs.
                   T is the number of time bins
                   D is the number of stimulus dimensions.
-    :param basis  RxD basis matrix
-                  R is the length of the impulse response
-                  D is the number of stimulus dimensions.
+    :param basis  TbxDb basis matrix
+                  Tb is the length of the impulse response
+                  Db is the number of basis dimensions.
 
     :rtype Tx1 vector of stimuli convolved with the 2D basis
     """
     (T,D) = stim.shape
-    (R,Db) = basis.shape
+    (Tb,Db) = basis.shape
     # assert D==Db, "Spatial dimension of basis must match spatial dimension of stimulus."
 
 #    import scipy.signal as sig
@@ -298,9 +299,10 @@ def convolve_with_2d_basis(stim, basis, shape=['first', 'valid']):
     # NOT need to be flipped
     basis = basis[:,::-1]
 
-    # Compute convolution
-    # TODO Performance can be improved for rank 2 filters
-#     fstim = sig.convolve2d(stim,basis,'full')
+    # Compute convolution using FFT
+    if D==Db and shape[1] == 'valid':
+        raise Warning("Use low rank convolution when D==Db!")
+
     # Look for fft_stim in _fft_cache
     fft_stim = None
     for (cache_stim, cache_fft_stim) in _fft_cache:
@@ -333,24 +335,100 @@ def convolve_with_2d_basis(stim, basis, shape=['first', 'valid']):
 
     return fstim
 
+def convolve_with_3d_basis(stim, basis, shape=['first', 'central', 'central']):
+    """ Project stimulus onto a basis.
+    :param stim   T x Dx x Dy array of inputs.
+                  T is the number of time bins
+                  Dx is the stimulus x dimension.
+                  Dy is the stimulus y dimension.
+    :param basis  Tb x Dbx x Dby basis matrix
+                  Tb is the length of the impulse response
+                  Dbx is the basis x dimension
+                  Dby is the basis y dimension
+
+    :rtype Tx1 vector of stimuli convolved with the 2D basis
+    """
+    assert stim.ndim == basis.ndim == 3
+    (T,Dx,Dy) = stim.shape
+    (Tb,Dbx,Dby) = basis.shape
+
+    # First, by convention, the impulse responses are apply to times
+    # (t-R:t-1). That means we need to prepend a row of zeros to make
+    # sure the basis remains causal
+    basis = np.concatenate((np.zeros((1,Dbx,Dby)),basis), axis=0)
+
+    # Flip the spatial dimension for convolution
+    # We are convolving the stimulus with the filter, so the temporal part does
+    # NOT need to be flipped
+    basis = basis[:,::-1, ::-1]
+
+    # Compute convolution using FFT
+    if Dx==Dbx and Dy==Dby and shape[1] == 'valid':
+        raise Warning("Use low rank convolution when D==Db!")
+
+    # Look for fft_stim in _fft_cache
+    fft_stim = None
+    for (cache_stim, cache_fft_stim) in _fft_cache:
+        if np.allclose(stim[-128:],cache_stim[-128:]) and \
+           np.allclose(stim[:128],cache_stim[:128]):
+            fft_stim = cache_fft_stim
+            break
+
+    if not fft_stim is None:
+        fstim,_ = fftconv.fftconvolve(stim, basis, 'full',
+                                      fft_in1=fft_stim)
+    else:
+        fstim,fft_stim,_ = fftconv.fftconvolve(stim, basis, 'full')
+        _fft_cache.append((stim,fft_stim))
+
+    # Slice the result
+    assert len(shape) == 3
+    if shape[0] == 'first':
+        fstim = fstim[:T,:,:]
+    else:
+        raise Exception('Only supporting \'first\' slicing for dimension 0 (time)')
+
+    if shape[1] == 'full':
+        pass
+    elif shape[1] == 'central':
+        sz = Dx + Dbx - 1
+        start = (sz - Dx)/2
+        stop = start + Dx
+        fstim = fstim[:,start:stop, :]
+    else:
+        raise NotImplementedError('Only supporting full and central slicing for spatial dims')
+
+    if shape[2] == 'full':
+        pass
+    elif shape[2] == 'central':
+        sz = Dy + Dby - 1
+        start = (sz - Dy)/2
+        stop = start + Dy
+        fstim = fstim[:,:,start:stop]
+    else:
+        raise NotImplementedError('Only supporting full and central slicing for spatial dims')
+
+    return fstim
+
+
 def project_onto_basis(f, basis, lam=0):
-        """
-        Project the function f onto the basis.
-        :param f     Rx1 function
-        :param basis RxB basis
-        :param lam   Optional ridge regresion penalty
-        :rtype Bx1 vector of basis coefficients 
-        """
-        (R,B) = basis.shape
+    """
+    Project the function f onto the basis.
+    :param f     Rx1 function
+    :param basis RxB basis
+    :param lam   Optional ridge regresion penalty
+    :rtype Bx1 vector of basis coefficients
+    """
+    (R,B) = basis.shape
 
-        assert f.shape[0]==R, "Function is not the same length as the basis!"
+    assert f.shape[0]==R, "Function is not the same length as the basis!"
 
-        # Make sure at least 2D
-        if f.ndim==1:
-            f = np.reshape(f,[R,1])
-        
-        # Regularize the projection
-        Q = lam*np.eye(B)
-        
-        beta = np.dot(np.dot(scipy.linalg.inv(np.dot(basis.T,basis)+Q), basis.T),f)
-        return beta
+    # Make sure at least 2D
+    if f.ndim==1:
+        f = np.reshape(f,(R,1))
+
+    # Regularize the projection
+    Q = lam*np.eye(B)
+
+    beta = np.dot(np.dot(scipy.linalg.inv(np.dot(basis.T,basis)+Q), basis.T),f)
+    return beta

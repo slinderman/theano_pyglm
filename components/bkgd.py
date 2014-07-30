@@ -333,8 +333,8 @@ class SpatiotemporalStimulus(Component):
 
 
 class SharedTuningCurveStimulus(Component):
-    """ Filter the stimulus with a set of shared tuning curves
-
+    """
+    Filter the stimulus with a set of shared tuning curves
     """
     def __init__(self, model, glm, latent):
         """ Initialize the filtered stim model
@@ -343,11 +343,13 @@ class SharedTuningCurveStimulus(Component):
         self.n = glm.n
         self.tuningcurves = latent[self.prms['tuningcurves']]
         self.spatial_basis = self.tuningcurves.spatial_basis
+        self.tc_spatial_shape = self.tuningcurves.spatial_shape
+        self.tc_spatial_ndim = self.tuningcurves.spatial_ndim
         self.temporal_basis = self.tuningcurves.temporal_basis
         self.Bx = self.tuningcurves.Bx
         self.Bt = self.tuningcurves.Bt
-        self.w_x = self.tuningcurves.w_x[self.tuningcurves.Y[self.n],:]
-        self.w_t = self.tuningcurves.w_t[self.tuningcurves.Y[self.n],:]
+        self.w_x = self.tuningcurves.w_x[:,self.tuningcurves.Y[self.n]]
+        self.w_t = self.tuningcurves.w_t[:,self.tuningcurves.Y[self.n]]
 
         # Create a shared variable for the filtered stimulus. This is a 4D
         # tensor with dimensions:
@@ -366,6 +368,7 @@ class SharedTuningCurveStimulus(Component):
         I_x = T.tensordot(self.filtered_stim,
                           self.w_x,
                           axes=[[2],[0]])
+
         # Extract only the loc_index column (Result is T x B_t)
         I_x = I_x[:,self.loc_index,:]
         self.I_stim = T.dot(I_x, self.w_t)
@@ -389,34 +392,57 @@ class SharedTuningCurveStimulus(Component):
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
+        assert data['stim'].ndim == 1+self.tc_spatial_ndim
         dt = data['dt']
         dt_stim = data['dt_stim']
         t = np.arange(0, data['T'], dt)
         nt = len(t)
-        D_stim = data['stim'].shape[1]
+        temporal_shape = data['stim'].shape[0]
+        spatial_shape = data['stim'].shape[1:]
+        spatial_ndim = len(spatial_shape)
+        D_stim = np.prod(spatial_shape)
 
         # Interpolate the stimulus so that it is defined on the same
         # time grid as t
-        t_stim = dt_stim * np.arange(data['stim'].shape[0])
-        stim = np.zeros((nt, D_stim))
-        for d in np.arange(D_stim):
-            stim[:, d] = np.interp(t,
-                                   t_stim,
-                                   data['stim'][:, d])
+        t_stim = dt_stim * np.arange(temporal_shape)
+        stim = np.zeros((nt,) + spatial_shape)
+        if spatial_ndim == 1:
+            for d in np.arange(spatial_shape[0]):
+                stim[:, d] = np.interp(t,
+                                       t_stim,
+                                       data['stim'][:, d])
+        elif spatial_ndim ==2:
+            for d1 in np.arange(spatial_shape[0]):
+                for d2 in np.arange(spatial_shape[1]):
+                    stim[:, d1, d2] = np.interp(t,
+                                                t_stim,
+                                                data['stim'][:, d1, d2])
 
         # Filter the stimulus with each spatiotemporal filter combo
         fstim = np.empty((nt, D_stim, self.Bt, self.Bx))
         for bt in np.arange(self.Bt):
             for bx in np.arange(self.Bx):
-                # atleast_2d gives row vectors
-                bas = np.dot(np.atleast_2d(self.tuningcurves.interpolated_temporal_basis[:,bt]).T,
-                             np.atleast_2d(self.tuningcurves.interpolated_spatial_basis[:,bx]))
-                fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
+                if self.tc_spatial_ndim == 1:
+                    # atleast_2d gives row vectors
+                    bas = np.dot(np.atleast_2d(self.tuningcurves.interpolated_temporal_basis[:,bt]).T,
+                                 np.atleast_2d(self.tuningcurves.interpolated_spatial_basis[:,bx]))
+                    fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
+                elif self.tc_spatial_ndim == 2:
+                    # Take the outerproduct to make a 3D tensor
+                    bas_xy = self.tuningcurves.interpolated_spatial_basis[:,bx].reshape((1,) + self.tc_spatial_shape )
+                    bas_t = self.tuningcurves.interpolated_temporal_basis[:,bt].reshape((-1,1))
+                    bas = np.tensordot(bas_t, bas_xy, [1,0])
+                    fconv3d = convolve_with_3d_basis(stim, bas, ['first', 'central', 'central'])
+                    fstim[:,:,bt,bx] = fconv3d.reshape((nt, D_stim))
+
+                else:
+                    raise Exception('spatial dimension must be <= 2D')
 
 
         # Permute output to get shape(T,Bt,Bx)
-        assert fstim.shape == (nt, D_stim, self.Bx, self.Bt)
         fstim = np.transpose(fstim, axes=[0,1,3,2])
+        assert fstim.shape == (nt, D_stim, self.Bx, self.Bt)
+
 
         self.filtered_stim.set_value(fstim)
 

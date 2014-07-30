@@ -127,10 +127,11 @@ class LatentTypeWithTuningCurve(LatentType):
         # Also initialize the tuning curves
         self.mu = self.prms['mu']
         self.sigma = self.prms['sigma']
-        self.D_stim = self.prms['D_stim']
 
         # Create a basis for the stimulus response
         self.spatial_basis = create_basis(self.prms['spatial_basis'])
+        self.spatial_shape = self.prms['spatial_shape']
+        self.spatial_ndim = len(self.spatial_shape)
         (_,Bx) = self.spatial_basis.shape
 
         self.temporal_basis = create_basis(self.prms['temporal_basis'])
@@ -145,8 +146,8 @@ class LatentTypeWithTuningCurve(LatentType):
         self.w_t = T.dmatrix('w_t')
 
         # Create function handles for the stimulus responses
-        self.stim_resp_t = T.dot(self.temporal_basis, self.w_t.T)
-        self.stim_resp_x = T.dot(self.spatial_basis, self.w_x.T)
+        self.stim_resp_t = T.dot(self.temporal_basis, self.w_t)
+        self.stim_resp_x = T.dot(self.spatial_basis, self.w_x)
 
         # Add the probability of these tuning curves to the log probability
         self.log_p += -0.5/self.sigma**2 *T.sum((self.w_x-self.mu)**2) + \
@@ -166,16 +167,22 @@ class LatentTypeWithTuningCurve(LatentType):
         # temporal and the spatial filters and get the same net effect.
         # By convention, choose the sign that results in the most
         # positive temporal filter.
-        sign = T.sgn(T.sum(self.stim_resp_t))
+        sign = T.sgn(T.sum(self.stim_resp_t, axis=0))
+        T.addbroadcast(sign, 0)
 
         # Similarly, we can trade a constant between the spatial and temporal
         # pieces. By convention, set the temporal filter to norm 1.
-        Z = self.stim_resp_t.norm(2)
+        Z = T.sqrt(T.sum(self.stim_resp_t**2, axis=0))
+        T.addbroadcast(Z, 0)
+
+        # Compute the normalized temporal response
         stim_resp_t = sign*(1.0/Z)*self.stim_resp_t
 
         # Finally, reshape the spatial component as necessary
-        if 'shape' in self.prms:
-            stim_resp_x = sign*Z*T.reshape(self.stim_resp_x, self.prms['shape'])
+        if self.spatial_ndim == 2:
+            stim_resp_x = sign*Z*self.stim_resp_x
+            stim_resp_x = T.reshape(self.stim_resp_x,
+                                    self.spatial_shape + (self.R,))
         else:
             stim_resp_x = sign*Z*self.stim_resp_x
 
@@ -189,8 +196,8 @@ class LatentTypeWithTuningCurve(LatentType):
         Return a sample of the types and tuning curves
         """
         s = super(LatentTypeWithTuningCurve, self).sample(acc)
-        w_x = self.mu + self.sigma * np.random.randn(self.R, self.Bx)
-        w_t = self.mu + self.sigma * np.random.randn(self.R, self.Bt)
+        w_x = self.mu + self.sigma * np.random.randn(self.Bx, self.R)
+        w_t = self.mu + self.sigma * np.random.randn(self.Bt, self.R)
 
         s.update({str(self.w_x) : w_x,
                   str(self.w_t) : w_t})
