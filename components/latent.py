@@ -6,6 +6,7 @@ import theano.tensor as T
 
 from component import Component
 from utils.basis import create_basis
+from priors import create_prior
 
 def create_latent_component(model, **kwargs):
     typ = model['type'].lower()
@@ -15,6 +16,9 @@ def create_latent_component(model, **kwargs):
     elif typ == 'latent_type_with_tuning_curves' or \
        typ == 'latenttypewithtuningcurves':
        return LatentTypeWithTuningCurve(model, **kwargs)
+    elif typ == 'latent_location' or \
+         typ == 'latentlocation':
+       return LatentLocation(model, **kwargs)
     else:
         raise Exception("Unrecognized latent component type: %s" % typ)
 
@@ -181,7 +185,7 @@ class LatentTypeWithTuningCurve(LatentType):
         # Finally, reshape the spatial component as necessary
         if self.spatial_ndim == 2:
             stim_resp_x = sign*Z*self.stim_resp_x
-            stim_resp_x = T.reshape(self.stim_resp_x,
+            stim_resp_x = T.reshape(stim_resp_x,
                                     self.spatial_shape + (self.R,))
         else:
             stim_resp_x = sign*Z*self.stim_resp_x
@@ -223,3 +227,57 @@ class LatentTypeWithTuningCurve(LatentType):
         # Save the interpolated bases
         self.interpolated_temporal_basis = ibasis_t
         self.interpolated_spatial_basis = self.spatial_basis
+
+
+class LatentLocation(Component):
+    """
+    The latent location of a neuron in either real or abstract space
+    """
+    def __init__(self, model):
+        self.prms = model
+        self.name = self.prms['name']
+        self.N_dims = self.prms['N_dims']
+        self.N = model['N']
+
+        # Create a location prior
+        self.location_prior = create_prior(self.prms['location_prior'])
+
+        # Make sure the sample is of the correct type
+        from priors import Categorical, JointCategorical
+        if isinstance(self.location_prior, (Categorical,JointCategorical)):
+            self.Lflat = T.lvector('L')
+            self.dtype = np.int
+        else:
+            self.Lflat = T.dvector('L')
+            self.dtype = np.float
+
+        # Latent distance model has NxN_dims matrix of locations Lm
+        self.Lmatrix = T.reshape(self.Lflat, (self.N, self.N_dims))
+        self.Lmatrix.name = 'L'
+
+        # Define log probability
+        self.log_p = self.location_prior.log_p(self.Lmatrix)
+
+    def get_variables(self):
+        return {str(self.Lflat) : self.Lflat}
+
+    def get_state(self):
+        return {str(self.Lmatrix) : self.Lmatrix}
+
+    def sample(self, acc):
+        """
+        return a sample of the variables
+        """
+        #  Sample locations from prior
+        L = self.location_prior.sample(None, self.N)
+
+        # DEBUG!  Permute the neurons such that they are sorted along the first dimension
+        # This is only for data generation
+        # if self.prms['sorted']:
+        #     print "Warning: sorting the neurons by latent location. " \
+        #           "Do NOT do this during inference!"
+        #     perm = np.argsort(L[:,0])
+        #     L = L[perm, :]
+        L = L.ravel()
+
+        return {str(self.Lflat) : L}

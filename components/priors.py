@@ -9,6 +9,11 @@ def create_prior(model, **kwargs):
     if typ == 'normal' or \
        typ == 'gaussian':
        return Gaussian(model, **kwargs)
+    elif typ == 'categorical':
+       return Categorical(model, **kwargs)
+    elif typ == 'jointcategorical' or \
+         typ == 'joint_categorical':
+       return JointCategorical(model, **kwargs)
     elif typ == 'spherical_gaussian':
         return SphericalGaussian(model, **kwargs)
     elif typ == 'group_lasso' or \
@@ -18,6 +23,101 @@ def create_prior(model, **kwargs):
         return DeterminenalPointProcess(model, **kwargs)
     else:
         raise Exception("Unrecognized prior type: %s" % typ)
+
+
+
+class Categorical(Component):
+    """ Wrapper for a discrete random variable from a Categorical distribution
+    """
+    def __init__(self, model):
+        self.prms = model
+        self.p = theano.shared(name='p', value=self.prms['p'])
+        self.min = self.prms['min']
+        self.max = self.prms['max']
+
+    def ravel_index(self,value):
+        return value - self.min
+
+    def log_p(self, value):
+        """ Compute log prob of the given value under this prior
+        """
+        lp = T.constant(0.)
+        lp += -np.Inf * T.lt(value, self.min)
+        lp += -np.Inf * T.gt(value, self.max)
+        lp += self.p[value]
+        return lp
+
+    def get_variables(self):
+        return {}
+
+    def sample(self, acc, size=(1,)):
+        """ Sample from the prior
+        """
+        v = np.random.choice(self.p, size=size)
+        return v
+
+
+class JointCategorical(Component):
+    """
+    Wrapper for a discrete random variable from a product distribution of
+    two categorical distributions.
+    """
+    def __init__(self, model):
+        self.prms = model
+        self.p1 = theano.shared(name='p1', value=self.prms['p1'])
+        self.p2 = theano.shared(name='p2', value=self.prms['p2'])
+        self.min1 = self.prms['min1']
+        self.max1 = self.prms['max1']
+        self.min2 = self.prms['min2']
+        self.max2 = self.prms['max2']
+
+    def ravel_index(self, value):
+        return (self.max1-self.min1+1)*(value[1]-self.min2) + (value[0]-self.min1)
+
+    def log_p(self, value):
+        """ Compute log prob of the given value under this prior
+        """
+        # Add up the log probs from each value
+
+        # Check for any values outside the given range
+        # oob = (T.any(T.lt(value[:,0], self.min1))) or \
+        #       (T.any(T.gt(value[:,0], self.max1))) or \
+        #       (T.any(T.lt(value[:,1], self.min2))) or \
+        #       (T.any(T.gt(value[:,1], self.max2)))
+        # lp += -np.Inf * T.sum(T.lt(value[:,0], self.min1))
+        # lp += -np.Inf * T.sum(T.gt(value[:,0], self.max1))
+        # lp += -np.Inf * T.sum(T.lt(value[:,1], self.min2))
+        # lp += -np.Inf * T.sum(T.gt(value[:,1], self.max2))
+
+        lp = T.sum(T.log(self.p1[value[:,0]]))
+        lp += T.sum(T.log(self.p2[value[:,1]]))
+
+        # from theano.ifelse import ifelse
+        # lp = ifelse(oob, T.constant(-np.Inf, dtype=np.float64), lp)
+
+
+        # oob1 = T.or_(T.lt(value[:,0], self.min1),
+        #             T.gt(value[:,0], self.max1))
+        # oob2 = T.or_(T.lt(value[:,1], self.min2),
+        #              T.gt(value[:,1], self.max2))
+        #
+        # T.where(oob1, -np.Inf, )
+
+        return lp
+
+    def get_variables(self):
+        return {}
+
+    def sample(self, acc, size=(1,)):
+        """ Sample from the prior
+        """
+        v1 = np.random.choice(np.arange(self.min1, self.max1+1),
+                              p=self.p1.get_value(), size=size).astype(np.int)
+        v2 = np.random.choice(np.arange(self.min2, self.max2+1),
+                              p=self.p2.get_value(), size=size).astype(np.int)
+        v = np.concatenate((v1[:,None], v2[:,None]), axis=1)
+        return v
+
 
 class Gaussian(Component):
     """ Wrapper for a scalar random variable with a Normal distribution

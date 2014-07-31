@@ -362,7 +362,9 @@ class SharedTuningCurveStimulus(Component):
         self.filtered_stim = theano.shared(name='stim',
                                            value=np.ones((1,1,1,1)))
 
-        self.loc_index = T.iscalar('loc_index')
+        self.locations = latent[self.prms['locations']]
+        self.L = self.locations.Lmatrix[self.n,:]
+        self.loc_index = self.locations.location_prior.ravel_index(self.L)
 
         # Expose outputs to the Glm class
         I_x = T.tensordot(self.filtered_stim,
@@ -372,22 +374,28 @@ class SharedTuningCurveStimulus(Component):
         # Extract only the loc_index column (Result is T x B_t)
         I_x = I_x[:,self.loc_index,:]
         self.I_stim = T.dot(I_x, self.w_t)
+        self.I_stim.name = 'I_stim'
 
         # There are no latent variables in this class. They all belong
         # to global latent variables.
         self.log_p = T.constant(0.0)
 
-    def get_variables(self):
+    # def get_variables(self):
+    #     """ Get the theano variables associated with this model.
+    #     """
+        # return {str(self.loc_index) : self.loc_index}
+
+    def get_state(self):
         """ Get the theano variables associated with this model.
         """
-        return {str(self.loc_index) : self.loc_index}
+        return {str(self.I_stim) : self.I_stim}
 
-    def sample(self, acc):
-        """
-        return a sample of the variables
-                """
-        loc_index = 0
-        return {str(self.loc_index) : loc_index}
+    # def sample(self, acc):
+    #     """
+    #     return a sample of the variables
+    #             """
+    #     loc_index = 0
+    #     return {str(self.loc_index) : loc_index}
 
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data

@@ -156,12 +156,14 @@ class LatentDistanceGraphModel(Component):
         self.N = model['N']
         self.N_dims = self.prms['N_dims']
 
-        # Create a location prior
-        self.location_prior = create_prior(self.prms['location_prior'])
-
-        # Latent distance model has NxR matrix of locations L
-        self.L = T.dvector('L')
-        self.Lm = T.reshape(self.L, (self.N, self.N_dims))
+        # Get the latent location
+        self.location = latent[self.prms['locations']]
+        self.Lm = self.location.Lm
+        # self.location_prior = create_prior(self.prms['location_prior'])
+        #
+        # # Latent distance model has NxR matrix of locations L
+        # self.L = T.dvector('L')
+        # self.Lm = T.reshape(self.L, (self.N, self.N_dims))
 
         # Compute the distance between each pair of locations
         # Reshape L into a Nx1xD matrix and a 1xNxD matrix, then add the requisite
@@ -200,44 +202,45 @@ class LatentDistanceGraphModel(Component):
 
         # Define log probability
         self.lkhd = T.sum(self.A * T.log(self.pA) + (1 - self.A) * T.log(1 - self.pA))
-        self.log_p = self.lkhd_scale * self.lkhd + self.location_prior.log_p(self.Lm)
+        # self.log_p = self.lkhd_scale * self.lkhd + self.location_prior.log_p(self.Lm)
+        self.log_p = self.lkhd_scale * self.lkhd
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
         """
         return {str(self.A): self.A,
-                str(self.L): self.L,
+                # str(self.L): self.L,
                 str(self.delta): self.delta}
 
     def sample(self, acc):
         N = self.model['N']
 
-        #  Sample locations from prior
-        L = self.location_prior.sample(None)
-
-        # DEBUG!  Permute the neurons such that they are sorted along the first dimension
-        # This is only for data generation
-        if self.prms['sorted']:
-            print "Warning: sorting the neurons by latent location. " \
-                  "Do NOT do this during inference!"
-            perm = np.argsort(L[:,0])
-            L = L[perm, :]
-        L = L.ravel()
+        # #  Sample locations from prior
+        # L = self.location_prior.sample(None)
+        #
+        # # DEBUG!  Permute the neurons such that they are sorted along the first dimension
+        # # This is only for data generation
+        # if self.prms['sorted']:
+        #     print "Warning: sorting the neurons by latent location. " \
+        #           "Do NOT do this during inference!"
+        #     perm = np.argsort(L[:,0])
+        #     L = L[perm, :]
+        # L = L.ravel()
 
         # TODO: Sample delta from prior
         delta = self.prms['delta']
 
         # Sample A from pA
-        pA = self.pA.eval({self.L: L,
+        pA = self.pA.eval({ #self.L: L,
                            self.delta: delta})
 
         A = np.random.rand(N, N) < pA
         A = A.astype(np.int8)
         return {str(self.A): A,
-                str(self.L): L,
+                # str(self.L): L,
                 str(self.delta): delta}
 
     def get_state(self):
         return {str(self.A): self.A,
-                str(self.L): self.Lm,
+                # str(self.L): self.Lm,
                 str(self.delta): self.delta}

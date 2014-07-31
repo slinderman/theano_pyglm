@@ -272,7 +272,7 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
     Hamiltonian dynamics.
     """
     def __init__(self):
-        super(HmcImpulseUpdate, self).__init__()
+        super(HmcBkgdUpdate, self).__init__()
 
         self.n_steps = 2
         self.avg_accept_rate = 0.9
@@ -343,7 +343,7 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
         grad_nll = lambda x_glm_vec: -1.0*self._grad_glm_logp(x_glm_vec, xn)
 
         # HMC with automatic parameter tuning
-        x_imp, new_step_sz, new_accept_rate = hmc(nll,
+        x_bkgd, new_step_sz, new_accept_rate = hmc(nll,
                                                   grad_nll,
                                                   self.step_sz,
                                                   self.n_steps,
@@ -358,8 +358,8 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
 
 
         # Unpack the optimized parameters back into the state dict
-        x_imp_n = unpackdict(x_imp, shapes)
-        set_vars(self.bkgd_syms, xn['glm']['bkgd'], x_imp_n)
+        x_bkgd_n = unpackdict(x_bkgd, shapes)
+        set_vars(self.bkgd_syms, xn['glm']['bkgd'], x_bkgd_n)
 
 
         x['glms'][n] = xn['glm']
@@ -1242,48 +1242,93 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         return x
 
 
-class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
+class LatentLocationUpdate(MetropolisHastingsUpdate):
     """
     Gibbs sample the parameters of a latent distance model, namely the
     latent locations (if they are not given) and the distance scale.
     """
     def __init__(self):
-        super(LatentDistanceNetworkUpdate, self).__init__()
+        super(LatentLocationUpdate, self).__init__()
 
+        # Use HMC if the locations are continuous
+        # Otherwise, use a Metropolis-Hastings update
         self.avg_accept_rate = 0.9
         self.step_sz = 0.001
 
     def preprocess(self, population):
-        # Compute the log probability of the graph and
-        # of the locations under the prior, as well as its
-        # gradient
         self.N = population.model['N']
-        self.network = population.network
+
+        # Get the location model(s)
+        from components.latent import LatentLocation
+        self.location_models = []
+        self.location_updates = []
+        for latent_component in population.latent.latentlist:
+            if isinstance(latent_component, LatentLocation):
+                self.location_models.append(latent_component)
+
+                # Make an update for this model
+                if latent_component.dtype == np.int:
+                    update = _DiscreteLatentLocationUpdate(latent_component)
+                else:
+                    update = _ContinuousLatentLocationUpdate(latent_component)
+                update.preprocess(population)
+                self.location_updates.append(update)
+
+    def update(self, x):
+        """
+        Update each location update in turn
+        """
+        for update in self.location_updates:
+            x = update.update(x)
+
+        return x
+
+class _ContinuousLatentLocationUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample continuous latent locations
+    """
+    def __init__(self, latent_location_component):
+        self.location = latent_location_component
+
+    def preprocess(self, population):
         self.syms = population.get_variables()
 
-        self.L_shape = population.sample()['net']['graph']['L'].shape
+        # Get the shape of L
+        # TODO: Fix this hack!
+        self.L = self.location.L
+        self.L_shape = population.sample()['latent'][self.location.name]['L'].shape
 
-        self.g_netlp_wrt_L = T.grad(self.network.graph.log_p,
-                                    self.syms['net']['graph']['L'])
+        # Compute the log probability and its gradients, taking into
+        # account the prior and the likelihood of any consumers of the
+        # location.
+        self.log_p = T.constant(0.)
+        self.log_p += self.location.log_p
+
+        self.g_log_p = T.constant(0.)
+        self.g_log_p += T.grad(self.location.log_p, self.L)
+
+        from components.graph import LatentDistanceGraphModel
+        if isinstance(population.network.graph, LatentDistanceGraphModel):
+            self.log_p += population.network.graph.log_p
+            self.g_log_p +=T.grad(population.network.graph.log_p, self.L)
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_p += population.glm.bkgd.log_p
+            self.g_log_p +=T.grad(population.glm.bkgd.log_p, self.L)
 
     def _lp_L(self, L, x):
         # Set L in state dict x
-        set_vars('L', x['net']['graph'], L)
-
-        # Get the prior probability of A
-        lp = seval(self.network.graph.log_p, self.syms['net']['graph'], x['net']['graph'])
-        # assert np.all(np.isfinite(lp))
+        set_vars('L', x['latent'][self.location.name], L)
+        lp = seval(self.log_p, self.syms, x)
+        assert np.all(np.isfinite(lp))
         return lp
 
 
     def _grad_lp_wrt_L(self, L, x):
         # Set L in state dict x
-        set_vars('L', x['net']['graph'], L)
-
-        # Get the grad of the log prob of A
-        g_lp = seval(self.g_netlp_wrt_L,
-                     self.syms['net']['graph'],
-                     x['net']['graph'])
+        set_vars('L', x['latent'][self.location.name], L)
+        g_lp = seval(self.g_log_p, self.syms, x)
         # if not np.all(np.isfinite(g_lp)):
         #     import pdb; pdb.set_trace()
         return g_lp
@@ -1292,32 +1337,334 @@ class LatentDistanceNetworkUpdate(MetropolisHastingsUpdate):
         """
         Sample L using HMC given A and delta (distance scale)
         """
-        # Sample W if it exists
-        if 'L' in x['net']['graph']:
-            # print "Sampling W"
-            nll = lambda L: -1.0 * self._lp_L(L.reshape(self.L_shape), x)
-            grad_nll = lambda L: -1.0 * self._grad_lp_wrt_L(L.reshape(self.L_shape), x).ravel()
+        nll = lambda L: -1.0 * self._lp_L(L.reshape(self.L_shape), x)
+        grad_nll = lambda L: -1.0 * self._grad_lp_wrt_L(L.reshape(self.L_shape), x).ravel()
 
-            # Automatically tune these paramseters
-            n_steps = 10
-            (L, new_step_sz, new_accept_rate) = hmc(nll,
-                                                    grad_nll,
-                                                    self.step_sz,
-                                                    n_steps,
-                                                    x['net']['graph']['L'].ravel(),
-                                                    adaptive_step_sz=True,
-                                                    avg_accept_rate=self.avg_accept_rate)
+        # Automatically tune these paramseters
+        n_steps = 10
+        (L, new_step_sz, new_accept_rate) = hmc(nll,
+                                                grad_nll,
+                                                self.step_sz,
+                                                n_steps,
+                                                x['latent'][self.location.name]['L'].ravel(),
+                                                adaptive_step_sz=True,
+                                                avg_accept_rate=self.avg_accept_rate)
 
-            # Update step size and accept rate
-            self.step_sz = new_step_sz
-            # print "Step: ", self.step_sz
-            self.avg_accept_rate = new_accept_rate
-            # print "Accept: ", self.avg_accept_rate
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        # print "Step: ", self.step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "Accept: ", self.avg_accept_rate
 
-            # Update current L
-            x['net']['graph']['L'] = L.reshape(self.L_shape)
+        # Update current L
+        x['latent'][self.location.name]['L'] = L.reshape(self.L_shape)
 
         return x
+
+
+class _DiscreteLatentLocationUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample discrete latent locations on a grid
+    """
+    def __init__(self, latent_location_component):
+        self.location = latent_location_component
+
+    def preprocess(self, population):
+        self.N = population.N
+        self.population = population
+        self.syms = population.get_variables()
+        self.L = self.location.Lmatrix
+
+        # Compute the log probability and its gradients, taking into
+        # account the prior and the likelihood of any consumers of the
+        # location.
+        self.log_p = self.location.log_p
+        self.log_lkhd = T.constant(0.)
+
+        from components.graph import LatentDistanceGraphModel
+        if isinstance(population.network.graph, LatentDistanceGraphModel):
+            self.log_lkhd += population.network.graph.log_p
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+
+    def _lp_L(self, L, x, n):
+        if not self._check_bounds(L):
+            return -np.Inf
+
+        # Set L in state dict x
+        xn = self.population.extract_vars(x, n)
+        set_vars('L', xn['latent'][self.location.name], L.ravel())
+        lp = seval(self.log_p, self.syms, xn)
+        lp += seval(self.log_lkhd, self.syms, xn)
+        return lp
+
+    def _check_bounds(self, L):
+        """
+        Return true if locations are within the allowable range
+        """
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        if isinstance(prior, Categorical):
+            if np.any(L < prior.min) or np.any(L > prior.max):
+                return False
+        if isinstance(prior, JointCategorical):
+            if np.any(L[:,0] < prior.min1) or np.any(L[:,0] > prior.max1) or \
+               np.any(L[:,1] < prior.min2) or np.any(L[:,1] > prior.max2):
+                return False
+        return True
+
+    def update(self, x):
+        """
+        Sample each entry in L using Metropolis Hastings
+        """
+        L = seval(self.location.Lmatrix, self.syms['latent'], x['latent'])
+        # print "L: ", L
+        for n in range(self.N):
+            L_curr = L[n,:].copy()
+            lp_curr = self._lp_L(L, x, n)
+
+            # Make a symmetric proposal of \pm 1 step along each dimension independently
+            L_prop = L_curr + np.random.randint(-1,2,L_curr.shape)
+            L[n,:] = L_prop
+            lp_prop = self._lp_L(L, x, n)
+
+            # Accept or reject (ignoring proposal since it's symmetric)
+            if np.log(np.random.rand()) < lp_prop - lp_curr:
+                L[n,:] = L_prop
+                # print "%d: [%d,%d]->[%d,%d]" % (n, L_curr[0], L_curr[1], L_prop[0],L_prop[1])
+            else:
+                L[n,:] = L_curr
+                # print "%d: [%d,%d]->[%d,%d]" % (n, L_curr[0], L_curr[1], L_curr[0],L_curr[1])
+
+        # Update current L
+        if not self._check_bounds(L):
+            import pdb; pdb.set_trace()
+        x['latent'][self.location.name]['L'] = L.ravel()
+
+        return x
+
+
+class LatentTypeUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample discrete latent locations on a grid
+    """
+    def __init__(self):
+        pass
+
+    def preprocess(self, population):
+        self.N = population.N
+        self.population = population
+        self.syms = population.get_variables()
+
+        # Get the shared tuning curve component
+        from components.latent import LatentType
+        self.latent_types = []
+        for latent_component in population.latent.latentlist:
+            if isinstance(latent_component, LatentType):
+                self.latent_types.append(latent_component)
+
+        # # Compute the log probability and its gradients, taking into
+        # # account the prior and the likelihood of any consumers of the
+        # # location.
+        # self.log_p = self.location.log_p
+        self.log_lkhd = T.constant(0.)
+
+        from components.graph import StochasticBlockGraphModel
+        if isinstance(population.network.graph, StochasticBlockGraphModel):
+            self.log_lkhd += population.network.graph.log_p
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+
+    def _lp_L(self, latent_type, Y, x, n):
+        # Set Yin state dict x
+        xn = self.population.extract_vars(x, n)
+        set_vars('Y', xn['latent'][latent_type.name], Y.ravel())
+        lp = seval(latent_type.log_p, self.syms, xn)
+        lp += seval(self.log_lkhd, self.syms, xn)
+        return lp
+
+    def update(self, x):
+        """
+        Sample each entry in L using Metropolis Hastings
+        """
+        from log_sum_exp import log_sum_exp_sample
+        for latent_type in self.latent_types:
+            R = latent_type.R
+            Y = x['latent'][latent_type.name]['Y']
+            print "Y: ", Y
+
+            for n in range(self.N):
+                lpr = np.zeros(R)
+                for r in range(R):
+                    Y[n] = r
+                    lpr[r] = self._lp_L(latent_type, Y, x, n)
+
+                Y[n] = log_sum_exp_sample(lpr)
+
+            x['latent'][latent_type.name]['Y'] = Y
+
+        return x
+
+
+class SharedTuningCurveUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample continuous latent locations
+    """
+    def __init__(self):
+        self.n_steps = 2
+        self.avg_accept_rate = 0.9
+        self.step_sz = 0.1
+
+    def preprocess(self, population):
+        self.population = population
+        self.N = population.N
+
+        # Get the shared tuning curve component
+        from components.latent import LatentTypeWithTuningCurve
+        self.tc_model = None
+        for latent_component in population.latent.latentlist:
+            if isinstance(latent_component, LatentTypeWithTuningCurve):
+                self.tc_model = latent_component
+                break
+
+        if self.tc_model is None:
+            return
+
+        self.syms = population.get_variables()
+
+        # Get the shape of w_x and w_t
+        self.w_x = self.tc_model.w_x
+        self.w_x_shape = (self.tc_model.Bx, self.tc_model.R)
+        self.w_t = self.tc_model.w_t
+        self.w_t_shape = (self.tc_model.Bt, self.tc_model.R)
+
+        # Compute the log probability and its gradients, taking into
+        # account the prior and the likelihood of any consumers of the
+        # location.
+        self.log_p = self.tc_model.log_p
+
+        self.g_log_p_wrt_wx = T.constant(0.)
+        self.g_log_p_wrt_wt = T.constant(0.)
+        self.g_log_p_wrt_wx += T.grad(self.tc_model.log_p, self.w_x)
+        self.g_log_p_wrt_wt += T.grad(self.tc_model.log_p, self.w_t)
+
+        self.log_lkhd = T.constant(0.0)
+        self.g_log_lkhd_wrt_wx = T.constant(0.)
+        self.g_log_lkhd_wrt_wt = T.constant(0.)
+
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+            self.g_log_lkhd_wrt_wx += T.grad(population.glm.log_p, self.w_x)
+            self.g_log_lkhd_wrt_wt += T.grad(population.glm.log_p, self.w_t)
+
+    def _lp_wx(self, w_x, x):
+        """
+        Compute the log posterior of x (across all GLMs)
+        """
+        # Set L in state dict x
+        set_vars('w_x', x['latent'][self.tc_model.name], w_x)
+        lp = seval(self.log_p, self.syms['latent'], x['latent'])
+
+        for n in range(self.N):
+            xn = self.population.extract_vars(x, n)
+            lp += seval(self.log_lkhd, self.syms, xn)
+
+        return lp
+
+    def _lp_wt(self, w_t, x):
+        # Set L in state dict x
+        set_vars('w_t', x['latent'][self.tc_model.name], w_t)
+        lp = seval(self.log_p, self.syms['latent'], x['latent'])
+
+        for n in range(self.N):
+            xn = self.population.extract_vars(x, n)
+            lp += seval(self.log_lkhd, self.syms, xn)
+
+        return lp
+
+    def _grad_lp_wrt_wx(self, w_x, x):
+        # Set L in state dict x
+        set_vars('w_x', x['latent'][self.tc_model.name], w_x)
+        g_lp = seval(self.g_log_p_wrt_wx, self.syms['latent'], x['latent'])
+
+        for n in range(self.N):
+            xn = self.population.extract_vars(x, n)
+            g_lp += seval(self.g_log_lkhd_wrt_wx, self.syms, xn)
+
+        return g_lp
+
+    def _grad_lp_wrt_wt(self, w_t, x):
+        # Set L in state dict x
+        set_vars('w_t', x['latent'][self.tc_model.name], w_t)
+        g_lp = seval(self.g_log_p_wrt_wt, self.syms['latent'], x['latent'])
+
+        for n in range(self.N):
+            xn = self.population.extract_vars(x, n)
+            g_lp += seval(self.g_log_lkhd_wrt_wt, self.syms, xn)
+
+        return g_lp
+
+    def update(self, x):
+        """
+        Sample L using HMC given A and delta (distance scale)
+        """
+        if self.tc_model is None:
+            return
+
+        # Update w_x
+        nll_wx = lambda w_x: -1.0 * self._lp_wx(w_x.reshape(self.w_x_shape), x)
+        grad_nll_wx = lambda w_x: -1.0 * self._grad_lp_wrt_wx(w_x.reshape(self.w_x_shape), x).ravel()
+
+        # Automatically tune these parameters
+        n_steps = 10
+        (w_x, new_step_sz, new_accept_rate) = hmc(nll_wx,
+                                                  grad_nll_wx,
+                                                  self.step_sz,
+                                                  n_steps,
+                                                  x['latent'][self.tc_model.name]['w_x'].ravel(),
+                                                  adaptive_step_sz=True,
+                                                  avg_accept_rate=self.avg_accept_rate)
+
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        # print "Step: ", self.step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "Accept: ", self.avg_accept_rate
+
+        # Update current w_x
+        x['latent'][self.tc_model.name]['w_x'] = w_x.reshape(self.w_x_shape)
+
+        # Do the same for w_t
+        nll_wt = lambda w_t: -1.0 * self._lp_wt(w_t.reshape(self.w_t_shape), x)
+        grad_nll_wt = lambda w_t: -1.0 * self._grad_lp_wrt_wt(w_t.reshape(self.w_t_shape), x).ravel()
+
+        # Automatically tune these paramseters
+        n_steps = 10
+        (w_t, new_step_sz, new_accept_rate) = hmc(nll_wt,
+                                                  grad_nll_wt,
+                                                  self.step_sz,
+                                                  n_steps,
+                                                  x['latent'][self.tc_model.name]['w_t'].ravel(),
+                                                  adaptive_step_sz=True,
+                                                  avg_accept_rate=self.avg_accept_rate)
+
+        # Update step size and accept rate
+        self.step_sz = new_step_sz
+        # print "Step: ", self.step_sz
+        self.avg_accept_rate = new_accept_rate
+        # print "Accept: ", self.avg_accept_rate
+
+        # Update current w_t
+        x['latent'][self.tc_model.name]['w_t'] = w_t.reshape(self.w_t_shape)
+
+        return x
+
 
 def initialize_updates(population):
     """ Compute the set of updates required for the given population.
@@ -1325,6 +1672,22 @@ def initialize_updates(population):
     """
     serial_updates = []
     parallel_updates = []
+
+    print "Initializing latent variable samplers"
+    loc_sampler = LatentLocationUpdate()
+    loc_sampler.preprocess(population)
+    serial_updates.append(loc_sampler)
+
+    type_sampler = LatentTypeUpdate()
+    type_sampler.preprocess(population)
+    serial_updates.append(type_sampler)
+
+    tc_sampler = SharedTuningCurveUpdate()
+    tc_sampler.preprocess(population)
+    serial_updates.append(tc_sampler)
+
+
+
     # All populations have a parallel GLM sampler
     print "Initializing GLM samplers"
     # glm_sampler = HmcGlmUpdate()
@@ -1334,6 +1697,10 @@ def initialize_updates(population):
     bias_sampler = HmcBiasUpdate()
     bias_sampler.preprocess(population)
     parallel_updates.append(bias_sampler)
+
+    bkgd_sampler = HmcBkgdUpdate()
+    bkgd_sampler.preprocess(population)
+    parallel_updates.append(bkgd_sampler)
 
     from components.impulse import DirichletImpulses
     if isinstance(population.glm.imp_model, DirichletImpulses):
@@ -1354,12 +1721,12 @@ def initialize_updates(population):
     parallel_updates.append(net_sampler)
 
     # If the graph model is a latent distance model, add its update
-    from components.graph import LatentDistanceGraphModel
-    if isinstance(population.network.graph, LatentDistanceGraphModel):
-        print "Initializing latent location sampler"
-        loc_sampler = LatentDistanceNetworkUpdate()
-        loc_sampler.preprocess(population)
-        serial_updates.append(loc_sampler)
+    # from components.graph import LatentDistanceGraphModel
+    # if isinstance(population.network.graph, LatentDistanceGraphModel):
+    #     print "Initializing latent location sampler"
+    #     loc_sampler = LatentLocationUpdate()
+    #     loc_sampler.preprocess(population)
+    #     serial_updates.append(loc_sampler)
 
     return serial_updates, parallel_updates
 

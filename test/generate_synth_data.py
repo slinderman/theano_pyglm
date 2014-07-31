@@ -109,7 +109,7 @@ def run_gen_synth_data():
     # Set simulation parametrs
     dt = 0.001
     dt_stim = 0.1
-    D_stim = (3,3)
+    D_stim = (5,5)
     # D_stim = model['bkgd']['D_stim'] if 'D_stim' in model['bkgd'] else 0
     if isinstance(D_stim, int):
         D_stim = [D_stim]

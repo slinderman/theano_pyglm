@@ -14,7 +14,7 @@ from models.model_factory import make_model, convert_model
 from population import Population
 from synth_harness import initialize_test_harness
 
-from inference.gibbs import LatentDistanceNetworkUpdate, MetropolisHastingsUpdate
+from inference.gibbs import LatentLocationUpdate, MetropolisHastingsUpdate
 
 def sample_network_from_prior(model):
     """
@@ -120,7 +120,7 @@ def fit_latent_network_to_mle():
 
     # Create a location sampler
     print "Initializing latent location sampler"
-    loc_sampler = LatentDistanceNetworkUpdate()
+    loc_sampler = LatentLocationUpdate()
     loc_sampler.preprocess(popn)
 
     # Convert the mle results into a weighted adjacency matrix
@@ -316,7 +316,7 @@ def test_latent_distance_network_sampler(N, N_samples=10000):
 
         # Create a location sampler
         print "Initializing latent location sampler"
-        loc_sampler = LatentDistanceNetworkUpdate()
+        loc_sampler = LatentLocationUpdate()
         loc_sampler.preprocess(dist_popn)
 
         # Run the sampler
