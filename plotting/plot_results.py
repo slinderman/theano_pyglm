@@ -62,7 +62,7 @@ def plot_connectivity_matrix(s_smpls, s_true=None):
     plt.colorbar()
     plt.title('Inferred Network')
 
-def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, color=None):
+def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=None):
     if 'sharedtuningcurve_provider' in s_mean['latent']:
         tc_mean = s_mean['latent']['sharedtuningcurve_provider']
         if s_std is not None:
@@ -76,21 +76,47 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, color=None):
         assert tc_t.shape[-1] == R
 
         # Plot each tuning curve
+        if s_true is not None:
+            true_tc_x = s_true['latent']['sharedtuningcurve_provider']['stim_response_x']
+            true_tc_t = s_true['latent']['sharedtuningcurve_provider']['stim_response_t']
+            if tc_x.ndim == 3:
+                ncols = 3
+            else:
+                ncols = 2
+        else:
+            ncols = 2
+
         for r in range(R):
             # Plot the spatial component of the stimulus response
-            plt.subplot(R,2,r*2+1)
+            plt.subplot(R,ncols,r*ncols+1)
             if tc_x.ndim == 3:
                 px_per_node = 10
                 stim_x_max = np.amax(np.abs(tc_x[:,:,r]))
                 plt.imshow(np.kron(tc_x[:,r],np.ones((px_per_node,px_per_node))),
                            vmin=-stim_x_max,vmax=stim_x_max,
                            extent=[0,1,0,1],
+                           cmap='RdGy',
                            interpolation='nearest')
                 plt.colorbar()
                 plt.title('$f_{%d}(\\Delta x)$' % r)
+
+                if s_true is not None:
+                    plt.subplot(R,ncols,r*ncols+2)
+                    px_per_node = 10
+                    stim_x_max = np.amax(np.abs(true_tc_x[:,:,r]))
+                    plt.imshow(np.kron(true_tc_x[:,r],np.ones((px_per_node,px_per_node))),
+                               vmin=-stim_x_max,vmax=stim_x_max,
+                               extent=[0,1,0,1],
+                               cmap='RdGy',
+                               interpolation='nearest')
+                    plt.colorbar()
+                    plt.title('True $f_{%d}(\\Delta x)$' % r)
             elif tc_x.ndim == 2:
                 plt.plot(tc_x[:,r], color=color, linestyle='-')
-                plt.hold(True)
+
+                # Plot the true tuning curve
+                if s_true is not None:
+                    plt.plot(true_tc_x[:,r], color='k', linestyle='-')
 
                 # If standard deviation is given, plot that as well
                 if s_std is not None:
@@ -103,13 +129,18 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, color=None):
             else:
                 raise Exception('Invalid TC dimension.')
 
-            plt.subplot(R,2,r*2+2)
+            plt.subplot(R,ncols,(r+1)*ncols)
             plt.plot(tc_t[:,r], color=color)
-            plt.hold(True)
+
+            # Plot the true tuning curve
+            if s_true is not None:
+                plt.plot(true_tc_t[:,r], color='k', linestyle='-')
+
             if s_std is not None:
                 stim_t_std = tc_std['stim_response_t'][:,r]
                 plt.plot(tc_t[:,r] + 2*stim_t_std, color=color, linestyle='--')
                 plt.plot(tc_t[:,r] - 2*stim_t_std, color=color, linestyle='--')
+
 
             plt.title('$f_{%d}(\\Delta t)$' % r)
 
@@ -458,6 +489,69 @@ def plot_log_lkhd(s_inf, s_true=None,  color='k'):
     plot_log_prob(s_inf, key='ll', s_true=s_true, color=color)
     plt.ylabel('Log likelihood')
 
+def plot_locations(s_inf, name='location_provider', color='k'):
+    """
+    Plot a histogram of the inferred locations for each neuron
+    """
+    if name not in s_inf[0]['latent']:
+        return
+
+    locs = np.array([s['latent'][name]['L'] for s in s_inf])
+    [N_smpls, N, D] = locs.shape
+
+    for n in range(N):
+        plt.subplot(1,N,n, aspect=1.0)
+
+        if N_smpls == 1:
+            if D == 1:
+                plt.plot([locs[0,n,0], locs[0,n,0]],
+                         [0,2], color=color, lw=2)
+            elif D == 2:
+                plt.plot(locs[0,n,0], locs[0,n,1], 's',
+                         color=color, markerfacecolor=color)
+            else:
+                raise Exception("Only plotting locs of dim <= 2")
+        else:
+            # Plot a histogram of samples
+            if D == 1:
+                plt.hist(locs[:,n,0], bins=20, normed=True, color=color)
+            elif D == 2:
+                plt.hist2d(locs[:,n,0], locs[:,n,1], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
+                plt.xlim((-0.5,4.5))
+                plt.ylim((-0.5,4.5))
+                plt.colorbar()
+            else:
+                raise Exception("Only plotting locs of dim <= 2")
+
+def plot_latent_types(s_inf, s_true=None, name='sharedtuningcurve_provider'):
+    """
+    Plot a histogram of the inferred locations for each neuron
+    """
+    if name not in s_inf[0]['latent']:
+        return
+
+    Ys = np.array([s['latent'][name]['Y'] for s in s_inf])
+    [N_smpls, N] = Ys.shape
+    vmin = np.amin(Ys)
+    vmax = np.amax(Ys)
+    if s_true is not None:
+        Ytrue = s_true['latent'][name]['Y']
+        vmin = np.minimum(vmin, np.amin(Ytrue))
+        vmax = np.maximum(vmax, np.amax(Ytrue))
+
+    vmin -= 0.1
+    vmax += 0.1
+
+    for n in range(N):
+        plt.scatter(np.arange(N_smpls), n*np.ones(N_smpls),
+                    c=Ys[:,n], s=100, cmap='jet', vmin=vmin, vmax=vmax)
+
+
+        plt.scatter((N_smpls+10)*np.ones(N), np.arange(N), c=Ytrue, s=100,
+                    cmap='jet', marker='*', vmin=vmin, vmax=vmax)
+
+    plt.colorbar()
+
 def plot_results(population, 
                  x_inf, 
                  popn_true=None, 
@@ -505,22 +599,40 @@ def plot_results(population,
         f.savefig(os.path.join(resdir,'conn.pdf'))
         plt.close(f)
 
+    if 'location_provider' in s_inf[0]['latent']:
+        f = plt.figure()
+        plot_locations(s_inf, color='r')
+        if true_given:
+            plot_locations([s_true], color='k')
+        f.savefig(os.path.join(resdir, 'locations.pdf'))
+        plt.close(f)
+
+
     # Plot shared tuning curves
-    if True:
+    if 'sharedtuningcurve_provider' in s_inf[0]['latent']:
         print "Plotting shared tuning curves"
         for n in range(N):
             f = plt.figure()
-            plot_spatiotemporal_tuning_curves(
-                s_avg,
-                s_std=s_std,
-                color='r')
             if true_given:
                 plot_spatiotemporal_tuning_curves(
-                    s_true,
+                    s_avg,
+                    s_true=s_true,
+                    s_std=s_std,
+                    color='r')
+            else:
+                plot_spatiotemporal_tuning_curves(
+                    s_avg,
+                    s_std=s_std,
                     color='k')
 
             f.savefig(os.path.join(resdir,'tuning_curves.pdf'))
             plt.close(f)
+
+        print "Plotting types"
+        f = plt.figure()
+        plot_latent_types(s_inf, s_true)
+        f.savefig(os.path.join(resdir, 'latent_types.pdf'))
+        plt.close(f)
 
     # Plot stimulus response functions
     if do_plot_stim_resp:

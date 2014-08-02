@@ -60,10 +60,10 @@ SharedTuningCurveGlm = \
                             'type' : 'joint_categorical',
                             'min1' : 0,
                             'max1' : 4,
-                            'p1' : np.ones(5)/5.0,
+                            'p1' : np.array([0,0,1,0,0]),
                             'min2' : 0,
                             'max2' : 4,
-                            'p2' : np.ones(5)/5.0
+                            'p2' : np.array([0,0,1,0,0]),
                         }
                 }
         },

@@ -115,6 +115,7 @@ class JointCategorical(Component):
                               p=self.p1.get_value(), size=size).astype(np.int)
         v2 = np.random.choice(np.arange(self.min2, self.max2+1),
                               p=self.p2.get_value(), size=size).astype(np.int)
+
         v = np.concatenate((v1[:,None], v2[:,None]), axis=1)
         return v
 

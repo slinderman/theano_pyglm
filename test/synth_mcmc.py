@@ -40,7 +40,7 @@ def run_synth_test():
         cPickle.dump(x_smpls, f, protocol=-1)
 
     # Plot average of last 20% of samples
-    smpl_frac = 1.0
+    smpl_frac = 0.5
     plot_results(popn, 
                  x_smpls[-1*int(smpl_frac*N_samples):],
                  popn_true=popn_true,
