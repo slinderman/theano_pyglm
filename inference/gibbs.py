@@ -1268,8 +1268,9 @@ class LatentLocationUpdate(MetropolisHastingsUpdate):
 
                 # Make an update for this model
                 if latent_component.dtype == np.int:
-                    update = _DiscreteLatentLocationUpdate(latent_component)
+                    # update = _DiscreteLatentLocationUpdate(latent_component)
                     # update = _DiscreteGibbsLatentLocationUpdate(latent_component)
+                    update = _DiscreteLocalGibbsLatentLocationUpdate(latent_component)
                 else:
                     update = _ContinuousLatentLocationUpdate(latent_component)
                 update.preprocess(population)
@@ -1543,6 +1544,136 @@ class _DiscreteGibbsLatentLocationUpdate(MetropolisHastingsUpdate):
         x['latent'][self.location.name]['L'] = L.ravel()
 
         return x
+
+class _DiscreteLocalGibbsLatentLocationUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample discrete latent locations on a grid
+    This is a Metropolis-Hastings update that takes local steps proportional
+    to their relative probability.
+    """
+    def __init__(self, latent_location_component):
+        self.location = latent_location_component
+
+    def preprocess(self, population):
+        self.N = population.N
+        self.population = population
+        self.syms = population.get_variables()
+        self.L = self.location.Lmatrix
+
+        # Compute the log probability and its gradients, taking into
+        # account the prior and the likelihood of any consumers of the
+        # location.
+        self.log_p = self.location.log_p
+        self.log_lkhd = T.constant(0.)
+
+        from components.graph import LatentDistanceGraphModel
+        if isinstance(population.network.graph, LatentDistanceGraphModel):
+            self.log_lkhd += population.network.graph.log_p
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+
+    def _lp_L(self, L, x, n):
+        if not self._check_bounds(L):
+            return -np.Inf
+
+        # Set L in state dict x
+        xn = self.population.extract_vars(x, n)
+        set_vars('L', xn['latent'][self.location.name], L.ravel())
+        lp = seval(self.log_p, self.syms, xn)
+        lp += seval(self.log_lkhd, self.syms, xn)
+        return lp
+
+    def _check_bounds(self, L):
+        """
+        Return true if locations are within the allowable range
+        """
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        if isinstance(prior, Categorical):
+            if np.any(L < prior.min) or np.any(L > prior.max):
+                return False
+        if isinstance(prior, JointCategorical):
+            if np.any(L[:,0] < prior.min0) or np.any(L[:,0] > prior.max0) or \
+               np.any(L[:,1] < prior.min1) or np.any(L[:,1] > prior.max1):
+                return False
+        return True
+
+    def _get_neighbors(self, L):
+        """
+        Get valid neighbors of 2D location (l0,l1)
+        """
+        ne = []
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        if isinstance(prior, Categorical):
+            for ne0 in range(L[0]-1,L[0]+2):
+                if ne0 >= prior.min and ne0 <= prior.max1:
+                    ne.append((ne0))
+
+        elif isinstance(prior, JointCategorical):
+            for ne0 in range(L[0]-1,L[0]+2):
+                for ne1 in range(L[1]-1,L[1]+2):
+                    if ne0 >= prior.min0 and ne0 <= prior.max0:
+                        if ne1 >= prior.min1 and ne1 <= prior.max1:
+                            ne.append((ne0,ne1))
+
+        return ne
+
+    def update(self, x):
+        """
+        Sample each entry in L using Metropolis Hastings
+        """
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        L = seval(self.location.Lmatrix, self.syms['latent'], x['latent'])
+
+        # Update each of the N neuron locations serially
+        # import pdb; pdb.set_trace()
+        for n in range(self.N):
+            # Compute the probability of each neighboring location
+            lnp_cache = {}
+            curr_loc = L[n,:]
+            curr_neighbors = self._get_neighbors(L[n,:])
+            curr_lnps = []
+            for ne in curr_neighbors:
+                L[n,:] = np.array(ne)
+                lnp_ne = self._lp_L(L, x, n)
+                lnp_cache[ne] = lnp_ne
+                curr_lnps.append(lnp_ne)
+
+            # Propose a neighbor according to its relative probability
+            prop_loc = curr_neighbors[log_sum_exp_sample(curr_lnps)]
+
+            # Compute acceptance probability
+            prop_neighbors = self._get_neighbors(prop_loc)
+            prop_lnps = []
+            for ne in prop_neighbors:
+                if ne in lnp_cache:
+                    prop_lnps.append(lnp_cache[ne])
+                else:
+                    L[n,:] = np.array(ne)
+                    lnp_ne = self._lp_L(L, x, n)
+                    lnp_cache[ne] = lnp_ne
+                    prop_lnps.append(lnp_ne)
+
+            # Acceptance probability is the ratio of normalizing constants
+            lnp_accept = logsumexp(curr_lnps) - logsumexp(prop_lnps)
+
+            if np.log(np.random.rand()) < lnp_accept:
+                L[n,:] = np.array(prop_loc)
+            else:
+                # Reject and stay in current loc
+                L[n,:] = np.array(curr_loc)
+
+        # Update current L
+        if not self._check_bounds(L):
+            import pdb; pdb.set_trace()
+        x['latent'][self.location.name]['L'] = L.ravel()
+
+        return x
+
 
 class LatentTypeUpdate(MetropolisHastingsUpdate):
     """
