@@ -432,3 +432,21 @@ def project_onto_basis(f, basis, lam=0):
 
     beta = np.dot(np.dot(scipy.linalg.inv(np.dot(basis.T,basis)+Q), basis.T),f)
     return beta
+
+def test_convolve_3d():
+    T = 100
+    D1 = 5
+    D2 = 5
+    stim = np.random.randn(T,D1,D2)
+    f_x = np.zeros((1,3,3))
+    f_x[0,1,1] = 1.0
+    f_t = np.array([[1]])
+    f = np.tensordot(f_t, f_x, [1,0])
+
+
+    import pdb; pdb.set_trace()
+    fstim = convolve_with_3d_basis(stim, f, ['first', 'central', 'central'])
+    assert np.allclose(stim[:-1,0,0], fstim[1:,0,0])
+
+if __name__ == '__main__':
+    test_convolve_3d()

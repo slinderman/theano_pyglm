@@ -72,6 +72,8 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
         tc_x = tc_mean['stim_response_x']
         tc_t = tc_mean['stim_response_t']
 
+        # import pdb; pdb.set_trace()
+
         R = tc_x.shape[-1]
         assert tc_t.shape[-1] == R
 
@@ -79,6 +81,7 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
         if s_true is not None:
             true_tc_x = s_true['latent']['sharedtuningcurve_provider']['stim_response_x']
             true_tc_t = s_true['latent']['sharedtuningcurve_provider']['stim_response_t']
+            true_R = true_tc_x.shape[-1]
             if tc_x.ndim == 3:
                 ncols = 3
             else:
@@ -92,7 +95,7 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
             if tc_x.ndim == 3:
                 px_per_node = 10
                 stim_x_max = np.amax(np.abs(tc_x[:,:,r]))
-                plt.imshow(np.kron(tc_x[:,r],np.ones((px_per_node,px_per_node))),
+                plt.imshow(np.kron(tc_x[:,:,r],np.ones((px_per_node,px_per_node))),
                            vmin=-stim_x_max,vmax=stim_x_max,
                            extent=[0,1,0,1],
                            cmap='RdGy',
@@ -100,11 +103,11 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
                 plt.colorbar()
                 plt.title('$f_{%d}(\\Delta x)$' % r)
 
-                if s_true is not None:
+                if s_true is not None and r < true_R:
                     plt.subplot(R,ncols,r*ncols+2)
                     px_per_node = 10
                     stim_x_max = np.amax(np.abs(true_tc_x[:,:,r]))
-                    plt.imshow(np.kron(true_tc_x[:,r],np.ones((px_per_node,px_per_node))),
+                    plt.imshow(np.kron(true_tc_x[:,:,r],np.ones((px_per_node,px_per_node))),
                                vmin=-stim_x_max,vmax=stim_x_max,
                                extent=[0,1,0,1],
                                cmap='RdGy',
@@ -115,7 +118,7 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
                 plt.plot(tc_x[:,r], color=color, linestyle='-')
 
                 # Plot the true tuning curve
-                if s_true is not None:
+                if s_true is not None and r < true_R:
                     plt.plot(true_tc_x[:,r], color='k', linestyle='-')
 
                 # If standard deviation is given, plot that as well
@@ -133,7 +136,7 @@ def plot_spatiotemporal_tuning_curves(s_mean, s_std=None, s_true=None, color=Non
             plt.plot(tc_t[:,r], color=color)
 
             # Plot the true tuning curve
-            if s_true is not None:
+            if s_true is not None and r < true_R:
                 plt.plot(true_tc_t[:,r], color='k', linestyle='-')
 
             if s_std is not None:
@@ -500,15 +503,20 @@ def plot_locations(s_inf, name='location_provider', color='k'):
     [N_smpls, N, D] = locs.shape
 
     for n in range(N):
-        plt.subplot(1,N,n, aspect=1.0)
+        plt.subplot(1,N,n+1, aspect=1.0)
+        plt.title('N: %d' % n)
 
         if N_smpls == 1:
             if D == 1:
                 plt.plot([locs[0,n,0], locs[0,n,0]],
                          [0,2], color=color, lw=2)
             elif D == 2:
-                plt.plot(locs[0,n,0], locs[0,n,1], 's',
+                plt.plot(locs[0,n,1], locs[0,n,0], 's',
                          color=color, markerfacecolor=color)
+
+                # TODO: Fix the limits!
+                plt.xlim((-0.5, 4.5))
+                plt.ylim((4.5, -0.5))
             else:
                 raise Exception("Only plotting locs of dim <= 2")
         else:
@@ -516,9 +524,10 @@ def plot_locations(s_inf, name='location_provider', color='k'):
             if D == 1:
                 plt.hist(locs[:,n,0], bins=20, normed=True, color=color)
             elif D == 2:
-                plt.hist2d(locs[:,n,0], locs[:,n,1], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
-                plt.xlim((-0.5,4.5))
-                plt.ylim((-0.5,4.5))
+                plt.hist2d(locs[:,n,1], locs[:,n,0], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
+                plt.xlim((-0.5, 4.5))
+                plt.ylim((4.5, -0.5))
+
                 plt.colorbar()
             else:
                 raise Exception("Only plotting locs of dim <= 2")
@@ -547,6 +556,7 @@ def plot_latent_types(s_inf, s_true=None, name='sharedtuningcurve_provider'):
                     c=Ys[:,n], s=100, cmap='jet', vmin=vmin, vmax=vmax)
 
 
+    if s_true is not None:
         plt.scatter((N_smpls+10)*np.ones(N), np.arange(N), c=Ytrue, s=100,
                     cmap='jet', marker='*', vmin=vmin, vmax=vmax)
 

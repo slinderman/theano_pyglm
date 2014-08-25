@@ -1,6 +1,6 @@
 import numpy as np
 
-from components.bkgd import BasisStimulus, SpatiotemporalStimulus
+from components.bkgd import BasisStimulus, SpatiotemporalStimulus, SharedTuningCurveStimulus
 
 from utils.sta import sta
 from utils.basis import project_onto_basis
@@ -97,3 +97,85 @@ def initialize_stim_with_sta(population, data, x0, Ns=None):
             # Flatten into a 1D vector 
             w_t = np.ravel(w_t)
             x0['glms'][n]['bkgd']['w_stim'] = w_t    
+
+
+def initialize_locations_by_correlation(population, data, x0, maxlag=300):
+    """
+    Initialize the locations of a shared tuning curve background model
+    by setting each neuron's location to the stimulus location where it is
+    most correlated.
+    """
+    if not isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+        return
+    # import pdb; pdb.set_trace()
+
+    location_model = population.glm.bkgd_model.locations
+    stim = data['stim']
+    spks = data['S']
+
+
+    # Downsample the spikes to the resolution of the stimulus
+    Tspks, N = spks.shape
+    Tstim = stim.shape[0]
+    ds = Tspks // Tstim
+    spks_ds = spks.reshape((Tstim, ds, N)).sum(axis=1)
+    mean_ds = spks_ds.mean(axis=0)
+    # Flatten higher dimensional stimuli
+    if stim.ndim == 3:
+        stimf = stim.reshape((Tstim, -1))
+        meanf = stimf.mean(axis=0)
+    else:
+        stimf = stim
+    # # Compute the correlation with each stimulus entry.
+    # # Since the stimulus is 1D, this is just a dot product
+    # # The result is a D x N matrix
+    # stimc = stimf-meanf
+    # spksc = spks_ds-mean_ds
+    #
+    # corr = np.dot(stimc.T, spksc)
+    # for lag in range(1,maxlag):
+    #     corr += np.dot(stimc[:-lag,:].T, spksc[lag:,:])
+    #
+    # locs = np.argmax(np.abs(corr), axis=0)
+    # locs = locs.reshape((N,1))
+    #
+    s = sta(stimf,
+            data,
+            maxlag,
+            Ns=np.arange(N))
+
+
+
+    # Get the total power in each pixel by summing across time
+    s_total = np.abs(s).sum(axis=1)
+
+    locs = np.argmax(s_total, axis=1)
+    locs = locs.reshape((N,1))
+
+    if stim.ndim == 2:
+        L0 = locs
+    elif stim.ndim == 3:
+        L0 = np.zeros((N,2))
+        locsi, locsj = np.unravel_index(locs, stim.shape[1:])
+        L0[:,0], L0[:,1] = locsi.ravel(), locsj.ravel()
+    x0['latent'][location_model.name]['L'] = L0.ravel().astype(np.int)
+
+
+    # import matplotlib.pyplot as plt
+    # plt.figure()
+    #
+    # # Get the limits by finding the max absolute value per neuron
+    # s_max = np.amax(np.abs(s.reshape((N,-1))), axis=1)
+    #
+    # lags_to_plot = np.arange(maxlag, step=50)
+    # for n in range(N):
+    #     for j,l in enumerate(lags_to_plot):
+    #         plt.subplot(N,len(lags_to_plot), n*len(lags_to_plot) + j + 1)
+    #         plt.title('N: %d, Lag: %d' % (n, j))
+    #         plt.imshow(np.kron(s[n,l,:].reshape((5,5)), np.ones((10,10))),
+    #                    vmin=-s_max[n], vmax=s_max[n],
+    #                    cmap='RdGy')
+    #         if j == len(lags_to_plot) - 1:
+    #             plt.colorbar()
+    #
+    # plt.savefig('sta.pdf')

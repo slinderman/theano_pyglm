@@ -1269,6 +1269,7 @@ class LatentLocationUpdate(MetropolisHastingsUpdate):
                 # Make an update for this model
                 if latent_component.dtype == np.int:
                     update = _DiscreteLatentLocationUpdate(latent_component)
+                    # update = _DiscreteGibbsLatentLocationUpdate(latent_component)
                 else:
                     update = _ContinuousLatentLocationUpdate(latent_component)
                 update.preprocess(population)
@@ -1410,8 +1411,8 @@ class _DiscreteLatentLocationUpdate(MetropolisHastingsUpdate):
             if np.any(L < prior.min) or np.any(L > prior.max):
                 return False
         if isinstance(prior, JointCategorical):
-            if np.any(L[:,0] < prior.min1) or np.any(L[:,0] > prior.max1) or \
-               np.any(L[:,1] < prior.min2) or np.any(L[:,1] > prior.max2):
+            if np.any(L[:,0] < prior.min0) or np.any(L[:,0] > prior.max0) or \
+               np.any(L[:,1] < prior.min1) or np.any(L[:,1] > prior.max1):
                 return False
         return True
 
@@ -1445,6 +1446,103 @@ class _DiscreteLatentLocationUpdate(MetropolisHastingsUpdate):
 
         return x
 
+
+class _DiscreteGibbsLatentLocationUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample discrete latent locations on a grid
+    """
+    def __init__(self, latent_location_component):
+        self.location = latent_location_component
+
+    def preprocess(self, population):
+        self.N = population.N
+        self.population = population
+        self.syms = population.get_variables()
+        self.L = self.location.Lmatrix
+
+        # Compute the log probability and its gradients, taking into
+        # account the prior and the likelihood of any consumers of the
+        # location.
+        self.log_p = self.location.log_p
+        self.log_lkhd = T.constant(0.)
+
+        from components.graph import LatentDistanceGraphModel
+        if isinstance(population.network.graph, LatentDistanceGraphModel):
+            self.log_lkhd += population.network.graph.log_p
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+
+    def _lp_L(self, L, x, n):
+        if not self._check_bounds(L):
+            return -np.Inf
+
+        # Set L in state dict x
+        xn = self.population.extract_vars(x, n)
+        set_vars('L', xn['latent'][self.location.name], L.ravel())
+        lp = seval(self.log_p, self.syms, xn)
+        lp += seval(self.log_lkhd, self.syms, xn)
+        return lp
+
+    def _check_bounds(self, L):
+        """
+        Return true if locations are within the allowable range
+        """
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        if isinstance(prior, Categorical):
+            if np.any(L < prior.min) or np.any(L > prior.max):
+                return False
+        if isinstance(prior, JointCategorical):
+            if np.any(L[:,0] < prior.min0) or np.any(L[:,0] > prior.max0) or \
+               np.any(L[:,1] < prior.min1) or np.any(L[:,1] > prior.max1):
+                return False
+        return True
+
+    def update(self, x):
+        """
+        Sample each entry in L using Metropolis Hastings
+        """
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        L = seval(self.location.Lmatrix, self.syms['latent'], x['latent'])
+        # print "L: ", L
+        for n in range(self.N):
+            # Compute the probability of each possible location
+            if isinstance(prior, Categorical):
+                lnp = np.zeros(prior.max-prior.min + 1)
+                for i,l in enumerate(range(prior.min, prior.max+1)):
+                    L[n,0] = l
+                    lnp[i] = self._lp_L(L, x, n)
+
+                L[n] = prior.min + log_sum_exp_sample(lnp)
+
+            elif isinstance(prior, JointCategorical):
+                d1 = prior.max0-prior.min0+1
+                d2 = prior.max1-prior.min1+1
+                lnp = np.zeros((d1,d2))
+                for i,l1 in enumerate(range(prior.min0, prior.max0+1)):
+                    for j,l2 in enumerate(range(prior.min1, prior.max1+1)):
+                        L[n,0] = l1
+                        L[n,1] = l2
+                        lnp[i,j] = self._lp_L(L, x, n)
+
+                # import pdb; pdb.set_trace()
+                # Gibbs sample from the 2d distribution
+                ij = log_sum_exp_sample(lnp.ravel(order='C'))
+                i,j = np.unravel_index(ij, (d1,d2), order='C')
+                L[n,0] = prior.min0 + i
+                L[n,1] = prior.min1 + j
+
+            else:
+                raise Exception('Only supporting Categorical and JointCategorical location priors')
+        # Update current L
+        if not self._check_bounds(L):
+            import pdb; pdb.set_trace()
+        x['latent'][self.location.name]['L'] = L.ravel()
+
+        return x
 
 class LatentTypeUpdate(MetropolisHastingsUpdate):
     """
@@ -1493,6 +1591,7 @@ class LatentTypeUpdate(MetropolisHastingsUpdate):
         """
         from log_sum_exp import log_sum_exp_sample
         for latent_type in self.latent_types:
+            # Update the latent types
             R = latent_type.R
             Y = x['latent'][latent_type.name]['Y']
             print "Y: ", Y
@@ -1506,6 +1605,130 @@ class LatentTypeUpdate(MetropolisHastingsUpdate):
                 Y[n] = log_sum_exp_sample(lpr)
 
             x['latent'][latent_type.name]['Y'] = Y
+
+            # Update alpha with the conjugate dirichlet prior
+            from components.priors import Dirichlet
+            if isinstance(latent_type.alpha_prior, Dirichlet):
+                suffstats = latent_type.alpha_prior.alpha0.get_value()
+                suffstats += np.bincount(Y, minlength=R)
+                alpha = np.random.dirichlet(suffstats)
+                x['latent'][latent_type.name]['alpha'] = alpha
+            else:
+                raise Warning('Cannot update alpha prior!')
+
+        return x
+
+class LatentLocationAndTypeUpdate(MetropolisHastingsUpdate):
+    """
+    A special subclass to sample discrete latent locations on a grid
+    along with the type of the neuron
+    """
+    def __init__(self):
+        raise NotImplementedError('Joint update of location and type has not yet been implemented!')
+
+    def preprocess(self, population):
+        self.N = population.N
+        self.population = population
+        self.syms = population.get_variables()
+
+        # Get the shared tuning curve component
+        from components.latent import LatentTypeWithTuningCurve
+        self.latent_types = []
+        for latent_component in population.latent.latentlist:
+            if isinstance(latent_component, LatentType):
+                self.latent_types.append(latent_component)
+
+        # # Compute the log probability and its gradients, taking into
+        # # account the prior and the likelihood of any consumers of the
+        # # location.
+        # self.log_p = self.location.log_p
+        self.log_lkhd = T.constant(0.)
+
+        from components.graph import StochasticBlockGraphModel
+        if isinstance(population.network.graph, StochasticBlockGraphModel):
+            self.log_lkhd += population.network.graph.log_p
+
+        from components.bkgd import SharedTuningCurveStimulus
+        if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
+            self.log_lkhd += population.glm.log_p
+
+    def _lp_L(self, latent_type, Y, x, n):
+        # Set Yin state dict x
+        xn = self.population.extract_vars(x, n)
+        set_vars('Y', xn['latent'][latent_type.name], Y.ravel())
+        lp = seval(latent_type.log_p, self.syms, xn)
+        lp += seval(self.log_lkhd, self.syms, xn)
+        return lp
+
+    def update(self, x):
+        """
+        Sample each entry in L using Metropolis Hastings
+        """
+        from log_sum_exp import log_sum_exp_sample
+        for latent_type in self.latent_types:
+            # Update the latent types
+            R = latent_type.R
+            Y = x['latent'][latent_type.name]['Y']
+            print "Y: ", Y
+
+            for n in range(self.N):
+                lpr = np.zeros(R)
+                for r in range(R):
+                    Y[n] = r
+                    lpr[r] = self._lp_L(latent_type, Y, x, n)
+
+                Y[n] = log_sum_exp_sample(lpr)
+
+            x['latent'][latent_type.name]['Y'] = Y
+
+            # Update alpha with the conjugate dirichlet prior
+            from components.priors import Dirichlet
+            if isinstance(latent_type.alpha_prior, Dirichlet):
+                suffstats = latent_type.alpha_prior.alpha0.get_value()
+                suffstats += np.bincount(Y, minlength=R)
+                alpha = np.random.dirichlet(suffstats)
+                x['latent'][latent_type.name]['alpha'] = alpha
+            else:
+                raise Warning('Cannot update alpha prior!')
+
+        from components.priors import Categorical, JointCategorical
+        prior = self.location.location_prior
+        L = seval(self.location.Lmatrix, self.syms['latent'], x['latent'])
+        # print "L: ", L
+        for n in range(self.N):
+            # Compute the probability of each possible location
+            if isinstance(prior, Categorical):
+                lnp = np.zeros(prior.max-prior.min + 1)
+                for i,l in enumerate(range(prior.min, prior.max+1)):
+                    L[n,0] = l
+                    lnp[i] = self._lp_L(L, x, n)
+
+                L[n] = prior.min + log_sum_exp_sample(lnp)
+
+            elif isinstance(prior, JointCategorical):
+                d1 = prior.max0-prior.min0+1
+                d2 = prior.max1-prior.min1+1
+                lnp = np.zeros((d1,d2))
+                for i,l1 in enumerate(range(prior.min0, prior.max0+1)):
+                    for j,l2 in enumerate(range(prior.min1, prior.max1+1)):
+                        L[n,0] = l1
+                        L[n,1] = l2
+                        lnp[i,j] = self._lp_L(L, x, n)
+
+                # import pdb; pdb.set_trace()
+                # Gibbs sample from the 2d distribution
+                ij = log_sum_exp_sample(lnp.ravel(order='C'))
+                i,j = np.unravel_index(ij, (d1,d2), order='C')
+                L[n,0] = prior.min0 + i
+                L[n,1] = prior.min1 + j
+
+            else:
+                raise Exception('Only supporting Categorical and JointCategorical location priors')
+        # Update current L
+        if not self._check_bounds(L):
+            import pdb; pdb.set_trace()
+        x['latent'][self.location.name]['L'] = L.ravel()
+
 
         return x
 
@@ -1682,6 +1905,7 @@ def initialize_updates(population):
     type_sampler.preprocess(population)
     serial_updates.append(type_sampler)
 
+    print "Ignoring shared tuning curve update"
     tc_sampler = SharedTuningCurveUpdate()
     tc_sampler.preprocess(population)
     serial_updates.append(tc_sampler)
@@ -1734,7 +1958,8 @@ def gibbs_sample(population,
                  data, 
                  N_samples=1000,
                  x0=None, 
-                 init_from_mle=True):
+                 init_from_mle=True,
+                 callback=None):
     """
     Sample the posterior distribution over parameters using MCMC.
     """
@@ -1760,6 +1985,10 @@ def gibbs_sample(population,
             # and the parameters of this model. Eg. Convert unweighted 
             # networks to weighted networks with normalized impulse responses.
             x0 = convert_model(mle_popn, mle_model, mle_x0, population, population.model, x0)
+
+    # TODO: Move this to a better place
+    from smart_init import initialize_locations_by_correlation
+    initialize_locations_by_correlation(population, data, x0)
 
     # Create updates for this population
     serial_updates, parallel_updates = initialize_updates(population)
@@ -1798,6 +2027,10 @@ def gibbs_sample(population,
         # Sample the serial updates
         for serial_update in serial_updates:
             serial_update.update(x)
+
+        # Call the callback
+        if callback is not None:
+            callback(x)
 
         x_smpls.append(copy.deepcopy(x))
 

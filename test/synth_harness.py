@@ -5,8 +5,6 @@ import os
 
 from population import Population
 from models.model_factory import *
-from plotting.plot_results import plot_results
-from utils.theano_func_wrapper import seval
 from utils.io import parse_cmd_line_args, load_data
 
 

@@ -93,10 +93,12 @@ class LatentType(Component):
 
         # A probability of each type with a symmetric Dirichlet prior
         self.alpha = T.dvector('alpha')
-        self.alpha0 = self.prms['alpha0']
+        self.alpha_prior = create_prior(self.prms['alpha_prior'])
+        # self.alpha0 = self.prms['alpha0']
 
         # Define log probability
-        log_p_alpha = T.sum((self.alpha0 - 1) * T.log(self.alpha))
+        # log_p_alpha = T.sum((self.alpha0 - 1) * T.log(self.alpha))
+        log_p_alpha = self.alpha_prior.log_p(self.alpha)
         log_p_Y = T.sum(T.log(self.alpha[self.Y]))
 
         self.log_p = log_p_alpha + log_p_Y
@@ -112,9 +114,10 @@ class LatentType(Component):
     def sample(self, acc):
         """
         return a sample of the variables
-                """
+        """
         # Sample alpha from a Dirichlet prior
-        alpha = np.random.dirichlet(self.alpha0*np.ones(self.R))
+        # alpha = np.random.dirichlet(self.alpha0*np.ones(self.R))
+        alpha = self.alpha_prior.sample(acc)
 
         # Sample Y from categorical dist
         Y = np.random.choice(self.R, size=self.N, p=alpha)
@@ -202,6 +205,13 @@ class LatentTypeWithTuningCurve(LatentType):
         s = super(LatentTypeWithTuningCurve, self).sample(acc)
         w_x = self.mu + self.sigma * np.random.randn(self.Bx, self.R)
         w_t = self.mu + self.sigma * np.random.randn(self.Bt, self.R)
+        # w_x = np.zeros((self.Bx, self.R))
+        # w_x[4,:] = 10
+
+        # for r in range(self.R):
+        #     w_x[:,r] = (r+1)*np.ones((self.Bx,))
+        # w_x[0,:] = 1.0
+        # w_t = np.ones((self.Bt, self.R))
 
         s.update({str(self.w_x) : w_x,
                   str(self.w_t) : w_t})
@@ -270,6 +280,10 @@ class LatentLocation(Component):
         """
         #  Sample locations from prior
         L = self.location_prior.sample(None, self.N)
+
+        # print Warning("Debugging locations!")
+        # L[0,0] = 2
+        # L[0,1] = 2
 
         # DEBUG!  Permute the neurons such that they are sorted along the first dimension
         # This is only for data generation

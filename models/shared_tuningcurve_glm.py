@@ -16,8 +16,15 @@ SharedTuningCurveGlm = \
 
                     # Latent type params
                     'N' : 3,
-                    'R' : 2,
-                    'alpha0' : 10.0,
+                    'R' : 3,
+
+                    'alpha_prior':
+                        {
+                            'type' : 'dirichlet',
+                            'alpha0' : 10.0,
+                            'R' : 3,
+                        },
+
 
                     # Tuning curve params
                     'dt_max' : 0.3,
@@ -41,11 +48,11 @@ SharedTuningCurveGlm = \
                     #        'orth' : False,
                     #        'norm' : True
                     #    }
-                    'spatial_shape' : (2,2),
+                    'spatial_shape' : (3,3),
                     'spatial_basis' :
                         {
                             'type' : 'identity',
-                            'n_eye' : 4
+                            'n_eye' : 9
                         }
                 },
 
@@ -58,12 +65,15 @@ SharedTuningCurveGlm = \
                     'location_prior' :
                         {
                             'type' : 'joint_categorical',
+                            'min0' : 0,
+                            'max0' : 4,
+                            'p0' : np.array([0.1,0.2,0.4,0.2,0.1]),
+                            # 'p1' : np.ones(5) / 5.0,
                             'min1' : 0,
                             'max1' : 4,
-                            'p1' : np.array([0,0,1,0,0]),
-                            'min2' : 0,
-                            'max2' : 4,
-                            'p2' : np.array([0,0,1,0,0]),
+                            # 'p2' : np.array([0,0,1,0,0]),
+                            'p1' : np.array([0.1,0.2,0.4,0.2,0.1]),
+                            # 'p2' : np.ones(5) / 5.0
                         }
                 }
         },

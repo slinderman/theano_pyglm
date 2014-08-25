@@ -21,6 +21,8 @@ def create_prior(model, **kwargs):
         return GroupLasso(model, **kwargs)
     elif typ == 'dpp':
         return DeterminenalPointProcess(model, **kwargs)
+    elif typ == 'dirichlet':
+        return Dirichlet(model)
     else:
         raise Exception("Unrecognized prior type: %s" % typ)
 
@@ -64,15 +66,15 @@ class JointCategorical(Component):
     """
     def __init__(self, model):
         self.prms = model
+        self.p0 = theano.shared(name='p0', value=self.prms['p0'])
         self.p1 = theano.shared(name='p1', value=self.prms['p1'])
-        self.p2 = theano.shared(name='p2', value=self.prms['p2'])
+        self.min0 = self.prms['min0']
+        self.max0 = self.prms['max0']
         self.min1 = self.prms['min1']
         self.max1 = self.prms['max1']
-        self.min2 = self.prms['min2']
-        self.max2 = self.prms['max2']
 
     def ravel_index(self, value):
-        return (self.max1-self.min1+1)*(value[1]-self.min2) + (value[0]-self.min1)
+        return (self.max1-self.min1+1)*(value[0]-self.min0) + (value[1]-self.min1)
 
     def log_p(self, value):
         """ Compute log prob of the given value under this prior
@@ -89,8 +91,8 @@ class JointCategorical(Component):
         # lp += -np.Inf * T.sum(T.lt(value[:,1], self.min2))
         # lp += -np.Inf * T.sum(T.gt(value[:,1], self.max2))
 
-        lp = T.sum(T.log(self.p1[value[:,0]]))
-        lp += T.sum(T.log(self.p2[value[:,1]]))
+        lp = T.sum(T.log(self.p0[value[:,0]]))
+        lp += T.sum(T.log(self.p1[value[:,1]]))
 
         # from theano.ifelse import ifelse
         # lp = ifelse(oob, T.constant(-np.Inf, dtype=np.float64), lp)
@@ -111,10 +113,10 @@ class JointCategorical(Component):
     def sample(self, acc, size=(1,)):
         """ Sample from the prior
         """
-        v1 = np.random.choice(np.arange(self.min1, self.max1+1),
+        v1 = np.random.choice(np.arange(self.min0, self.max0+1),
+                              p=self.p0.get_value(), size=size).astype(np.int)
+        v2 = np.random.choice(np.arange(self.min1, self.max1+1),
                               p=self.p1.get_value(), size=size).astype(np.int)
-        v2 = np.random.choice(np.arange(self.min2, self.max2+1),
-                              p=self.p2.get_value(), size=size).astype(np.int)
 
         v = np.concatenate((v1[:,None], v2[:,None]), axis=1)
         return v
@@ -298,6 +300,60 @@ class DeterminenalPointProcess(Component):
         assert np.all(np.isfinite(x))
 
         return x.reshape((N,D))
+
+class Dirichlet(Component):
+    """ Wrapper for a random vector from a Dirichlet distribution
+    """
+    def __init__(self, model):
+        self.prms = model
+
+        a = self.prms['alpha0']
+        if np.isscalar(a):
+            # Specified a symmetric Dirichlet prior
+            R = self.prms['R']
+            a = a * np.ones(R)
+        else:
+            assert a.ndim == 1
+
+        self.alpha0 = theano.shared(name='alpha0', value=a)
+
+    def log_p(self, value):
+        """ Compute log prob of the given value under this prior
+        """
+        lp = T.sum((self.alpha0 - 1) * T.log(value))
+        return lp
+
+    def get_variables(self):
+        return {}
+
+    def sample(self, acc, size=None):
+        """ Sample from the prior
+        """
+        alpha = np.random.dirichlet(self.alpha0.get_value(), size=size)
+        return alpha
+
+
+class DirichletMultinomial(Dirichlet):
+    """
+    Compound of Multinomial distribution with Dirichlet prior
+    """
+    def __init__(self, model):
+        super(DirichletMultinomial, self).__init__(model)
+
+        # Vector of multinomial observations
+        self.N = model['N']
+        self.Y = T.lvector('Y')
+
+    def log_p(self, value):
+        lp = super(DirichletMultinomial, self).log_p(value)
+        lp += T.sum(T.log(self.alpha[self.Y]))
+        return lp
+
+    def sample(self, acc, size=None):
+        alpha = super(DirichletMultinomial, self).sample(acc)
+        Y = np.random.multinomial(self.N, alpha, size=size)
+
+        return alpha, Y
 
 def test_determinant():
     sigma = 5.0
