@@ -1,3 +1,6 @@
+import os, sys, hashlib, cPickle
+from os.path import expanduser
+
 import theano
 import theano.tensor as T
 
@@ -366,15 +369,32 @@ class SharedTuningCurveStimulus(Component):
         self.L = self.locations.Lmatrix[self.n,:]
         self.loc_index = self.locations.location_prior.ravel_index(self.L)
 
+
         # Expose outputs to the Glm class
-        I_x = T.tensordot(self.filtered_stim,
+
+        # It matters that we do the dot products in order of outermost
+        # to innermost dimension. This improves memory efficiency.
+        # Compute the spatially filtered stimulus
+        # Result is T x L x B_t
+        self.I_stim_t = T.tensordot(self.filtered_stim,
+                          self.w_t,
+                          axes=[[3],[0]])
+        self.I_stim_t.name = 'I_stim_t'
+
+        # Take dot product with temporal basis coefficients
+        # Result is T x L (where L is number of locations)
+        self.I_stim_xt = T.tensordot(self.I_stim_t,
                           self.w_x,
                           axes=[[2],[0]])
+        self.I_stim_xt.name = 'I_stim_xt'
+
+        self.I_stim = self.I_stim_xt[:, self.loc_index]
+        self.I_stim.name = 'I_stim'
 
         # Extract only the loc_index column (Result is T x B_t)
-        I_x = I_x[:,self.loc_index,:]
-        self.I_stim = T.dot(I_x, self.w_t)
-        self.I_stim.name = 'I_stim'
+        # I_x = I_x[:,self.loc_index,:]
+        # self.I_stim = T.dot(I_x, self.w_t)
+        # self.I_stim.name = 'I_stim'
 
         # There are no latent variables in this class. They all belong
         # to global latent variables.
@@ -428,28 +448,61 @@ class SharedTuningCurveStimulus(Component):
                                                 data['stim'][:, d1, d2])
 
         # Filter the stimulus with each spatiotemporal filter combo
-        fstim = np.empty((nt, D_stim, self.Bt, self.Bx))
-        for bt in np.arange(self.Bt):
-            for bx in np.arange(self.Bx):
-                if self.tc_spatial_ndim == 1:
-                    # atleast_2d gives row vectors
-                    bas = np.dot(np.atleast_2d(self.tuningcurves.interpolated_temporal_basis[:,bt]).T,
-                                 np.atleast_2d(self.tuningcurves.interpolated_spatial_basis[:,bx]))
-                    fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
-                elif self.tc_spatial_ndim == 2:
-                    # Take the outerproduct to make a 3D tensor
-                    bas_xy = self.tuningcurves.interpolated_spatial_basis[:,bx].reshape((1,) + self.tc_spatial_shape )
-                    bas_t = self.tuningcurves.interpolated_temporal_basis[:,bt].reshape((-1,1))
-                    bas = np.tensordot(bas_t, bas_xy, [1,0])
-                    fconv3d = convolve_with_3d_basis(stim, bas, ['first', 'central', 'central'])
-                    fstim[:,:,bt,bx] = fconv3d.reshape((nt, D_stim))
-
-                else:
-                    raise Exception('spatial dimension must be <= 2D')
+        # Look for cached version of filtered stimulus
+        # import pdb; pdb.set_trace()
+        fstim_cached = False
+        pyglm_home = os.path.join(expanduser("~"), '.pyglm')
+        hash = hashlib.sha1(stim)
+        hash.update(self.spatial_basis)
+        hash.update(self.temporal_basis)
+        keystr = hash.hexdigest()
+        cachefile = os.path.join(pyglm_home, "%s.pkl" % keystr)
 
 
-        # Permute output to get shape(T,Bt,Bx)
-        fstim = np.transpose(fstim, axes=[0,1,3,2])
+        if os.path.exists(pyglm_home):
+            if os.path.exists(cachefile):
+                print "Found filtered stim in cache"
+                with open(cachefile) as f:
+                    fstim = cPickle.load(f)
+                    fstim_cached = True
+
+        if not fstim_cached:
+            fstim = np.empty((nt, D_stim, self.Bt, self.Bx))
+            print "Convolving stimulus with 3D basis"
+            for bt in np.arange(self.Bt):
+                for bx in np.arange(self.Bx):
+                    # Print progress
+                    sys.stdout.write('.')
+                    sys.stdout.flush()
+
+                    if self.tc_spatial_ndim == 1:
+                        # atleast_2d gives row vectors
+                        bas = np.dot(np.atleast_2d(self.tuningcurves.interpolated_temporal_basis[:,bt]).T,
+                                     np.atleast_2d(self.tuningcurves.interpolated_spatial_basis[:,bx]))
+                        fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
+                    elif self.tc_spatial_ndim == 2:
+                        # Take the outerproduct to make a 3D tensor
+                        bas_xy = self.tuningcurves.interpolated_spatial_basis[:,bx].reshape((1,) + self.tc_spatial_shape )
+                        bas_t = self.tuningcurves.interpolated_temporal_basis[:,bt].reshape((-1,1))
+                        bas = np.tensordot(bas_t, bas_xy, [1,0])
+                        fconv3d = convolve_with_3d_basis(stim, bas, ['first', 'central', 'central'])
+                        fstim[:,:,bt,bx] = fconv3d.reshape((nt, D_stim))
+
+                    else:
+                        raise Exception('spatial dimension must be <= 2D')
+
+            sys.stdout.write(" Done\n")
+
+            # Permute output to get shape(T,Bt,Bx)
+            fstim = np.transpose(fstim, axes=[0,1,3,2])
+
+            # Save the file to cache
+            if os.path.exists(pyglm_home):
+                print "Saving filtered stim to cache file at: ", cachefile
+                print "Expected file size: %.2f Gb" % (float(fstim.size)/2**30)
+                with open(cachefile, 'w') as f:
+                    cPickle.dump(fstim, f, protocol=-1)
+
         assert fstim.shape == (nt, D_stim, self.Bx, self.Bt)
 
 

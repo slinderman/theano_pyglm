@@ -112,6 +112,7 @@ class LocationPlotProvider(PlotProvider):
 
         # Get the locations
         loccomp = self.population.latent.latentdict[name]
+        locprior = loccomp.location_prior
         locvars = loccomp.get_variables()
         Ls = np.array([seval(loccomp.Lmatrix,
                             locvars, x['latent'][name])
@@ -132,9 +133,9 @@ class LocationPlotProvider(PlotProvider):
                     ax.text(Ls[0,n,1]+0.25, Ls[0,n,0]+0.25, '%d' % n,
                              color=color)
 
-                    # TODO: Fix the limits!
-                    ax.set_xlim((-0.5, 4.5))
-                    ax.set_ylim((4.5, -0.5))
+                    # Set the limits
+                    ax.set_xlim((locprior.min0-0.5, locprior.max0+0.5))
+                    ax.set_ylim((locprior.max1+0.5, locprior.min1-0.5))
                 else:
                     raise Exception("Only plotting locs of dim <= 2")
             else:
@@ -143,8 +144,10 @@ class LocationPlotProvider(PlotProvider):
                     ax.hist(Ls[:,n,0], bins=20, normed=True, color=color)
                 elif D == 2:
                     ax.hist2d(Ls[:,n,1], Ls[:,n,0], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
-                    ax.set_xlim((-0.5, 4.5))
-                    ax.set_ylim((4.5, -0.5))
+
+                    # Set the limits
+                    ax.set_xlim((locprior.min0-0.5, locprior.max0+0.5))
+                    ax.set_ylim((locprior.max1+0.5, locprior.min1-0.5))
 
                     # ax.colorbar()
                 else:

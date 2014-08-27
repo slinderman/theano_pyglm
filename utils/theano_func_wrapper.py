@@ -33,14 +33,14 @@ def seval(expr, syms, vals, defaults=None, givens=[]):
         #print "DBG: Calling expr: %s" % str(expr)
     else:
         # Create a callable theano function and cache it
-        #print "DBG: Compiling expr: %s" % str(expr)
+        print "DBG: Compiling expr: %s" % str(expr)
         sargs = _flatten(syms)
         if len(givens) == 0:
-            #print "DBG: Compiling expression %s with no givens" % expr
+            # print "DBG: Compiling expression %s with no givens" % expr
             f = theano.function(sargs, expr,
                                 on_unused_input='ignore')
         else:
-            #print "DBG: Compiling expression %s with givens: %s" % (expr, str(givens))
+            # print "DBG: Compiling expression %s with givens: %s" % (expr, str(givens))
             f = theano.function(sargs, expr,
                                 givens=givens,
                                 on_unused_input='ignore')

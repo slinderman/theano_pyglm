@@ -49,16 +49,12 @@ class Glm(Component):
                                    self.bkgd_model.I_stim +
                                    self.I_net)
 
+        # Clip the rate to a reasonable range
+        # self.lam = T.clip(self.lam, 1e-128, 1e128)
+        self.lam.name = 'lambda'
+
         # Compute the log likelihood under the Poisson process
         self.ll = T.sum(-self.dt*self.lam + T.log(self.lam)*self.S[:,self.n])
-
-
-        # DEBUG
-        # cont = raw_input("OVERRIDING GLM LOGP. ENTER 'y' TO CONTINUE: ")
-        # if cont == 'y':
-        #     self.ll = T.constant(0.0)
-        # else:
-        #     raise Exception("Failed to accept debug")
 
         # Compute the log prior
         lp_bias = self.bias_model.log_p

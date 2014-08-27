@@ -107,7 +107,6 @@ def initialize_locations_by_correlation(population, data, x0, maxlag=300):
     """
     if not isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
         return
-    # import pdb; pdb.set_trace()
 
     location_model = population.glm.bkgd_model.locations
     stim = data['stim']
@@ -117,15 +116,17 @@ def initialize_locations_by_correlation(population, data, x0, maxlag=300):
     # Downsample the spikes to the resolution of the stimulus
     Tspks, N = spks.shape
     Tstim = stim.shape[0]
-    ds = Tspks // Tstim
-    spks_ds = spks.reshape((Tstim, ds, N)).sum(axis=1)
-    mean_ds = spks_ds.mean(axis=0)
     # Flatten higher dimensional stimuli
     if stim.ndim == 3:
         stimf = stim.reshape((Tstim, -1))
-        meanf = stimf.mean(axis=0)
     else:
         stimf = stim
+
+    # Downsample spikes to bins of same size as stimulus
+    # ds = Tspks // Tstim
+    # spks_ds = spks.reshape((Tstim, ds, N)).sum(axis=1)
+    # mean_ds = spks_ds.mean(axis=0)
+    #
     # # Compute the correlation with each stimulus entry.
     # # Since the stimulus is 1D, this is just a dot product
     # # The result is a D x N matrix
@@ -145,13 +146,13 @@ def initialize_locations_by_correlation(population, data, x0, maxlag=300):
             Ns=np.arange(N))
 
 
-
     # Get the total power in each pixel by summing across time
     s_total = np.abs(s).sum(axis=1)
 
     locs = np.argmax(s_total, axis=1)
     locs = locs.reshape((N,1))
 
+    L0 = None
     if stim.ndim == 2:
         L0 = locs
     elif stim.ndim == 3:
