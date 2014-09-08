@@ -1,0 +1,20 @@
+#$ -V
+#$ -t 1-16
+#$ -q adams.q
+#$ -S /bin/sh
+#$ -N ipengine
+
+. ~/venvs/pyglm/bin/activate
+
+# TODO: Probably need to do something with THEANORC to set temp directories
+
+#ipengine --profile=sge 
+
+# Set working directory
+cd ~/code/pyglm
+
+# Compile theano files to a task-specific directory to avoid collision
+export THEANO_FLAGS="base_compiledir=/home/slinderman/.theano/task$SGE_TASK_ID"
+
+#module load mpi/openmpi/1.4.2/intel
+ipengine --profile-dir=/home/slinderman/.config/ipython/profile_sge

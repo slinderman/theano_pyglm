@@ -1,0 +1,26 @@
+#!/bin/bash
+#
+### Using bash
+#$ -S /bin/bash
+#
+### Work in the directory where submitted
+#$ -cwd
+#
+### Combine output and error messages
+#$ -j y
+#$ -o testing.outerr.$JOB_ID
+##$ -e testing.outerr.$JOB_ID
+#
+### request maximum of 10 minutes of compute time
+##$ -l h_rt=8:00:00
+#
+
+#
+# Use modules to setup the runtime environment
+#
+. /etc/profile
+. ~/venvs/pyglm/bin/activate
+
+cd ~/code/pyglm
+./scripts/fit_synth_data.sh dist 16 15
+
