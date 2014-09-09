@@ -1,11 +1,9 @@
 import cPickle
-import scipy.io
-import numpy as np
 import os
 
-from population import Population
-from models.model_factory import *
-from utils.io import parse_cmd_line_args, load_data
+from pyglm.population import Population
+from pyglm.models.model_factory import *
+from pyglm.utils.io import parse_cmd_line_args, load_data
 
 
 def initialize_test_harness():

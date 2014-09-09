@@ -1,15 +1,16 @@
 # Run as script using 'python -m test.synth_map'
 import cPickle
 import os
-import numpy as np
 import copy
 
-from population import Population
-from inference.coord_descent import coord_descent
-from plotting.plot_results import plot_results
+import numpy as np
+
+from pyglm.inference import coord_descent
+from pyglm.plotting import plot_results
 from synth_harness import initialize_test_harness, get_xv_models
 from models.model_factory import make_model
-from utils.io import segment_data
+from pyglm.utils.io import segment_data
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MAP inference with cross validation

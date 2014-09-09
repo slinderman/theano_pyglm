@@ -2,19 +2,19 @@
 import os
 import sys
 import cPickle
-import numpy as np
 import copy
+
+import numpy as np
 from scipy.misc import logsumexp
-
 import matplotlib.pyplot as plt
-import brewer2mpl
 
-from utils.theano_func_wrapper import seval
-from models.model_factory import make_model, convert_model
+import brewer2mpl
+from pyglm.utils.theano_func_wrapper import seval
+from pyglm.models.model_factory import make_model, convert_model
 from population import Population
 from synth_harness import initialize_test_harness
+from pyglm.inference.gibbs import LatentLocationUpdate
 
-from inference.gibbs import LatentLocationUpdate, MetropolisHastingsUpdate
 
 def sample_network_from_prior(model):
     """

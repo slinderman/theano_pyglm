@@ -2,14 +2,15 @@
 """
 import os
 import cPickle
+
 import numpy as np
 from sklearn.metrics import roc_curve
+import matplotlib
 
-from plotting.roc import plot_roc_curve
+from pyglm.plotting.roc import plot_roc_curve
 from population import Population
 from models.model_factory import make_model
 
-import matplotlib
 matplotlib.use('Agg')       # To enable saving remotely
 import matplotlib.pyplot as plt
 

@@ -1,11 +1,11 @@
 # Run as script using 'python -m test.synth_map'
 import cPickle
 import os
-import scipy.io
 
-from inference.coord_descent import coord_descent
-from plotting.plot_results import plot_results
+from pyglm.inference import coord_descent
+from pyglm.plotting import plot_results
 from synth_harness import initialize_test_harness
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MCMC inference

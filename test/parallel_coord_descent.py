@@ -2,9 +2,10 @@
 import os
 import cPickle
 
-from inference.parallel_coord_descent import parallel_coord_descent
-from plotting.plot_results import plot_results
+from pyglm.inference.parallel_coord_descent import parallel_coord_descent
 from parallel_harness import initialize_parallel_test_harness
+from pyglm.plotting import plot_results
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MAP inference via

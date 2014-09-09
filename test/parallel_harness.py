@@ -1,12 +1,13 @@
-from IPython.parallel import Client
-
 import os
 import cPickle
 
-from utils.parallel_util import initialize_imports, create_population_on_engines
-from utils.io import parse_cmd_line_args, load_data
+from IPython.parallel import Client
+
+from pyglm.utils.parallel_util import initialize_imports, create_population_on_engines
+from pyglm.utils.io import parse_cmd_line_args, load_data
 from population import Population
-from models.model_factory import *
+from pyglm.models.model_factory import *
+
 
 def initialize_parallel_test_harness():
     # Parse command line args

@@ -1,16 +1,11 @@
 # Run as script using 'python -m test.synth_map'
 import cPickle
-import scipy.io
 
+from IPython.parallel import Client
 
 from synth_harness import parse_cmd_line_args
-from inference.coord_descent import coord_descent
-from plotting.plot_results import plot_results
-from models.model_factory import make_model
+from pyglm.models.model_factory import make_model
 from population import Population
-
-from utils.parallelutil import *
-from IPython.parallel import Client
 
 def load_data(options):
     # Load data

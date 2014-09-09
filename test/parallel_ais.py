@@ -1,13 +1,12 @@
 # Run as script using 'python -m test.synth'
 import os
 import cPickle
-import time
-import numpy as np
 
-from models.model_factory import make_model, convert_model
+from pyglm.models.model_factory import make_model, convert_model
 from population import Population
-from inference.parallel_ais import parallel_ais
+from pyglm.inference.parallel_ais import parallel_ais
 from parallel_harness import initialize_parallel_test_harness
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MCMC inference

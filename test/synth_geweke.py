@@ -2,11 +2,12 @@
 import cPickle
 import os
 
-from models.model_factory import *
-from inference.gibbs import initialize_updates
+import matplotlib.pyplot as plt
+
+from pyglm.models.model_factory import *
+from pyglm.inference.gibbs import initialize_updates
 from population import Population
 
-import matplotlib.pyplot as plt
 
 def geweke_test(population,
                 data,

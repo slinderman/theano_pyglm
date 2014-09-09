@@ -3,14 +3,15 @@ import cPickle
 import os
 
 import matplotlib
-matplotlib.use('MacOSX')
+# matplotlib.use('MacOSX')
 import matplotlib.pyplot as plt
 
-from models.model_factory import *
-from inference.gibbs import gibbs_sample
+from pyglm.plotting import plot_results
+from pyglm.models.model_factory import *
+from pyglm.inference.gibbs import gibbs_sample
 from synth_harness import initialize_test_harness
 # from plotting.plot_results import plot_results
-from plotting.plotting import NetworkPlotProvider, LocationPlotProvider
+from pyglm.plotting.plotting import NetworkPlotProvider, LocationPlotProvider
 from population import Population
 
 
@@ -100,7 +101,6 @@ def run_synth_test():
             cPickle.dump(x_smpls, f, protocol=-1)
 
     # Plot average of last 20% of samples
-    from plotting.plot_results import plot_results
     smpl_frac = 0.2
     plot_results(popn, 
                  x_smpls[-1*int(smpl_frac*N_samples):],

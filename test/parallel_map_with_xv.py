@@ -1,21 +1,20 @@
 # Run as script using 'python -m test.synth_map'
 import cPickle
-import numpy as np
 import copy
-import os
 import time
 
-from inference.parallel_coord_descent import parallel_coord_descent
+import numpy as np
+
+from pyglm.inference.parallel_coord_descent import parallel_coord_descent
 from parallel_harness import initialize_parallel_test_harness
-from utils.parallel_util import set_data_on_engines, \
+from pyglm.utils.parallel_util import set_data_on_engines, \
                                 set_hyperparameters_on_engines, \
                                 parallel_compute_ll
-from plotting.plot_results import plot_results
-from models.model_factory import make_model
+from pyglm.models.model_factory import make_model
 from synth_harness import get_xv_models
+from pyglm.utils.parallelutil import *
+from pyglm.utils.io import segment_data
 
-from utils.parallelutil import *
-from utils.io import segment_data
 
 def run_parallel_map():
     """ Run a test with synthetic data and MCMC inference

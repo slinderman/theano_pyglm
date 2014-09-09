@@ -1,15 +1,16 @@
 # Run as script using 'python -m test.synth_map'
 import cPickle
 import os
-import scipy.io
+
 import numpy as np
 
-from population import Population
-from models.model_factory import make_model, \
+from pyglm.population import Population
+from pyglm.models.model_factory import make_model, \
                                  stabilize_sparsity, \
                                  check_stability
-from plotting.plot_results import plot_results
-from utils.io import create_unique_results_folder
+from pyglm.plotting.plot_results import plot_results
+from pyglm.utils.io import create_unique_results_folder
+
 
 def parse_cmd_line_args():
     """

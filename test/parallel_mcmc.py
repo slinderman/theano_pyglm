@@ -2,14 +2,16 @@
 import os
 import cPickle
 import time
+
 import numpy as np
 
 from generate_synth_data import gen_synth_data
 from models.model_factory import make_model, convert_model
 from population import Population
-from inference.parallel_gibbs import parallel_gibbs_sample
+from pyglm.inference.parallel_gibbs import parallel_gibbs_sample
 from parallel_harness import initialize_parallel_test_harness
-from plotting.plot_results import plot_results
+from pyglm.plotting import plot_results
+
 
 def run_synth_test():
     """ Run a test with synthetic data and MCMC inference

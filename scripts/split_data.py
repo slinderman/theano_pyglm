@@ -1,6 +1,8 @@
 import cPickle
 import os
-from utils.io import segment_data
+
+from pyglm.utils.io import segment_data
+
 
 data_dir = '/Users/scott/Projects/pyglm/data/synth/dist/N16T300/2014_07_22-10_01/'
 
