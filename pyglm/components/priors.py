@@ -3,8 +3,6 @@ import numpy as np
 import theano
 import theano.tensor as T
 from pyglm.components.component import Component
-from pyglm.inference import hmc
-
 
 def create_prior(model, **kwargs):
     typ = model['type'].lower()
@@ -383,7 +381,7 @@ def test_determinant():
     # # Compute gradients
     # print "theano glp: ",  glp.eval({L : L1})
     # print "theano glp: ",  glp.eval({L : L2})
-    from pyglm.inference.hmc import hmc
+    from hips.inference.hmc import hmc
     N = 3
     D = 2
     f_lp = lambda x: -1.0*lp.eval({L : x.reshape((N,D))})

@@ -6,13 +6,13 @@ import matplotlib
 # matplotlib.use('MacOSX')
 import matplotlib.pyplot as plt
 
-from pyglm.plotting import plot_results
+from pyglm.plotting.plot_results import plot_results
 from pyglm.models.model_factory import *
 from pyglm.inference.gibbs import gibbs_sample
 from synth_harness import initialize_test_harness
 # from plotting.plot_results import plot_results
 from pyglm.plotting.plotting import NetworkPlotProvider, LocationPlotProvider
-from population import Population
+from pyglm.population import Population
 
 
 def initialize_plotting(popn_true, x_true, popn_inf):

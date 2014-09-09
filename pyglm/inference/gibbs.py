@@ -7,22 +7,12 @@ import copy
 from scipy.misc import logsumexp
 from scipy.integrate import cumtrapz
 
-from pyglm.inference import coord_descent, hmc
-
-from utils.theano_func_wrapper import seval, _flatten
-from utils.packvec import *
+from pyglm.utils.theano_func_wrapper import seval, _flatten
+from pyglm.utils.packvec import *
 from pyglm.utils.grads import *
 
-
-
-
-
-
-
-
-
-# from ars import adaptive_rejection_sample
 from hips.inference.ars import adaptive_rejection_sample
+from hips.inference.hmc import hmc
 from pyglm.inference.log_sum_exp import log_sum_exp_sample
 
 
@@ -2441,7 +2431,7 @@ def gibbs_sample(population,
     x = x0
 
     import time
-    start_time = time.clock()
+    start_time = time.time()
 
     for smpl in np.arange(N_samples):
 
@@ -2453,7 +2443,7 @@ def gibbs_sample(population,
         lp = population.compute_log_p(x)
 
         # Compute iters per second
-        stop_time = time.clock()
+        stop_time = time.time()
         if stop_time - start_time == 0:
             print "Gibbs iteration %d. Iter/s exceeds time resolution. Log prob: %.3f" % (smpl, lp)
         else:
@@ -2465,12 +2455,12 @@ def gibbs_sample(population,
         # Go through each parallel MH update
         for parallel_update in parallel_updates:
             for n in np.arange(N):
-                print "Parallel update: %s for neuron %d" % (str(type(parallel_update)), n)
+                # print "Parallel update: %s for neuron %d" % (str(type(parallel_update)), n)
                 parallel_update.update(x, n)
 
         # Sample the serial updates
         for serial_update in serial_updates:
-            print "Serial update: ", type(serial_update)
+            # print "Serial update: ", type(serial_update)
             serial_update.update(x)
 
 

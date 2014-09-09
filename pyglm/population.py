@@ -1,7 +1,7 @@
 import numpy as np
 
 from pyglm.components.latent import LatentVariables
-from components.network import Network
+from pyglm.components.network import Network
 from glm import Glm
 from pyglm.utils.theano_func_wrapper import seval
 

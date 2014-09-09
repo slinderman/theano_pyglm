@@ -1,8 +1,6 @@
 """
 Make models from a template
 """
-import copy
-
 import numpy as np
 from scipy.optimize import nnls
 
@@ -10,11 +8,12 @@ from standard_glm import StandardGlm
 from spatiotemporal_glm import SpatiotemporalGlm
 from shared_tuningcurve_glm import SharedTuningCurveGlm
 from simple_weighted_model import SimpleWeightedModel
-from pyglm.models.simple_sparse_model import SimpleSparseModel
+from simple_sparse_model import SimpleSparseModel
 from sparse_weighted_model import SparseWeightedModel
 from sbm_weighted_model import SbmWeightedModel
 from distance_weighted_model import DistanceWeightedModel
 
+import copy
 
 def make_model(template, N=None):
     """ Construct a model from a template and update the specified parameters
@@ -211,11 +210,11 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
                 w_ir_n2 = np.zeros((N,B))
                 for n1 in np.arange(N):
                     # Solve a nonnegative least squares problem
-                    (w_ir_n1n2p, residp) = nnls(to_state['glms'][n2]['imp']['basis'], 
+                    (w_ir_n1n2p, residp) = nnls(to_state['glms'][n2]['imp']['basis'],
                                                 from_state['glms'][n2]['imp']['impulse'][n1,:])
-                    (w_ir_n1n2n, residn) = nnls(to_state['glms'][n2]['imp']['basis'], 
+                    (w_ir_n1n2n, residn) = nnls(to_state['glms'][n2]['imp']['basis'],
                                                 -1.0*from_state['glms'][n2]['imp']['impulse'][n1,:])
-                    
+
                     # Take the better of the two solutions
                     if residp < residn:
                         Wsgn = 1.0
@@ -223,7 +222,7 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
                     else:
                         Wsgn = -1.0
                         w_ir_n1n2 = w_ir_n1n2n
-                    
+
                     # Normalized weights must be > 0, sum to 1
                     w_ir_n1n2 = w_ir_n1n2
                     w_ir_n1n2 = np.clip(w_ir_n1n2,0.001,np.Inf)
@@ -249,7 +248,7 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             # Threshold the adjacency matrix to start with the right level of sparsity
             if 'rho' in to_model['network']['graph'].keys():
                 W_sorted = np.sort(np.abs(W.ravel()))
-                thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)] 
+                thresh = W_sorted[np.floor((1.0-2.0*to_model['network']['graph']['rho'])*(N**2-N)-N)]
                 conv_vars['net']['graph']['A'] = (np.abs(W) >= thresh).astype(np.int8)
             else:
                 conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
@@ -258,6 +257,92 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             for n in np.arange(N):
                 conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
 
-            # TODO Update background params
+    # Update background params
+    if 'sharedtuningcurves' in to_model['latent'] and \
+        from_model['bkgd']['type'] == 'spatiotemporal':
+        convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars,
+                                             to_popn, to_model, conv_vars)
 
     return conv_vars
+
+def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
+    """
+    Convert a set of stimulus filters to a shared set of tuning curves
+    """
+    # Get the spatial component of the stimulus filter for each neuron
+    N = from_popn.N
+    R = to_model['latent']['sharedtuningcurves']['R']
+    from_state = from_popn.eval_state(from_vars)
+
+    locs = np.zeros((N,2))
+    local_stim_xs = []
+    local_stim_ts = []
+    for n in range(N):
+        s_glm = from_state['glms'][n]
+
+
+        # to_state = to_popn.eval_state(to_vars)
+        assert 'stim_response_x' in s_glm['bkgd']
+
+        # Get the stimulus responses
+        stim_x = s_glm['bkgd']['stim_response_x']
+        stim_t = s_glm['bkgd']['stim_response_t']
+        loc_max = np.argmax(np.abs(stim_x))
+
+        if stim_x.ndim == 2:
+            locsi, locsj = np.unravel_index(loc_max, stim_x.shape)
+            locs[n,0], locs[n,1] = locsi.ravel(), locsj.ravel()
+
+        # Get the stimulus response in the vicinity of the mode
+        # Create a meshgrid of the correct shape, centered around the max
+        max_rb = to_model['latent']['latent_location']['location_prior']['max0']
+        max_ub = to_model['latent']['latent_location']['location_prior']['max1']
+        gsz = to_model['latent']['sharedtuningcurves']['spatial_shape']
+        gwidth = (np.array(gsz) - 1)//2
+        lb = max(0, locs[n,0]-gwidth[0])
+        rb = min(locs[n,0]-gwidth[0]+gsz[0], max_rb)
+        db = max(0, locs[n,1]-gwidth[1])
+        ub = min(locs[n,1]-gwidth[1]+gsz[1], max_ub)
+        grid = np.ix_(np.arange(lb, rb).astype(np.int),
+                      np.arange(db, ub).astype(np.int))
+
+        # grid = grid.astype(np.int)
+        # Add this local filter to the list
+        local_stim_xs.append(stim_x[grid])
+        local_stim_ts.append(stim_t)
+
+    # Cluster the local stimulus filters
+    from sklearn.cluster import KMeans
+    flattened_filters_x = np.array(map(lambda f: f.ravel(), local_stim_xs))
+    flattened_filters_t = np.array(map(lambda f: f.ravel(), local_stim_ts))
+    km = KMeans(n_clusters=R)
+    km.fit(flattened_filters_x)
+    Y = km.labels_
+    print 'Filter cluster labels from kmeans: ',  Y
+
+    # Initialize type based on stimulus filter
+    to_vars['latent']['sharedtuningcurve_provider']['Y'] = Y
+
+    # Initialize shared tuning curves (project onto the bases)
+    from utils.basis import project_onto_basis
+    for r in range(R):
+        mean_filter_xr = flattened_filters_x[Y==r].mean(axis=0)
+        mean_filter_tr = flattened_filters_t[Y==r].mean(axis=0)
+
+        # Project the mean filters onto the basis
+        to_vars['latent']['sharedtuningcurve_provider']['w_x'][:,r] = \
+            project_onto_basis(mean_filter_xr,
+                               to_popn.glm.bkgd_model.spatial_basis).ravel()
+
+        # Temporal part of the filter
+        temporal_basis = to_popn.glm.bkgd_model.temporal_basis
+        t_temporal_basis = np.arange(temporal_basis.shape[0])
+        t_mean_filter_tr = np.linspace(0, temporal_basis.shape[0]-1, mean_filter_tr.shape[0])
+        interp_mean_filter_tr = np.interp(t_temporal_basis, t_mean_filter_tr, mean_filter_tr)
+        to_vars['latent']['sharedtuningcurve_provider']['w_t'][:,r] = \
+            project_onto_basis(interp_mean_filter_tr, temporal_basis).ravel()
+
+
+    # Initialize locations based on stimuls filters
+    to_vars['latent']['location_provider']['L'] = locs.ravel().astype(np.int)
+

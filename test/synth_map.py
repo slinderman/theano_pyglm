@@ -2,8 +2,8 @@
 import cPickle
 import os
 
-from pyglm.inference import coord_descent
-from pyglm.plotting import plot_results
+from pyglm.inference.coord_descent import coord_descent
+from pyglm.plotting.plot_results import plot_results
 from synth_harness import initialize_test_harness
 
 
