@@ -127,7 +127,7 @@ def parallel_gibbs_sample(client,
     x = copy.deepcopy(x0)
 
     import time
-    start_time = time.clock()
+    start_time = time.time()
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         ll = parallel_compute_ll(dview, x, N)
@@ -144,7 +144,7 @@ def parallel_gibbs_sample(client,
         # END DEBUG
 
         # Compute iters per second
-        stop_time = time.clock()
+        stop_time = time.time()
         if stop_time - start_time == 0:
             print "Gibbs iteration %d. Iter/s exceeds time resolution. LL: %.3f   Log prob: %.3f" % (smpl, ll, lp)
         else:
