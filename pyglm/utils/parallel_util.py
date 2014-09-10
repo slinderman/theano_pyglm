@@ -136,33 +136,36 @@ def initialize_imports(dview):
     dview.execute('from pyglm.utils.theano_func_wrapper import seval')
     dview.execute('import cPickle')
 
-def set_data_on_engines(dview, d):
+def set_data_on_engines(dview, d,
+                        use_shared_filesystem=False):
     """ Send the data to each engine
     """
     # Initialize the GLM with the data
-    # TODO: This seems to be the bottleneck for large datasets!
-    # The data is sent to each worker sequentially (not broadcast)
-    #dview['data'] = d
+    if not use_shared_filesystem:
+        # This seems to be the bottleneck for large datasets!
+        # The data is sent to each worker sequentially (not broadcast)
+        dview['data'] = d
 
-    # Pickle the data and save it to the shared file system
-    with open('.temp_data.pkl', 'w') as f:
-        cPickle.dump(d, f, protocol=-1)
+    else:
+        # Pickle the data and save it to the shared file system
+        with open('.temp_data.pkl', 'w') as f:
+            cPickle.dump(d, f, protocol=-1)
 
-    # Initialize the data globa
-    dview['data'] = 'tmp'
-    @interactive
-    def _load_data():
-        global data
-        with open('.temp_data.pkl', 'r') as f:
-            data = cPickle.load(f)
+        # Initialize the data globa
+        dview['data'] = 'tmp'
+        @interactive
+        def _load_data():
+            global data
+            with open('.temp_data.pkl', 'r') as f:
+                data = cPickle.load(f)
 
-    dview.apply_sync(_load_data)
+        dview.apply_sync(_load_data)
 
-    # Delete the temp data
-    os.remove('.temp_data.pkl')
+        # Delete the temp data
+        os.remove('.temp_data.pkl')
 
+    # Condition the population on the data
     dview.execute("popn.set_data(data)", block=True)
-
 
 def set_hyperparameters_on_engines(dview, m):
     """ Send the hyperparameters to each engine
