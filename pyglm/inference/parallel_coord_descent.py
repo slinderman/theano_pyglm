@@ -9,9 +9,9 @@ def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
     """
     print "Initializing imports for parallel coord descent"
-    dview.execute('from utils.theano_func_wrapper import seval')
-    dview.execute('from inference.coord_descent import *')
-    dview.execute('from inference.smart_init import initialize_with_data')
+    dview.execute('from pyglm.utils.theano_func_wrapper import seval')
+    dview.execute('from pyglm.inference.coord_descent import *')
+    dview.execute('from pyglm.inference.smart_init import initialize_with_data')
 
 def parallel_compute_log_p(dview,
                            master,

@@ -13,11 +13,11 @@ from pyglm.utils.parallel_util import parallel_compute_log_p
 def initialize_imports(dview):
     """ Import functions req'd for coordinate descent
     """
-    dview.execute('from utils.theano_func_wrapper import seval, _flatten')
-    dview.execute('from utils.packvec import *')
-    dview.execute('from inference.gibbs import *')
-    dview.execute('from log_sum_exp import log_sum_exp_sample')
-    dview.execute('from hmc import hmc')
+    dview.execute('from pyglm.utils.theano_func_wrapper import seval, _flatten')
+    dview.execute('from pyglm.utils.packvec import *')
+    dview.execute('from pyglm.inference.gibbs import *')
+    dview.execute('from pyglm.log_sum_exp import log_sum_exp_sample')
+    dview.execute('from hips.inference.hmc import hmc')
 
 def concatenate_parallel_updates(xs, x):
     # Concatenate results into x
