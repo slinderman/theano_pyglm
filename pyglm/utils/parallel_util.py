@@ -136,6 +136,14 @@ def initialize_imports(dview):
     dview.execute('from pyglm.utils.theano_func_wrapper import seval')
     dview.execute('import cPickle')
 
+    # Make sure that each node uses a different Theano compile directory
+    @interactive
+    def _set_theano_base_compiledir(n):
+        theano.config.base_compiledir = \
+            os.path.join(theano.config.base_compiledir, 'engine%d' % n)
+    dview.map(_set_theano_base_compiledir,
+              range(len(dview)))
+
 def set_data_on_engines(dview, d,
                         use_shared_filesystem=False):
     """ Send the data to each engine
