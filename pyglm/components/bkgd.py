@@ -464,15 +464,16 @@ class SharedTuningCurveStimulus(Component):
         if os.path.exists(pyglm_home):
             if os.path.exists(cachefile):
                 print "Found filtered stim in cache"
-                with open(cachefile) as f:
+                with open(cachefile, 'r') as f:
                     fstim = cPickle.load(f)
                     fstim_cached = True
 
         if not fstim_cached:
-            fstim = np.empty((nt, D_stim, self.Bt, self.Bx))
+            fstim = np.empty((nt, D_stim, self.Bx, self.Bt))
             print "Convolving stimulus with 3D basis"
-            for bt in np.arange(self.Bt):
-                for bx in np.arange(self.Bx):
+
+            for bx in np.arange(self.Bx):
+                for bt in np.arange(self.Bt):
                     # Print progress
                     sys.stdout.write('.')
                     sys.stdout.flush()
@@ -481,27 +482,26 @@ class SharedTuningCurveStimulus(Component):
                         # atleast_2d gives row vectors
                         bas = np.dot(np.atleast_2d(self.tuningcurves.interpolated_temporal_basis[:,bt]).T,
                                      np.atleast_2d(self.tuningcurves.interpolated_spatial_basis[:,bx]))
-                        fstim[:,:,bt,bx] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
+                        fstim[:,:,bx,bt] = convolve_with_2d_basis(stim, bas, ['first', 'central'])
                     elif self.tc_spatial_ndim == 2:
                         # Take the outerproduct to make a 3D tensor
                         bas_xy = self.tuningcurves.interpolated_spatial_basis[:,bx].reshape((1,) + self.tc_spatial_shape )
                         bas_t = self.tuningcurves.interpolated_temporal_basis[:,bt].reshape((-1,1))
                         bas = np.tensordot(bas_t, bas_xy, [1,0])
                         fconv3d = convolve_with_3d_basis(stim, bas, ['first', 'central', 'central'])
-                        fstim[:,:,bt,bx] = fconv3d.reshape((nt, D_stim))
+                        fstim[:,:,bx,bt] = fconv3d.reshape((nt, D_stim))
 
                     else:
                         raise Exception('spatial dimension must be <= 2D')
-
             sys.stdout.write(" Done\n")
 
             # Permute output to get shape(T,Bt,Bx)
-            fstim = np.transpose(fstim, axes=[0,1,3,2])
+            # fstim = np.transpose(fstim, axes=[0,1,3,2])
 
             # Save the file to cache
             if os.path.exists(pyglm_home):
                 print "Saving filtered stim to cache file at: ", cachefile
-                print "Expected file size: %.2f Gb" % (float(fstim.size)/2**30)
+                print "Expected file size: %.2f Gb" % (float(fstim.size*8)/2**30)
                 with open(cachefile, 'w') as f:
                     cPickle.dump(fstim, f, protocol=-1)
 
