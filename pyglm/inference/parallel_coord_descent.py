@@ -85,23 +85,22 @@ def parallel_coord_descent(client,
     print "Initializing parameters"
     if x0 is None:
         master.execute('x0 = popn.sample()', block=True)
+        master.execute('initialize_with_data(popn, data, x0)')
         x0 = master['x0']
-    else:
-        master['x0'] = x0
+    # else:
+    #     master['x0'] = x0
 
-    # Also initialize with intelligent parameters from the data
-    # dview['x0d'] = x0      
-    # @interactive
-    # def _initialize_with_data(n):
-    #     initialize_with_data(popn, data, x0d, Ns=n)
-    # x0s = dview.map_async(_initialize_with_data,
-    #                       range(N)) 
-    # x0s = x0s.get()
-    # Extract the initial parameters for each GLM
-    #x0['glms'] = [x0s['glms'][n] for n in np.arange(N)]
+        # Also initialize with intelligent parameters from the data
+        # dview['x0d'] = x0
+        # @interactive
+        # def _initialize_with_data(n):
+        #     initialize_with_data(popn, data, x0d, Ns=n)
+        # x0s = dview.map_async(_initialize_with_data,
+        #                       range(N))
+        # x0s = x0s.get()
+        # Extract the initial parameters for each GLM
+        #x0['glms'] = [x0s['glms'][n] for n in np.arange(N)]
 
-    master.execute('initialize_with_data(popn, data, x0)')
-    
     print "Preparing Theano functions for inference"
     # Compute log prob, gradient, and hessian wrt network parameters
     dview.execute('net_inf_prms = prep_network_inference(popn,'

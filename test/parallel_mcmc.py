@@ -81,12 +81,12 @@ def run_synth_test():
 
         # Perform inference
         print "Performing parallel inference"
-        start_time = time.clock()
+        start_time = time.time()
         x_smpls = parallel_gibbs_sample(client, data,
                                         x0=x0, N_samples=N_samples,
                                         save_interval=50, results_dir=options.resultsDir,
                                         callback=pred_ll_cbk)
-        stop_time = time.clock()
+        stop_time = time.time()
 
         # Save results
         print "Saving results to %s" % os.path.join(options.resultsDir, 'results.pkl')
