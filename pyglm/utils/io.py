@@ -34,7 +34,7 @@ def parse_cmd_line_args():
                       help="Whether or not to create a unique results directory.")
 
     # Parallel-specific options for loading IPython profiles
-    parser.add_option("-p", "--profile", dest="profile", default='default',
+    parser.add_option("-p", "--profile", dest="profile", default=None,
                       help="IPython parallel profile to use.")
 
     parser.add_option("-j", "--json", dest="json", default=None,

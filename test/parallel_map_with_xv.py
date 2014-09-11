@@ -7,7 +7,7 @@ import numpy as np
 
 from pyglm.inference.parallel_coord_descent import parallel_coord_descent
 from parallel_harness import initialize_parallel_test_harness
-from pyglm.utils.parallel_util import set_data_on_engines, \
+from pyglm.utils.parallel_util import add_data_on_engines, \
                                 set_hyperparameters_on_engines, \
                                 parallel_compute_ll
 from pyglm.models.model_factory import make_model
@@ -51,7 +51,7 @@ def run_parallel_map():
     for (i,model) in enumerate(models):
         print "Evaluating model %d" % i
         set_hyperparameters_on_engines(client[:], model)
-        set_data_on_engines(client[:], train_data)
+        add_data_on_engines(client[:], train_data)
 
         if use_existing and  \
            os.path.exists(os.path.join(options.resultsDir, 'results.partial.%d.pkl' % i)):
@@ -78,13 +78,13 @@ def run_parallel_map():
             train_lls[i] = ll_train
 
             # Compute log lkhd on xv data
-            set_data_on_engines(client[:], xv_data)
+            add_data_on_engines(client[:], xv_data)
             ll_xv = parallel_compute_ll(client[:], x_inf, data['N'])
             print "Cross Validation LL: %f" % ll_xv
             xv_lls[i] = ll_xv
 
             # Compute log lkhd on total dataset
-            set_data_on_engines(client[:], data)
+            add_data_on_engines(client[:], data)
             ll_total = parallel_compute_ll(client[:], x_inf, data['N'])
             print "Total LL: %f" % ll_total
             total_lls[i] = ll_total
@@ -103,7 +103,7 @@ def run_parallel_map():
     print "Training the best model (%d) with the full dataset" % best_ind
     # Set the best hyperparameters
     set_hyperparameters_on_engines(client[:], best_model)
-    set_data_on_engines(client[:], data)
+    add_data_on_engines(client[:], data)
 
     # Fit the best model on the full training data
     best_x = parallel_coord_descent(client, data['N'], x0=best_x, maxiter=1,

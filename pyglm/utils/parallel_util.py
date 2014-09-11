@@ -144,7 +144,7 @@ def initialize_imports(dview):
     dview.map(_set_theano_base_compiledir,
               range(len(dview)))
 
-def set_data_on_engines(dview, d,
+def add_data_on_engines(dview, d,
                         use_shared_filesystem=False):
     """ Send the data to each engine
     """
@@ -173,7 +173,7 @@ def set_data_on_engines(dview, d,
         os.remove('.temp_data.pkl')
 
     # Condition the population on the data
-    dview.execute("popn.set_data(data)", block=True)
+    dview.execute("popn.add_data(data)", block=True)
 
 def set_hyperparameters_on_engines(dview, m):
     """ Send the hyperparameters to each engine
@@ -183,7 +183,7 @@ def set_hyperparameters_on_engines(dview, m):
 
 
 def create_population_on_engines(dview,
-                                 data,
+                                 data_sequences,
                                  model_type
                                  ):
     """ Initialize a model with N neurons. Use the data if specified on the
@@ -191,12 +191,17 @@ def create_population_on_engines(dview,
         Return a population object, the data, and a set of true parameters
         which is expected for synthetic tests
     """
+    # Make sure data sequences is a list
+    if not isinstance(data_sequences, list):
+        data_sequences = [data_sequences]
+
     # Initialize a model with N neurons
-    N = data['N']
+    N = data_sequences[0]['N']
+    dt = data_sequences[0]['dt']
     if isinstance(model_type, dict):
         m = model_type
     elif isinstance(model_type, str):
-        m = make_model(model_type, N=N)
+        m = make_model(model_type, N=N, dt=dt)
     else:
         raise Exception("Create_population_on_engines requires model to be either str type or dict")
     stabilize_sparsity(m)
@@ -215,4 +220,5 @@ def create_population_on_engines(dview,
     # Initialize the GLM with the data
     #dview['data'] = data
     #dview.execute("popn.set_data(data)", block=True)
-    set_data_on_engines(dview, data)
+    for data in data_sequences:
+        add_data_on_engines(dview, data)

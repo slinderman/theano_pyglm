@@ -64,8 +64,7 @@ def check_convergence(x):
     """
     return False
 
-def parallel_gibbs_sample(client,
-                          data,
+def parallel_gibbs_sample(client, N,
                           N_samples=1000,
                           x0=None,
                           init_from_mle=True,
@@ -77,7 +76,6 @@ def parallel_gibbs_sample(client,
     """
     dview = client[:]
     master = client[client.ids[0]]
-    N = data['N']
 
     # Import req'd functions on engines
     initialize_imports(dview)

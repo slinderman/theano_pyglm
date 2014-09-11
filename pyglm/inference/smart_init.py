@@ -98,7 +98,7 @@ def initialize_stim_with_sta(population, data, x0, Ns=None):
             x0['glms'][n]['bkgd']['w_stim'] = w_t    
 
 
-def initialize_locations_by_correlation(population, data, x0, maxlag=300):
+def initialize_locations_by_correlation(population, x0, maxlag=300):
     """
     Initialize the locations of a shared tuning curve background model
     by setting each neuron's location to the stimulus location where it is
@@ -108,6 +108,8 @@ def initialize_locations_by_correlation(population, data, x0, maxlag=300):
         return
 
     location_model = population.glm.bkgd_model.locations
+    assert len(population.data_sequences) > 0
+    data = population.data_sequences[-1]
     stim = data['stim']
     spks = data['S']
 

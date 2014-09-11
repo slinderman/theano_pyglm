@@ -203,8 +203,7 @@ def fit_glm(xn, n,
     x_glm_n = unpackdict(xn_opt, shapes)
     set_vars(glm_syms, xn['glm'], x_glm_n)
 
-def coord_descent(population, 
-                  data,
+def coord_descent(population,
                   x0=None, 
                   maxiter=50, 
                   atol=1e-5):
@@ -228,7 +227,7 @@ def coord_descent(population,
         x0 = population.sample()
 
     # Also initialize with intelligent parameters from the data
-    initialize_with_data(population, data, x0)
+    initialize_with_data(population, population.data_sequences[-1], x0)
 
     lp = population.compute_log_p(x0)
     print "Initial LP=%.2f." % (lp)

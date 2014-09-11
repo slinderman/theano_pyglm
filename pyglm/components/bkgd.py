@@ -195,8 +195,9 @@ class SpatiotemporalStimulus(Component):
         self.Bt = Bt
 
         # The basis is interpolated once the data is specified
-        self.ibasis_x = theano.shared(value=np.zeros((2,Bx)))
-        self.ibasis_t = theano.shared(value=np.zeros((2,Bt)))
+        # self.ibasis_x = theano.shared(value=np.zeros((2,Bx)))
+        # self.ibasis_t = theano.shared(value=np.zeros((2,Bt)))
+        self.initialize_basis()
 
         # Compute the number of parameters
         self.n_vars = Bx+Bt
@@ -301,7 +302,7 @@ class SpatiotemporalStimulus(Component):
 
     def preprocess_data(self, data):
         dt = self.model['dt']
-        dt_stim = self.bkgd_model['dt_stim']
+        dt_stim = data['dt_stim']
         t = np.arange(0, data['T'], dt)
         nt = len(t)
         t_stim = dt_stim * np.arange(data['stim'].shape[0])

@@ -9,17 +9,17 @@ from pyglm.utils.basis import create_basis
 from pyglm.components.priors import create_prior
 
 
-def create_latent_component(model, **kwargs):
-    typ = model['type'].lower()
+def create_latent_component(model, component_model, **kwargs):
+    typ = component_model['type'].lower()
     if typ == 'latent_type' or \
        typ == 'latenttype':
-       return LatentType(model, **kwargs)
+       return LatentType(model, component_model, **kwargs)
     elif typ == 'latent_type_with_tuning_curves' or \
        typ == 'latenttypewithtuningcurves':
-       return LatentTypeWithTuningCurve(model, **kwargs)
+       return LatentTypeWithTuningCurve(model, component_model, **kwargs)
     elif typ == 'latent_location' or \
          typ == 'latentlocation':
-       return LatentLocation(model, **kwargs)
+       return LatentLocation(model, component_model, **kwargs)
     else:
         raise Exception("Unrecognized latent component type: %s" % typ)
 
@@ -31,10 +31,11 @@ class LatentVariables(Component):
         """
         Go through the items in the model, each of which specifies a latent variable component
         """
+        self.model = model
         if 'latent' in model.keys():
-            self.prms = model['latent']
+            self.latent_model = model['latent']
         else:
-            self.prms = {}
+            self.latent_model = {}
 
         self.log_p = T.constant(0.0)
 
@@ -42,9 +43,9 @@ class LatentVariables(Component):
         self.latentlist = []
         self.latentdict = {}
 
-        for (k,v) in self.prms.items():
+        for (k,v) in self.latent_model.items():
             # Create the latent component
-            latent_component = create_latent_component(v)
+            latent_component = create_latent_component(model, v)
             self.log_p += latent_component.log_p
 
             # Add to the list of latent variable components
@@ -80,22 +81,22 @@ class LatentVariables(Component):
         return self.latentdict[item]
 
 class LatentType(Component):
-    def __init__(self, model):
-        # TODO: Get the global model
-        self.prms = model
-        self.name = self.prms['name']
+    def __init__(self, model, type_model):
+        self.model = model
+        self.type_model = type_model
+        self.name = self.type_model['name']
 
         # There are N neurons to assign types to
-        self.N = model['N']
+        self.N = type_model['N']
 
         # There are has R latent types
-        self.R = self.prms['R']
+        self.R = self.type_model['R']
         # Each neuron has a latent type Y
         self.Y = T.lvector('Y')
 
         # A probability of each type with a symmetric Dirichlet prior
         self.alpha = T.dvector('alpha')
-        self.alpha_prior = create_prior(self.prms['alpha_prior'])
+        self.alpha_prior = create_prior(self.type_model['alpha_prior'])
         # self.alpha0 = self.prms['alpha0']
 
         # Define log probability
@@ -130,20 +131,20 @@ class LatentTypeWithTuningCurve(LatentType):
     """
     Extent the basic latent type component to also include tuning curves
     """
-    def __init__(self, model):
-        super(LatentTypeWithTuningCurve, self).__init__(model)
+    def __init__(self, model, type_model):
+        super(LatentTypeWithTuningCurve, self).__init__(model, type_model)
 
         # Also initialize the tuning curves
-        self.mu = self.prms['mu']
-        self.sigma = self.prms['sigma']
+        self.mu = self.type_model['mu']
+        self.sigma = self.type_model['sigma']
 
         # Create a basis for the stimulus response
-        self.spatial_basis = create_basis(self.prms['spatial_basis'])
-        self.spatial_shape = self.prms['spatial_shape']
+        self.spatial_basis = create_basis(self.type_model['spatial_basis'])
+        self.spatial_shape = self.type_model['spatial_shape']
         self.spatial_ndim = len(self.spatial_shape)
         (_,Bx) = self.spatial_basis.shape
 
-        self.temporal_basis = create_basis(self.prms['temporal_basis'])
+        self.temporal_basis = create_basis(self.type_model['temporal_basis'])
         (_,Bt) = self.temporal_basis.shape
 
         # Save the filter sizes
@@ -228,7 +229,7 @@ class LatentTypeWithTuningCurve(LatentType):
 
         # Interpolate the temporal basis at the resolution of the data
         (Lt,Bt) = self.temporal_basis.shape
-        Lt_int = self.prms['dt_max']/dt
+        Lt_int = self.type_model['dt_max']/dt
         t_int = np.linspace(0,1,Lt_int)
         t_bas = np.linspace(0,1,Lt)
         ibasis_t = np.zeros((len(t_int), Bt))
@@ -236,7 +237,7 @@ class LatentTypeWithTuningCurve(LatentType):
             ibasis_t[:,b] = np.interp(t_int, t_bas, self.temporal_basis[:,b])
 
         # Normalize so that the interpolated basis has unit L1 norm
-        if self.prms['temporal_basis']['norm']:
+        if self.type_model['temporal_basis']['norm']:
             ibasis_t = ibasis_t / np.tile(np.sum(ibasis_t,0),[Lt_int,1])
 
         # Save the interpolated bases
@@ -248,11 +249,14 @@ class LatentLocation(Component):
     """
     The latent location of a neuron in either real or abstract space
     """
-    def __init__(self, model):
-        self.prms = model
+    def __init__(self, model, loc_model):
+        self.model = model
+        self.N = model['N']
+
+        self.prms = loc_model
         self.name = self.prms['name']
         self.N_dims = self.prms['N_dims']
-        self.N = model['N']
+
 
         # Create a location prior
         self.location_prior = create_prior(self.prms['location_prior'])

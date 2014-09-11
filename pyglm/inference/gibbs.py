@@ -14,6 +14,7 @@ from pyglm.utils.grads import *
 from hips.inference.ars import adaptive_rejection_sample
 from hips.inference.hmc import hmc
 from pyglm.inference.log_sum_exp import log_sum_exp_sample
+from pyglm.inference.coord_descent import coord_descent
 
 
 class MetropolisHastingsUpdate(object):
@@ -2047,6 +2048,7 @@ class LatentLocationAndTypeUpdate(MetropolisHastingsUpdate):
         self.syms = population.get_variables()
 
         # Get the shared tuning curve component
+        from pyglm.components.latent import LatentType
         self.latent_types = []
         for latent_component in population.latent.latentlist:
             if isinstance(latent_component, LatentType):
@@ -2470,8 +2472,7 @@ def initialize_updates(population):
 
     return serial_updates, parallel_updates
 
-def gibbs_sample(population, 
-                 data, 
+def gibbs_sample(population,
                  N_samples=1000,
                  x0=None, 
                  init_from_mle=True,
@@ -2480,6 +2481,7 @@ def gibbs_sample(population,
     Sample the posterior distribution over parameters using MCMC.
     """
     N = population.model['N']
+    dt = population.model['dt']
 
     # Draw initial state from prior if not given
     if x0 is None:
@@ -2488,14 +2490,16 @@ def gibbs_sample(population,
         if init_from_mle:
             print "Initializing with coordinate descent"
             from pyglm.models.model_factory import make_model, convert_model
-            from population import Population
-            mle_model = make_model('standard_glm', N=N)
+            from pyglm.population import Population
+            mle_model = make_model('standard_glm', N=N, dt=dt)
             mle_popn = Population(mle_model)
-            mle_popn.set_data(data)
+
+            for data in population.data_sequences:
+                mle_popn.add_data(data)
             mle_x0 = mle_popn.sample()
 
             # Initialize with MLE under standard GLM
-            mle_x0 = coord_descent(mle_popn, data, x0=mle_x0, maxiter=1)
+            mle_x0 = coord_descent(mle_popn, x0=mle_x0, maxiter=1)
 
             # Convert between inferred parameters of the standard GLM
             # and the parameters of this model. Eg. Convert unweighted 
@@ -2504,7 +2508,7 @@ def gibbs_sample(population,
 
     # TODO: Move this to a better place
     from pyglm.inference.smart_init import initialize_locations_by_correlation
-    initialize_locations_by_correlation(population, data, x0)
+    initialize_locations_by_correlation(population, x0)
 
     # Create updates for this population
     serial_updates, parallel_updates = initialize_updates(population)

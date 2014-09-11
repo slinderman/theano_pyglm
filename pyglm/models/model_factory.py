@@ -327,7 +327,8 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
     to_vars['latent']['sharedtuningcurve_provider']['Y'] = Y
 
     # Initialize shared tuning curves (project onto the bases)
-    from utils.basis import project_onto_basis
+    import pdb; pdb.set_trace()
+    from pyglm.utils.basis import project_onto_basis
     for r in range(R):
         mean_filter_xr = flattened_filters_x[Y==r].mean(axis=0)
         mean_filter_tr = flattened_filters_t[Y==r].mean(axis=0)
