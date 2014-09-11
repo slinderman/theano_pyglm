@@ -16,6 +16,11 @@ class Component(object):
     def get_state(self):
         return {}
 
+    def preprocess_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        pass
+
     def set_data(self, data):
         """ Set the shared memory variables that depend on the data
         """

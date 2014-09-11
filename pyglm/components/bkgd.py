@@ -49,16 +49,18 @@ class BasisStimulus(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
-        self.prms = model['bkgd']
+        self.model = model
+        self.bkgd_model = model['bkgd']
         # Create a basis for the stimulus response
-        self.basis = create_basis(self.prms['basis'])
+        self.basis = create_basis(self.bkgd_model['basis'])
         (_,B) = self.basis.shape
 
         # The basis is interpolated once the data is specified
-        self.ibasis = theano.shared(value=np.zeros((2,B)))
+        # self.ibasis = theano.shared(value=np.zeros((2,B)))
+        self.initialize_basis()
 
         # Compute the number of parameters
-        self.n_vars = B*self.prms['D_stim']
+        self.n_vars = B*self.bkgd_model['D_stim']
         
         # Create a spherical Gaussian prior on the weights
 #        self.prior = create_prior(self.prms['prior'], name='w_stim', D=self.n_vars)
@@ -95,23 +97,42 @@ class BasisStimulus(Component):
         """
         return {'stim_response' : self.stim_resp,
                 'basis' : self.ibasis}
-        
-    def set_data(self, data):
+
+    def initialize_basis(self):
+        (_,B) = self.basis.shape
+
+        # Interpolate stimulus at the resolution of the data
+        dt = self.model['dt']
+
+        # Interpolate basis at the resolution of the data
+        (L,B) = self.basis.shape
+        Lt_int = self.bkgd_model['dt_max']/dt
+        t_int = np.linspace(0,1,Lt_int)
+        t_bas = np.linspace(0,1,L)
+        ibasis = np.zeros((len(t_int), B))
+        for b in np.arange(B):
+            ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
+
+        # Normalize so that the interpolated basis has volume 1
+        if self.bkgd_model['basis']['norm']:
+            ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
+
+        self.ibasis = theano.shared(value=ibasis)
+
+    def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
         # Check data shape
-        if not self.prms['D_stim'] == data['stim'].shape[1]: 
-            raise Exception("Stim dimension (%d) is not equal to that specified by model (%d)" % (data['stim'].shape[1], self.prms['D_stim']))
-
-        D_stim = self.prms['D_stim']
-        
-        if not np.abs(data['stim'].shape[0] * data['dt_stim'] - data['T']) < \
-               data['dt_stim']:
+        if not abs(data['stim'].shape[0] * data['dt_stim'] - data['T']) < data['dt_stim']:
             raise Exception('Stimulus length is not the same as data time length!')
 
+        if not self.bkgd_model['D_stim'] == data['stim'].shape[1]:
+            raise Exception("Stim dimension (%d) is not equal to that specified by model (%d)" % (data['stim'].shape[1], self.bkgd_model['D_stim']))
+
         # Interpolate stimulus at the resolution of the data
-        dt = data['dt']
-        dt_stim = data['dt_stim']
+        D_stim = self.bkgd_model['D_stim']
+        dt = self.model['dt']
+        dt_stim = self.bkgd_model['dt_stim']
         t = dt * np.arange(data['S'].shape[0])
         t_stim = dt_stim * np.arange(data['stim'].shape[0])
         stim = np.zeros((len(t), D_stim))
@@ -120,24 +141,8 @@ class BasisStimulus(Component):
                                    t_stim,
                                    data['stim'][:, d])
 
-        # Interpolate basis at the resolution of the data
-        (L,B) = self.basis.shape
-        Lt_int = self.prms['dt_max']/dt
-        t_int = np.linspace(0,1,Lt_int)
-        t_bas = np.linspace(0,1,L)
-        ibasis = np.zeros((len(t_int), B))
-        for b in np.arange(B):
-            ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
-            # Keep the total L1 norm the same
-            #ibasis[:,b] /= (np.sum(ibasis[:,b])/np.sum(self.basis[:,b]))
-
-        # Normalize so that the interpolated basis has volume 1
-        if self.prms['basis']['norm']:
-            ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
-        self.ibasis.set_value(ibasis)
-
         # Project the stimulus onto the basis
-        cstim = convolve_with_basis(stim, ibasis)
+        cstim = convolve_with_basis(stim, self.ibasis.get_value())
 
         # Flatten this manually (there's surely a way to do this with numpy)
         (nT,D,B) = cstim.shape 
@@ -145,12 +150,15 @@ class BasisStimulus(Component):
         for d in np.arange(D):
             for b in np.arange(B):
                 fstim[:,d*B+b] = cstim[:,d,b]
-        self.stim.set_value(fstim)
+
+        data['fstim'] = fstim
+
+    def set_data(self, data):
+        self.stim.set_value(data['fstim'])
 
     def set_hyperparameters(self, model):
         """ Set hyperparameters of the model
         """
-#        self.prior.set_hyperparameters(model)
         pass
 
     def sample(self, acc):
@@ -158,8 +166,6 @@ class BasisStimulus(Component):
         return a sample of the variables
                 """
         smpl = {str(self.w_stim) : 0.01*np.random.randn(self.n_vars)}
-#        smpl = {}
-#        smpl.update(self.prior.sample())
         return smpl
 
 
@@ -172,16 +178,16 @@ class SpatiotemporalStimulus(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
-
-        self.prms = model['bkgd']
-        self.mu = self.prms['mu']
-        self.sigma = self.prms['sigma']
+        self.model = model
+        self.bkgd_model = model['bkgd']
+        self.mu = self.bkgd_model['mu']
+        self.sigma = self.bkgd_model['sigma']
 
         # Create a basis for the stimulus response
-        self.spatial_basis = create_basis(self.prms['spatial_basis'])
+        self.spatial_basis = create_basis(self.bkgd_model['spatial_basis'])
         (_,Bx) = self.spatial_basis.shape
 
-        self.temporal_basis = create_basis(self.prms['temporal_basis'])
+        self.temporal_basis = create_basis(self.bkgd_model['temporal_basis'])
         (_,Bt) = self.temporal_basis.shape
 
         # Save the filter sizes
@@ -255,8 +261,8 @@ class SpatiotemporalStimulus(Component):
         stim_resp_t = sign*(1.0/Z)*self.stim_resp_t
 
         # Finally, reshape the spatial component as necessary
-        if 'shape' in self.prms:
-            stim_resp_x = sign*Z*T.reshape(self.stim_resp_x, self.prms['shape'])
+        if 'shape' in self.bkgd_model:
+            stim_resp_x = sign*Z*T.reshape(self.stim_resp_x, self.bkgd_model['shape'])
         else:
             stim_resp_x = sign*Z*self.stim_resp_x
 
@@ -264,27 +270,13 @@ class SpatiotemporalStimulus(Component):
                 'stim_response_t' : stim_resp_t,
                 'basis_t' : self.ibasis_t}
 
-    def set_data(self, data):
-        """ Set the shared memory variables that depend on the data
-        """
+    def initialize_basis(self):
         # Interpolate stimulus at the resolution of the data
-        dt = data['dt']
-        dt_stim = data['dt_stim']
-        t = np.arange(0, data['T'], dt)
-        nt = len(t)
-#         t_stim = np.arange(0, data['T'], dt_stim)
-        t_stim = dt_stim * np.arange(data['stim'].shape[0])
-        stim = np.zeros((nt, self.prms['D_stim']))
-        for d in np.arange(self.prms['D_stim']):
-            stim[:, d] = np.interp(t,
-                                   t_stim,
-                                   data['stim'][:, d])
-
-        # TODO Interpolate in spatial dimension as well?
+        dt = self.model['dt']
 
         # Interpolate basis at the resolution of the data
         (Lt,Bt) = self.temporal_basis.shape
-        Lt_int = self.prms['dt_max']/dt
+        Lt_int = self.bkgd_model['dt_max']/dt
         t_int = np.linspace(0,1,Lt_int)
         t_bas = np.linspace(0,1,Lt)
         ibasis_t = np.zeros((len(t_int), Bt))
@@ -292,25 +284,37 @@ class SpatiotemporalStimulus(Component):
             ibasis_t[:,b] = np.interp(t_int, t_bas, self.temporal_basis[:,b])
 
         (Lx,Bx) = self.spatial_basis.shape
-        Lx_int = self.prms['D_stim']
+        Lx_int = self.bkgd_model['D_stim']
         x_int = np.linspace(0,1,Lx_int)
         x_bas = np.linspace(0,1,Lx)
         ibasis_x = np.zeros((len(x_int), Bx))
         for b in np.arange(Bx):
             ibasis_x[:,b] = np.interp(x_int, x_bas, self.spatial_basis[:,b])
 
-        # Normalize so that the interpolated basis has volume 1
-#         if self.prms['temporal_basis']['norm']:
-#             ibasis_t = ibasis_t / self.prms['dt_max']
         # Normalize so that the interpolated basis has unit L1 norm
-        if self.prms['temporal_basis']['norm']:
+        if self.bkgd_model['temporal_basis']['norm']:
             ibasis_t = ibasis_t / np.tile(np.sum(ibasis_t,0),[Lt_int,1])
 
         # Save the interpolated bases
-        self.ibasis_t.set_value(ibasis_t)
-        self.ibasis_x.set_value(ibasis_x)
+        self.ibasis_t = theano.shared(value=ibasis_t)
+        self.ibasis_x = theano.shared(value=ibasis_x)
+
+    def preprocess_data(self, data):
+        dt = self.model['dt']
+        dt_stim = self.bkgd_model['dt_stim']
+        t = np.arange(0, data['T'], dt)
+        nt = len(t)
+        t_stim = dt_stim * np.arange(data['stim'].shape[0])
+        stim = np.zeros((nt, self.bkgd_model['D_stim']))
+        for d in np.arange(self.bkgd_model['D_stim']):
+            stim[:, d] = np.interp(t,
+                                   t_stim,
+                                   data['stim'][:, d])
+
 
         # Take all pairs of temporal and spatial basis vectors
+        ibasis_t = self.ibasis_t.get_value()
+        ibasis_x = self.ibasis_x.get_value()
         (_,Bt) = ibasis_t.shape
         (_,Bx) = ibasis_x.shape
 
@@ -332,9 +336,12 @@ class SpatiotemporalStimulus(Component):
         fstim = np.transpose(fstim, axes=[0,2,1])
 
         # Flatten the filtered stimulus
-        fstim2 = np.reshape(fstim,(nt,Bt*Bx))
+        data['fstim'] = np.reshape(fstim,(nt,Bt*Bx))
 
-        self.stim.set_value(fstim2)
+    def set_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        self.stim.set_value(data['fstim'])
 
 
 class SharedTuningCurveStimulus(Component):
@@ -344,9 +351,10 @@ class SharedTuningCurveStimulus(Component):
     def __init__(self, model, glm, latent):
         """ Initialize the filtered stim model
         """
-        self.prms = model['bkgd']
+        self.model = model
+        self.bkgd_model = model['bkgd']
         self.n = glm.n
-        self.tuningcurves = latent[self.prms['tuningcurves']]
+        self.tuningcurves = latent[self.bkgd_model['tuningcurves']]
         self.spatial_basis = self.tuningcurves.spatial_basis
         self.tc_spatial_shape = self.tuningcurves.spatial_shape
         self.tc_spatial_ndim = self.tuningcurves.spatial_ndim
@@ -367,7 +375,7 @@ class SharedTuningCurveStimulus(Component):
         self.filtered_stim = theano.shared(name='stim',
                                            value=np.ones((1,1,1,1)))
 
-        self.locations = latent[self.prms['locations']]
+        self.locations = latent[self.bkgd_model['locations']]
         self.L = self.locations.Lmatrix[self.n,:]
         self.loc_index = self.locations.location_prior.ravel_index(self.L)
 
@@ -393,38 +401,21 @@ class SharedTuningCurveStimulus(Component):
         self.I_stim = self.I_stim_xt[:, self.loc_index]
         self.I_stim.name = 'I_stim'
 
-        # Extract only the loc_index column (Result is T x B_t)
-        # I_x = I_x[:,self.loc_index,:]
-        # self.I_stim = T.dot(I_x, self.w_t)
-        # self.I_stim.name = 'I_stim'
-
         # There are no latent variables in this class. They all belong
         # to global latent variables.
         self.log_p = T.constant(0.0)
 
-    # def get_variables(self):
-    #     """ Get the theano variables associated with this model.
-    #     """
-        # return {str(self.loc_index) : self.loc_index}
 
     def get_state(self):
         """ Get the theano variables associated with this model.
         """
-        # return {str(self.I_stim) : self.I_stim}
         return {}
 
-    # def sample(self, acc):
-    #     """
-    #     return a sample of the variables
-    #             """
-    #     loc_index = 0
-    #     return {str(self.loc_index) : loc_index}
-
-    def set_data(self, data):
+    def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
         assert data['stim'].ndim == 1+self.tc_spatial_ndim
-        dt = data['dt']
+        dt = self.model['dt']
         dt_stim = data['dt_stim']
         t = np.arange(0, data['T'], dt)
         nt = len(t)
@@ -451,7 +442,6 @@ class SharedTuningCurveStimulus(Component):
 
         # Filter the stimulus with each spatiotemporal filter combo
         # Look for cached version of filtered stimulus
-        # import pdb; pdb.set_trace()
         fstim_cached = False
         pyglm_home = os.path.join(expanduser("~"), '.pyglm')
         hash = hashlib.sha1(stim)
@@ -495,9 +485,6 @@ class SharedTuningCurveStimulus(Component):
                         raise Exception('spatial dimension must be <= 2D')
             sys.stdout.write(" Done\n")
 
-            # Permute output to get shape(T,Bt,Bx)
-            # fstim = np.transpose(fstim, axes=[0,1,3,2])
-
             # Save the file to cache
             if os.path.exists(pyglm_home):
                 print "Saving filtered stim to cache file at: ", cachefile
@@ -505,8 +492,10 @@ class SharedTuningCurveStimulus(Component):
                 with open(cachefile, 'w') as f:
                     cPickle.dump(fstim, f, protocol=-1)
 
+
         assert fstim.shape == (nt, D_stim, self.Bx, self.Bt)
+        data['fstim'] = fstim
 
-
-        self.filtered_stim.set_value(fstim)
+    def set_data(self, data):
+        self.filtered_stim.set_value(data['fstim'])
 

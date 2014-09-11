@@ -55,16 +55,16 @@ def parse_cmd_line_args():
 
 def gen_synth_data(N, T_stop, popn, x_true, dt=0.001, dt_stim=0.1, D_stim=1, stim=None):
     # Initialize the GLMs with just the stimulus
-    temp_data = {"S": np.zeros((T_stop/dt, N)),
-                 "N": N,
-                 "dt": dt,
-                 "T": np.float(T_stop),
-                 "stim": stim,
-                 'dt_stim': dt_stim}
-    popn.set_data(temp_data)
+    # temp_data = {"S": np.zeros((T_stop/dt, N)),
+    #              "N": N,
+    #              "dt": dt,
+    #              "T": np.float(T_stop),
+    #              "stim": stim,
+    #              'dt_stim': dt_stim}
+    # popn.add_data(temp_data)
 
     # Simulate spikes
-    S,X = popn.simulate(x_true, (0, T_stop), dt)
+    S,X = popn.simulate(x_true, (0, T_stop), dt, stim, dt_stim)
 
     # Package data into dict
     data = {"S": S,
@@ -84,7 +84,8 @@ def run_gen_synth_data():
     options, args = parse_cmd_line_args()
     
     # Create the model
-    model = make_model(options.model, N=options.N)
+    dt = 0.001
+    model = make_model(options.model, N=options.N, dt=dt)
     # Set the sparsity level to minimize the risk of unstable networks
     stabilize_sparsity(model)
 
@@ -108,7 +109,6 @@ def run_gen_synth_data():
           (options.N, options.T_stop)
 
     # Set simulation parametrs
-    dt = 0.001
     dt_stim = 0.1
     D_stim = (5,5)
     # D_stim = model['bkgd']['D_stim'] if 'D_stim' in model['bkgd'] else 0
@@ -117,8 +117,9 @@ def run_gen_synth_data():
     stim = np.random.randn(options.T_stop/dt_stim, *D_stim)
 
     data = gen_synth_data(options.N, options.T_stop, popn, x_true, dt, dt_stim, D_stim, stim)
+
     # Set the data so that the population state can be evaluated
-    popn.set_data(data)
+    popn.add_data(data)
     
     # DEBUG Evaluate the firing rate and the simulated firing rate
     state = popn.eval_state(x_true)
@@ -127,11 +128,6 @@ def run_gen_synth_data():
         lam_sim =  popn.glm.nlin_model.f_nlin(data['X'][:,n])
         assert np.allclose(lam_true, lam_sim)
 
-    # Save the data for reuse
-    #fname_mat = os.path.join(options.resultsDir, 'data.mat')
-    #print "Saving data to %s" % fname_mat
-    #scipy.io.savemat(fname_mat, data, oned_as='row')
-        
     # Pickle the data so we can open it more easily
     fname_pkl = os.path.join(options.resultsDir, 'data.pkl')
     print "Saving data to %s" % fname_pkl

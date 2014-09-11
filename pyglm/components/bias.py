@@ -39,12 +39,6 @@ class ConstantBias(Component):
         """
         return {str(self.bias) : self.bias}
 
-    def set_data(self, data):
-        """ Set the shared memory variables that depend on the data
-        """
-        pass
-
-
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
         """

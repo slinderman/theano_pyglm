@@ -19,10 +19,10 @@ def initialize_test_harness():
     data = load_data(options)
     
     print "Creating master population object"
-    model = make_model(options.model, N=data['N'])
+    model = make_model(options.model, N=data['N'], dt=0.001)
     stabilize_sparsity(model)
     popn = Population(model)
-    popn.set_data(data) 
+    popn.add_data(data)
     
     # Initialize the GLM with the data
     popn_true = None
@@ -50,8 +50,9 @@ def initialize_test_harness():
             if 'L' in x_true['net']['graph']:
                 x_true['net']['graph']['L'] = x_true['net']['graph']['L'].ravel()
             # END HACK
+
             popn_true = Population(model_true)
-            popn_true.set_data(data)
+            popn_true.add_data(data)
             ll_true = popn_true.compute_log_p(x_true)
             print "true LL: %f" % ll_true
 

@@ -15,7 +15,7 @@ from distance_weighted_model import DistanceWeightedModel
 
 import copy
 
-def make_model(template, N=None):
+def make_model(template, N=None, dt=None):
     """ Construct a model from a template and update the specified parameters
     """
     if isinstance(template, str):
@@ -52,6 +52,9 @@ def make_model(template, N=None):
     # Override template model parameters
     if N is not None:
         model['N'] = N
+
+    if dt is not None:
+        model['dt'] = dt
 
     # # Update other parameters as necessary
     # if template.lower() == 'distance_weighted_model' or \

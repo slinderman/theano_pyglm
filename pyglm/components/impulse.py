@@ -20,8 +20,9 @@ class LinearBasisImpulses(Component):
         tensordot to sum up the currents from each presynaptic neuron.
     """
     def __init__(self, model):
-        self.prms = model['impulse']
-        self.prior = create_prior(self.prms['prior'])
+        self.model = model
+        self.imp_model = model['impulse']
+        self.prior = create_prior(self.imp_model['prior'])
 
         # Number of presynaptic neurons
         self.N = model['N']
@@ -31,10 +32,10 @@ class LinearBasisImpulses(Component):
         # self.sigma = self.prms['sigma']
 
         # Create a basis for the impulse responses response
-        self.basis = create_basis(self.prms['basis'])
+        self.basis = create_basis(self.imp_model['basis'])
         (_,self.B) = self.basis.shape
         # The basis is interpolated once the data is specified
-        self.ibasis = theano.shared(value=np.zeros((2,self.B)))
+        self.initialize_basis()
 
         # Initialize memory for the filtered spike train
         self.ir = theano.shared(name='ir',
@@ -88,13 +89,14 @@ class LinearBasisImpulses(Component):
         return {'impulse' : self.impulse,
                 'basis' : self.ibasis}
 
-    def set_data(self, data):
-        """ Set the shared memory variables that depend on the data
+    def initialize_basis(self):
+        """
+        Initialize the basis by interpolating it at the resolution of the data
         """
         # Interpolate basis at the resolution of the data
-        dt = data['dt']
+        dt = self.model['dt']
         (L,B) = self.basis.shape
-        Lt_int = self.prms['dt_max']/dt
+        Lt_int = self.imp_model['dt_max']/dt
         t_int = np.linspace(0,1,Lt_int)
         t_bas = np.linspace(0,1,L)
         ibasis = np.zeros((len(t_int), B))
@@ -102,12 +104,17 @@ class LinearBasisImpulses(Component):
             ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
 
         # Normalize so that the interpolated basis has volume 1
-        if self.prms['basis']['norm']:
-            ibasis = ibasis / self.prms['dt_max']
+        if self.imp_model['basis']['norm']:
+            ibasis = ibasis / self.imp_model['dt_max']
         # Normalize so that the interpolated basis has unit L1 norm
 #         if self.prms['basis']['norm']:
 #             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
-        self.ibasis.set_value(ibasis)
+        self.ibasis = theano.shared(value=ibasis)
+
+    def preprocess_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        ibasis = self.ibasis.get_value()
 
         # Project the presynaptic spiking onto the basis
         nT,Ns = data["S"].shape
@@ -120,26 +127,30 @@ class LinearBasisImpulses(Component):
         (nT,Nc,B) = fS.shape
         assert Nc == self.N, "ERROR: Convolution with spike train " \
                              "resulted in incorrect shape: %s" % str(fS.shape)
-        self.ir.set_value(fS)
+        data['fS'] = fS
+
+    def set_data(self, data):
+        self.ir.set_value(data['fS'])
 
 class NormalizedBasisImpulses(Component):
     """ Normalized impulse response functions. Here we make use of Theano's
         broadcasting to sum up the currents from each presynaptic neuron.
     """
     def __init__(self, model):
-        self.prms = model['impulse']
+        self.model = model
+        self.imp_model = model['impulse']
 
         # Number of presynaptic neurons
         self.N = model['N']
 
         # Get parameters of the prior
-        self.alpha = self.prms['alpha']
+        self.alpha = self.imp_model['alpha']
 
         # Create a basis for the impulse responses response
-        self.basis = create_basis(self.prms['basis'])
+        self.basis = create_basis(self.imp_model['basis'])
         (_,self.B) = self.basis.shape
         # The basis is interpolated once the data is specified
-        self.ibasis = theano.shared(value=np.zeros((2,self.B)))
+        self.initialize_basis()
 
         # Initialize memory for the filtered spike train
         self.ir = theano.shared(name='ir',
@@ -201,29 +212,29 @@ class NormalizedBasisImpulses(Component):
         return {'impulse' : self.impulse,
                 'basis' : self.ibasis}
 
-    def set_data(self, data):
-        """ Set the shared memory variables that depend on the data
-        """
+    def initialize_basis(self):
         # Interpolate basis at the resolution of the data
-        dt = data['dt']
+        dt = self.model['dt']
         (L,B) = self.basis.shape
-        Lt_int = self.prms['dt_max']/dt
+        Lt_int = self.imp_model['dt_max']/dt
         # t_int = np.linspace(0,1,Lt_int)
-        t_int = np.arange(0.0, self.prms['dt_max'], step=dt)
+        t_int = np.arange(0.0, self.imp_model['dt_max'], step=dt)
         # t_bas = np.linspace(0,1,L)
-        t_bas = np.linspace(0.0, self.prms['dt_max'], L)
+        t_bas = np.linspace(0.0, self.imp_model['dt_max'], L)
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
             ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
 
         # Normalize so that the interpolated basis has volume 1
-        if self.prms['basis']['norm']:
+        if self.imp_model['basis']['norm']:
             ibasis = ibasis / np.trapz(ibasis,t_int,axis=0)
-        # Normalize so that the interpolated basis has unit L1 norm
-#         if self.prms['basis']['norm']:
-#             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
-        self.ibasis.set_value(ibasis)
 
+        self.ibasis = theano.shared(value=ibasis)
+
+    def preprocess_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        ibasis = self.ibasis.get_value()
         # Project the presynaptic spiking onto the basis
         nT,Ns = data["S"].shape
         assert Ns == self.N, "ERROR: Spike train must be (TxN) " \
@@ -235,7 +246,10 @@ class NormalizedBasisImpulses(Component):
         (nT,Nc,B) = fS.shape
         assert Nc == self.N, "ERROR: Convolution with spike train " \
                              "resulted in incorrect shape: %s" % str(fS.shape)
-        self.ir.set_value(fS)
+        data['fS'] = fS
+
+    def set_data(self, data):
+        self.ir.set_value(data['fS'])
 
 class DirichletImpulses(Component):
     """ Normalized impulse response functions using a Dirichlet prior.
@@ -243,19 +257,20 @@ class DirichletImpulses(Component):
         so that they may be sampled separately.
     """
     def __init__(self, model):
-        self.prms = model['impulse']
+        self.model = model
+        self.imp_model = model['impulse']
 
         # Number of presynaptic neurons
         self.N = model['N']
 
         # Get parameters of the prior
-        self.alpha = self.prms['alpha']
+        self.alpha = self.imp_model['alpha']
 
         # Create a basis for the impulse responses response
-        self.basis = create_basis(self.prms['basis'])
+        self.basis = create_basis(self.imp_model['basis'])
         (_,self.B) = self.basis.shape
         # The basis is interpolated once the data is specified
-        self.ibasis = theano.shared(value=np.zeros((2,self.B)))
+        self.initialize_basis()
 
         # Initialize memory for the filtered spike train
         self.ir = theano.shared(name='ir',
@@ -341,29 +356,29 @@ class DirichletImpulses(Component):
         return {'impulse' : self.impulse,
                 'basis' : self.ibasis}
 
-    def set_data(self, data):
-        """ Set the shared memory variables that depend on the data
-        """
+    def initialize_basis(self):
         # Interpolate basis at the resolution of the data
-        dt = data['dt']
+        dt = self.model['dt']
         (L,B) = self.basis.shape
-        Lt_int = self.prms['dt_max']/dt
+        Lt_int = self.imp_model['dt_max']/dt
         # t_int = np.linspace(0,1,Lt_int)
-        t_int = np.arange(0.0, self.prms['dt_max'], step=dt)
+        t_int = np.arange(0.0, self.imp_model['dt_max'], step=dt)
         # t_bas = np.linspace(0,1,L)
-        t_bas = np.linspace(0.0, self.prms['dt_max'], L)
+        t_bas = np.linspace(0.0, self.imp_model['dt_max'], L)
         ibasis = np.zeros((len(t_int), B))
         for b in np.arange(B):
             ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
 
         # Normalize so that the interpolated basis has volume 1
-        if self.prms['basis']['norm']:
+        if self.imp_model['basis']['norm']:
             ibasis = ibasis / np.trapz(ibasis,t_int,axis=0)
-        # Normalize so that the interpolated basis has unit L1 norm
-#         if self.prms['basis']['norm']:
-#             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
-        self.ibasis.set_value(ibasis)
 
+        self.ibasis = theano.shared(value=ibasis)
+
+    def set_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        ibasis = self.ibasis.get_value()
         # Project the presynaptic spiking onto the basis
         nT,Ns = data["S"].shape
         assert Ns == self.N, "ERROR: Spike train must be (TxN) " \
@@ -377,20 +392,20 @@ class DirichletImpulses(Component):
                              "resulted in incorrect shape: %s" % str(fS.shape)
         self.ir.set_value(fS)
 
-
 class ExponentialImpulses(Component):
     """ Exponential impulse response functions. Here we make use of Theano's
         broadcasting to sum up the currents from each presynaptic neuron.
     """
     def __init__(self, model):
-        self.prms = model['impulse']
+        self.model = model
+        self.imp_model = model['impulse']
 
         # Number of presynaptic neurons
         self.N = model['N']
 
         # Get parameters of the prior
-        self.tau0 = self.prms['tau0']
-        self.sigma = self.prms['sigma']
+        self.tau0 = self.imp_model['tau0']
+        self.sigma = self.imp_model['sigma']
 
         # Impulse responses are parameterized by a time constant tau
         self.taus = T.dvector('taus_ir')
@@ -459,15 +474,18 @@ class ExponentialImpulses(Component):
         return {'impulse' : self.impulse,
                 'I_imp' : self.I_imp}
 
-    def set_data(self, data):
+    def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
         # Set data
         self.S.set_value(data['S'])
 
         # Set t_ir, the time delta for each impulse bin
-        N_ir = self.prms['dt_max'] / data['dt']
+        N_ir = self.imp_model['dt_max'] / data['dt']
         t_ir = data['dt']*np.arange(N_ir)
-        #t_ir = np.reshape(t_ir, (N_ir, 1))
-        self.t_ir.set_value(t_ir)
+
+        data['t_ir'] = t_ir
+
+    def set_data(self, data):
+        self.t_ir.set_value(data['t_ir'])
 

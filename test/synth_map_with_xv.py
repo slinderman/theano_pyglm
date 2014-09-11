@@ -5,12 +5,12 @@ import copy
 
 import numpy as np
 
-from pyglm.inference import coord_descent
-from pyglm.plotting import plot_results
-from synth_harness import initialize_test_harness, get_xv_models
-from models.model_factory import make_model
+from pyglm.inference.coord_descent import coord_descent
+from pyglm.plotting.plot_results import plot_results
 from pyglm.utils.io import segment_data
+from pyglm.models.model_factory import make_model
 
+from synth_harness import initialize_test_harness, get_xv_models
 
 def run_synth_test():
     """ Run a test with synthetic data and MAP inference with cross validation
@@ -18,7 +18,7 @@ def run_synth_test():
     options, popn, data, popn_true, x_true = initialize_test_harness()
     
     # Get the list of models for cross validation
-    base_model = make_model(options.model, N=data['N'])
+    base_model = make_model(options.model, N=data['N'], dt=0.001)
     models = get_xv_models(base_model)
 
     # TODO Segment data into training and cross validation sets
@@ -26,9 +26,13 @@ def run_synth_test():
     T_split = data['T'] * train_frac
     train_data = segment_data(data, (0,T_split))
     xv_data = segment_data(data, (T_split,data['T']))
-    
+
+    # Preprocess the data sequences
+    train_data = popn.preprocess_data(train_data)
+    xv_data = popn.preprocess_data(xv_data)
+
     # Sample random initial state
-    x0 = popn.sample(None)
+    x0 = popn.sample()
 
     # Track the best model and parameters
     best_ind = -1
@@ -53,7 +57,7 @@ def run_synth_test():
                               use_hessian=False,
                               use_rop=False)
         ll_train = popn.compute_log_p(x_inf)
-        print "Training LL_inf: %f" % ll_train
+        print "Training LP_inf: %f" % ll_train
         train_lls[i] = ll_train
 
         
@@ -66,7 +70,7 @@ def run_synth_test():
         # Compute log lkhd on total dataset
         popn.set_data(data)
         ll_total = popn.compute_ll(x_inf)
-        print "Tota LL: %f" % ll_total
+        print "Total LL: %f" % ll_total
         total_lls[i] = ll_total
 
         # Update best model

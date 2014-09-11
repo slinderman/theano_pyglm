@@ -13,8 +13,7 @@ class Glm(Component):
         """
         # Define the Poisson regression model
         self.n = T.lscalar('n')
-        self.dt = theano.shared(name='dt',
-                                value=1.0)
+        self.dt = theano.shared(name='dt', value=model['dt'])
         self.S = theano.shared(name='S',
                                value=np.zeros((1, model['N'])))
 
@@ -85,7 +84,13 @@ class Glm(Component):
         state['imp']  = self.imp_model.get_state()
         state['nlin'] = self.nlin_model.get_state()
         return state
-    
+
+    def preprocess_data(self, data):
+        self.bias_model.preprocess_data(data)
+        self.bkgd_model.preprocess_data(data)
+        self.imp_model.preprocess_data(data)
+        self.nlin_model.preprocess_data(data)
+
     def set_data(self, data):
         """ Update the shared memory where the data is stored
         """
@@ -94,7 +99,7 @@ class Glm(Component):
         else:
             self.S.set_value(np.zeros_like(data["stim"]))
 
-        self.dt.set_value(data["dt"])
+        # self.dt.set_value(data["dt"])
 
         self.bkgd_model.set_data(data)
         self.imp_model.set_data(data)

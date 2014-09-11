@@ -81,6 +81,7 @@ class LatentVariables(Component):
 
 class LatentType(Component):
     def __init__(self, model):
+        # TODO: Get the global model
         self.prms = model
         self.name = self.prms['name']
 
@@ -148,6 +149,9 @@ class LatentTypeWithTuningCurve(LatentType):
         # Save the filter sizes
         self.Bx = Bx
         self.Bt = Bt
+
+        # Initialize interpolated bases
+        self.initialize_basis()
 
         # Initialize RxBx and RxBt matrices for the per-type tuning curves
         self.w_x = T.dmatrix('w_x')
@@ -218,9 +222,9 @@ class LatentTypeWithTuningCurve(LatentType):
                   str(self.w_t) : w_t})
         return s
 
-    def set_data(self, data):
+    def initialize_basis(self):
         # Interpolate stimulus at the resolution of the data
-        dt = data['dt']
+        dt = self.model['dt']
 
         # Interpolate the temporal basis at the resolution of the data
         (Lt,Bt) = self.temporal_basis.shape

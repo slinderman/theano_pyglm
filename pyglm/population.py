@@ -16,6 +16,9 @@ class Population:
         self.model = model
         self.N = model['N']
 
+        # Initialize a list of data sequences
+        self.data_sequences = []
+
         # Initialize latent variables of the population
         self.latent = LatentVariables(model)
 
@@ -32,21 +35,12 @@ class Population:
         """ Compute the log joint probability under a given set of variables
         """
         lp = 0.0
-
-        # Get set of symbolic variables
-        # syms = self.get_variables()
-        #
-        # lp += seval(self.network.log_p,
-        #             syms['net'],
-        #             vars['net'])
-        # for n in range(self.N):
-        #     nvars = self.extract_vars(vars, n)
-        #     lp += seval(self.glm.log_p,
-        #                 syms,
-        #                 nvars)
-
-        lp += self.compute_ll(vars)
         lp += self.compute_log_prior(vars)
+
+        # Add the likelihood of each data sequence
+        for data in self.data_sequences:
+            self.set_data(data)
+            lp += self.compute_ll(vars)
 
         return lp
 
@@ -82,6 +76,7 @@ class Population:
         # Get set of symbolic variables
         syms = self.get_variables()
 
+        # Add the likelihood from each GLM
         for n in range(self.N):
             nvars = self.extract_vars(vars, n)
             ll += seval(self.glm.ll,
@@ -189,15 +184,53 @@ class Population:
 
         return state
 
+    def preprocess_data(self, data):
+        """
+        Preprocess the data to compute filtered stimuli, spike trains, etc.
+        """
+        assert isinstance(data, dict), 'Data must be a dictionary'
+        self.latent.preprocess_data(data)
+        self.network.preprocess_data(data)
+        self.glm.preprocess_data(data)
+        data['preprocessed'] = True
+        return data
+
+    def add_data(self, data, set_as_current_data=True):
+        """
+        Add another data sequence to the population. Recursively call components
+        to prepare the new data sequence. E.g. the background model may preprocess
+        the stimulus with a set of basis filters.
+        """
+        # TODO: Figure out how to handle time varying weights with multiple
+        # data sequences. Maybe we only allow one sequence.
+
+        assert isinstance(data, dict), 'Data must be a dictionary'
+
+        # Check for spike times in the data array
+        assert 'S' in data, 'Data must contain an array of spike times'
+        assert isinstance(data['S'], np.ndarray), 'Spike times must be a numpy array'
+
+        if 'preprocessed' not in data or  not data['preprocessed']:
+            data = self.preprocess_data(data)
+
+        # Add the data to the list
+        self.data_sequences.append(data)
+
+        # By default, we set this as the current dataset
+        if set_as_current_data:
+            self.set_data(data)
+
     def set_data(self, data):
         """
         Condition on the data
         """
+        assert 'preprocessed' in data and data['preprocessed'] == True, \
+            'Data must be preprocessed before it can be set'
         self.latent.set_data(data)
         self.network.set_data(data)
         self.glm.set_data(data)
 
-    def simulate(self, vars,  (T_start,T_stop), dt):
+    def simulate(self, vars, (T_start,T_stop), dt, stim, dt_stim):
         """ Simulate spikes from a network of coupled GLMs
         :param vars - the variables corresponding to each GLM
         :type vars    list of N variable vectors
@@ -224,13 +257,19 @@ class Population:
                            nvars)
 
         # Add stimulus induced currents if given
+        temp_data = {'S' : np.zeros((nT, N)),
+                     'stim' : stim,
+                     'dt_stim': dt_stim}
+        self.add_data(temp_data)
         for n in np.arange(N):
             nvars = self.extract_vars(vars, n)
             X[:,n] += seval(self.glm.bkgd_model.I_stim,
                             syms,
                             nvars)
-
         print "Max background rate: %s" % str(self.glm.nlin_model.f_nlin(np.amax(X)))
+
+        # Remove the temp data from the population data sequences
+        self.data_sequences.pop()
 
         # Get the impulse response functions
         imps = []
@@ -275,8 +314,6 @@ class Population:
             if np.mod(t,10000)==0:
                 print "Iteration %d" % t
             # TODO Handle nonlinearities with variables
-            #lam = np.array(map(lambda n: self.glm.nlin_model.f_nlin(X[t,n]),
-            #               np.arange(N)))
             lam = self.glm.nlin_model.f_nlin(X[t,:])
             acc = acc + lam*dt
 
@@ -308,8 +345,6 @@ class Population:
             max_spks_per_bin = 10
             while n_spk > 0:
                 if np.any(S[t,:] >= max_spks_per_bin):
-                    #print "Limiting to at most %d spikes in time bin %d" % \
-                    #      (max_spks_per_bin, t)
                     n_exceptions += 1
                     break
                 # Add weighted impulse response to activation of other neurons)
@@ -345,7 +380,6 @@ class Population:
 
         print "Sampled %s spikes." % str(nS)
         print "Expected %s spikes." % str(E_nS)
-        # import pdb; pdb.set_trace()
 
         if np.any(np.abs(nS-E_nS) > 3*np.sqrt(E_nS)):
             print "ERROR: Actual num spikes (%s) differs from expected (%s) by >3 std." % (str(nS),str(E_nS))
