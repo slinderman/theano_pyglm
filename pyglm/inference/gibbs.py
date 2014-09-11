@@ -497,7 +497,9 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
         # Compute the log likelihood for each data sequence
         for data in self.population.data_sequences:
             self.population.set_data(data)
-            # TODO
+            lp += seval(self.glm_ll,
+                   self.syms,
+                   x_all)
 
         return lp
 
@@ -511,14 +513,16 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
         # Extract the glm parameters
         x_imp = unpackdict(x_vec, self.glm_shapes)
         set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
-        glp = seval(self.g_glm_logp_wrt_imp,
+        glp = seval(self.g_glm_logprior_wrt_imp,
                     self.syms,
                     x_all)
 
         # Compute the log likelihood for each data sequence
         for data in self.population.data_sequences:
             self.population.set_data(data)
-            # TODO
+            glp = seval(self.g_glm_ll_wrt_imp,
+                    self.syms,
+                    x_all)
         return glp
 
     def update(self, x, n):
