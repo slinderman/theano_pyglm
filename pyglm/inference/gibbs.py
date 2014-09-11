@@ -59,105 +59,105 @@ class ParallelMetropolisHastingsUpdate(MetropolisHastingsUpdate):
         """
         pass
 
-class HmcGlmUpdate(ParallelMetropolisHastingsUpdate):
-    """
-    Update the continuous and unconstrained GLM parameters using Hamiltonian
-    Monte Carlo. Stochastically follow the gradient of the parameters using
-    Hamiltonian dynamics.
-    """
-    def __init__(self):
-        super(HmcGlmUpdate, self).__init__()
-
-        self.avg_accept_rate = 0.9
-        self.step_sz = 0.05
-
-    def preprocess(self, population):
-        """ Initialize functions that compute the gradient and Hessian of
-            the log probability with respect to the differentiable GLM
-            parameters, e.g. the weight matrix if it exists.
-        """
-        self.population = population
-        self.glm = population.glm
-        self.syms = population.get_variables()
-        self.glm_syms = differentiable(self.syms['glm'])
-
-        # Compute gradients of the log prob wrt the GLM parameters
-        self.glm_logp = self.glm.log_p
-        self.g_glm_logp_wrt_glm, _ = grad_wrt_list(self.glm_logp,
-                                                   _flatten(self.glm_syms))
-
-        # Get the shape of the parameters from a sample of variables
-        self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm'],
-                                     self.glm_syms)
-
-    def _glm_logp(self, x_vec, x_all):
-        """
-        Compute the log probability (or gradients and Hessians thereof)
-        of the given GLM variables. We also need the rest of the population variables,
-        i.e. those that are not being sampled currently, in order to evaluate the log
-        probability.
-        """
-        # Extract the glm parameters
-        x_glm = unpackdict(x_vec, self.glm_shapes)
-        set_vars(self.glm_syms, x_all['glm'], x_glm)
-        lp = seval(self.glm_logp,
-                   self.syms,
-                   x_all)
-        return lp
-
-    def _grad_glm_logp(self, x_vec, x_all):
-        """
-        Compute the negative log probability (or gradients and Hessians thereof)
-        of the given GLM variables. We also need the rest of the population variables,
-        i.e. those that are not being sampled currently, in order to evaluate the log
-        probability.
-        """
-        # Extract the glm parameters
-        x_glm = unpackdict(x_vec, self.glm_shapes)
-        set_vars(self.glm_syms, x_all['glm'], x_glm)
-        glp = seval(self.g_glm_logp_wrt_glm,
-                    self.syms,
-                    x_all)
-        return glp
-
-    def update(self, x, n):
-        """ Gibbs sample the GLM parameters. These are mostly differentiable
-            so we use HMC wherever possible.
-        """
-
-        xn = self.population.extract_vars(x, n)
-
-        # Get the differentiable variables suitable for HMC
-        dxn = get_vars(self.glm_syms, xn['glm'])
-        x_glm_0, shapes = packdict(dxn)
-
-        # Create lambda functions to compute the nll and its gradient
-        nll = lambda x_glm_vec: -1.0*self._glm_logp(x_glm_vec, xn)
-        grad_nll = lambda x_glm_vec: -1.0*self._grad_glm_logp(x_glm_vec, xn)
-
-        # HMC with automatic parameter tuning
-        n_steps = 2
-        x_glm, new_step_sz, new_accept_rate = hmc(nll,
-                                                  grad_nll,
-                                                  self.step_sz,
-                                                  n_steps,
-                                                  x_glm_0,
-                                                  adaptive_step_sz=True,
-                                                  avg_accept_rate=self.avg_accept_rate)
-
-        # Update step size and accept rate
-        self.step_sz = new_step_sz
-        self.avg_accept_rate = new_accept_rate
-        # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
-
-
-        # Unpack the optimized parameters back into the state dict
-        x_glm_n = unpackdict(x_glm, shapes)
-        set_vars(self.glm_syms, xn['glm'], x_glm_n)
-
-
-        x['glms'][n] = xn['glm']
-        return x
+# class HmcGlmUpdate(ParallelMetropolisHastingsUpdate):
+#     """
+#     Update the continuous and unconstrained GLM parameters using Hamiltonian
+#     Monte Carlo. Stochastically follow the gradient of the parameters using
+#     Hamiltonian dynamics.
+#     """
+#     def __init__(self):
+#         super(HmcGlmUpdate, self).__init__()
+#
+#         self.avg_accept_rate = 0.9
+#         self.step_sz = 0.05
+#
+#     def preprocess(self, population):
+#         """ Initialize functions that compute the gradient and Hessian of
+#             the log probability with respect to the differentiable GLM
+#             parameters, e.g. the weight matrix if it exists.
+#         """
+#         self.population = population
+#         self.glm = population.glm
+#         self.syms = population.get_variables()
+#         self.glm_syms = differentiable(self.syms['glm'])
+#
+#         # Compute gradients of the log prob wrt the GLM parameters
+#         self.glm_logp = self.glm.log_p
+#         self.g_glm_logp_wrt_glm, _ = grad_wrt_list(self.glm_logp,
+#                                                    _flatten(self.glm_syms))
+#
+#         # Get the shape of the parameters from a sample of variables
+#         self.glm_shapes = get_shapes(self.population.extract_vars(self.population.sample(),0)['glm'],
+#                                      self.glm_syms)
+#
+#     def _glm_logp(self, x_vec, x_all):
+#         """
+#         Compute the log probability (or gradients and Hessians thereof)
+#         of the given GLM variables. We also need the rest of the population variables,
+#         i.e. those that are not being sampled currently, in order to evaluate the log
+#         probability.
+#         """
+#         # Extract the glm parameters
+#         x_glm = unpackdict(x_vec, self.glm_shapes)
+#         set_vars(self.glm_syms, x_all['glm'], x_glm)
+#         lp = seval(self.glm_logp,
+#                    self.syms,
+#                    x_all)
+#         return lp
+#
+#     def _grad_glm_logp(self, x_vec, x_all):
+#         """
+#         Compute the negative log probability (or gradients and Hessians thereof)
+#         of the given GLM variables. We also need the rest of the population variables,
+#         i.e. those that are not being sampled currently, in order to evaluate the log
+#         probability.
+#         """
+#         # Extract the glm parameters
+#         x_glm = unpackdict(x_vec, self.glm_shapes)
+#         set_vars(self.glm_syms, x_all['glm'], x_glm)
+#         glp = seval(self.g_glm_logp_wrt_glm,
+#                     self.syms,
+#                     x_all)
+#         return glp
+#
+#     def update(self, x, n):
+#         """ Gibbs sample the GLM parameters. These are mostly differentiable
+#             so we use HMC wherever possible.
+#         """
+#
+#         xn = self.population.extract_vars(x, n)
+#
+#         # Get the differentiable variables suitable for HMC
+#         dxn = get_vars(self.glm_syms, xn['glm'])
+#         x_glm_0, shapes = packdict(dxn)
+#
+#         # Create lambda functions to compute the nll and its gradient
+#         nll = lambda x_glm_vec: -1.0*self._glm_logp(x_glm_vec, xn)
+#         grad_nll = lambda x_glm_vec: -1.0*self._grad_glm_logp(x_glm_vec, xn)
+#
+#         # HMC with automatic parameter tuning
+#         n_steps = 2
+#         x_glm, new_step_sz, new_accept_rate = hmc(nll,
+#                                                   grad_nll,
+#                                                   self.step_sz,
+#                                                   n_steps,
+#                                                   x_glm_0,
+#                                                   adaptive_step_sz=True,
+#                                                   avg_accept_rate=self.avg_accept_rate)
+#
+#         # Update step size and accept rate
+#         self.step_sz = new_step_sz
+#         self.avg_accept_rate = new_accept_rate
+#         # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
+#
+#
+#         # Unpack the optimized parameters back into the state dict
+#         x_glm_n = unpackdict(x_glm, shapes)
+#         set_vars(self.glm_syms, xn['glm'], x_glm_n)
+#
+#
+#         x['glms'][n] = xn['glm']
+#         return x
 
 
 class HmcBiasUpdate(ParallelMetropolisHastingsUpdate):
@@ -229,19 +229,22 @@ class HmcBiasUpdate(ParallelMetropolisHastingsUpdate):
                    self.syms,
                    x_all)
 
-        lp += seval(self.glm.ll,
-                    {'I_stim' : self.glm.bkgd_model.I_stim,
-                     'I_net' : self.glm.I_net,
-                     'bias' : self.bias_model.bias,
-                     'n' : self.glm.n
-                    },
-                    {'I_stim' : I_stim,
-                     'I_net' : I_net,
-                     'bias' : x_vec,
-                     'n' : x_all['glm']['n']
-                    }
-                    )
-        return lp
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += seval(self.glm.ll,
+                        {'I_stim' : self.glm.bkgd_model.I_stim,
+                         'I_net' : self.glm.I_net,
+                         'bias' : self.bias_model.bias,
+                         'n' : self.glm.n
+                        },
+                        {'I_stim' : I_stim,
+                         'I_net' : I_net,
+                         'bias' : x_vec,
+                         'n' : x_all['glm']['n']
+                        }
+                        )
+            return lp
 
     def _grad_glm_logp(self, x_vec, x_all, I_stim, I_net):
         """
@@ -261,18 +264,21 @@ class HmcBiasUpdate(ParallelMetropolisHastingsUpdate):
                    self.syms,
                    x_all)
 
-        glp += seval(self.g_glm_ll_wrt_bias,
-                    {'I_stim' : self.glm.bkgd_model.I_stim,
-                     'I_net' : self.glm.I_net,
-                     'bias' : self.bias_model.bias,
-                     'n' : self.glm.n
-                    },
-                    {'I_stim' : I_stim,
-                     'I_net' : I_net,
-                     'bias' : x_vec,
-                     'n' : x_all['glm']['n']
-                    }
-                    )
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            glp += seval(self.g_glm_ll_wrt_bias,
+                        {'I_stim' : self.glm.bkgd_model.I_stim,
+                         'I_net' : self.glm.I_net,
+                         'bias' : self.bias_model.bias,
+                         'n' : self.glm.n
+                        },
+                        {'I_stim' : I_stim,
+                         'I_net' : I_net,
+                         'bias' : x_vec,
+                         'n' : x_all['glm']['n']
+                        }
+                        )
 
         return glp
 
@@ -307,15 +313,6 @@ class HmcBiasUpdate(ParallelMetropolisHastingsUpdate):
         self.step_sz = new_step_sz
         self.avg_accept_rate = new_accept_rate
         # print "GLM step sz: %.3f\tGLM_accept rate: %.3f" % (new_step_sz, new_accept_rate)
-        # x_bias = hmc(nll,
-        #              grad_nll,
-        #              self.step_sz,
-        #              self.n_steps,
-        #              x_glm_0)
-
-        # Unpack the optimized parameters back into the state dict
-        # x_bias_n = unpackdict(x_bias, shapes)
-        # set_vars(self.bias_syms, xn['glm']['bias'], x_bias_n)
 
         xn['glm']['bias']['bias'] = x_bias
         x['glms'][n] = xn['glm']
@@ -347,8 +344,12 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
         self.bkgd_syms = differentiable(self.syms['glm']['bkgd'])
 
         # Compute gradients of the log prob wrt the GLM parameters
-        self.glm_logp = self.glm.log_p
-        self.g_glm_logp_wrt_bkgd, _ = grad_wrt_list(self.glm_logp,
+        self.glm_logprior = self.glm.log_prior
+        self.g_glm_logprior_wrt_bkgd, _ = grad_wrt_list(self.glm_logprior,
+                                                   _flatten(self.bkgd_syms))
+
+        self.glm_ll = self.glm.ll
+        self.g_glm_ll_wrt_bkgd, _ = grad_wrt_list(self.glm_ll,
                                                    _flatten(self.bkgd_syms))
 
         # Get the shape of the parameters from a sample of variables
@@ -365,9 +366,17 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
         # Extract the glm parameters
         x_imp = unpackdict(x_vec, self.glm_shapes)
         set_vars(self.bkgd_syms, x_all['glm']['bkgd'], x_imp)
-        lp = seval(self.glm_logp,
+        lp = seval(self.glm_logprior,
                    self.syms,
                    x_all)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += seval(self.glm_ll,
+                        self.syms,
+                        x_all)
+
         return lp
 
     def _grad_glm_logp(self, x_vec, x_all):
@@ -380,9 +389,17 @@ class HmcBkgdUpdate(ParallelMetropolisHastingsUpdate):
         # Extract the glm parameters
         x_imp = unpackdict(x_vec, self.glm_shapes)
         set_vars(self.bkgd_syms, x_all['glm']['bkgd'], x_imp)
-        glp = seval(self.g_glm_logp_wrt_bkgd,
+        glp = seval(self.g_glm_logprior_wrt_bkgd,
                     self.syms,
                     x_all)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            glp = seval(self.g_glm_ll_wrt_bkgd,
+                        self.syms,
+                        x_all)
+
         return glp
 
     def update(self, x, n):
@@ -451,8 +468,12 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
         self.impulse_syms = differentiable(self.syms['glm']['imp'])
 
         # Compute gradients of the log prob wrt the GLM parameters
-        self.glm_logp = self.glm.log_p
-        self.g_glm_logp_wrt_imp, _ = grad_wrt_list(self.glm_logp,
+        self.glm_logprior = self.glm.log_prior
+        self.g_glm_logprior_wrt_imp, _ = grad_wrt_list(self.glm_logprior,
+                                                   _flatten(self.impulse_syms))
+
+        self.glm_ll = self.glm.ll
+        self.g_glm_ll_wrt_imp, _ = grad_wrt_list(self.glm_ll,
                                                    _flatten(self.impulse_syms))
 
         # Get the shape of the parameters from a sample of variables
@@ -469,9 +490,15 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
         # Extract the glm parameters
         x_imp = unpackdict(x_vec, self.glm_shapes)
         set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
-        lp = seval(self.glm_logp,
+        lp = seval(self.glm_logprior,
                    self.syms,
                    x_all)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            # TODO
+
         return lp
 
     def _grad_glm_logp(self, x_vec, x_all):
@@ -487,6 +514,11 @@ class HmcImpulseUpdate(ParallelMetropolisHastingsUpdate):
         glp = seval(self.g_glm_logp_wrt_imp,
                     self.syms,
                     x_all)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            # TODO
         return glp
 
     def update(self, x, n):
@@ -625,7 +657,11 @@ class HmcDirichletImpulseUpdate(ParallelMetropolisHastingsUpdate):
 
 
         lp = seval(self.glm.imp_model.log_p, s, xv)
-        lp += seval(self.glm.ll, s, xv)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += seval(self.glm.ll, s, xv)
 
 
         # set_vars(self.impulse_syms, x_all['glm']['imp'], x_imp)
@@ -672,8 +708,12 @@ class HmcDirichletImpulseUpdate(ParallelMetropolisHastingsUpdate):
             else:
                 xv[g_sym.name] = x_all['glm']['imp'][g_sym.name]
 
-        glp = seval(self.grad_lls_wrt_imp[n], s, xv)
-        glp += seval(self.grad_priors_wrt_imp[n], s, xv)
+        glp = seval(self.grad_priors_wrt_imp[n], s, xv)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            glp += seval(self.grad_lls_wrt_imp[n], s, xv)
 
         # glp = seval(self.grads_wrt_imp[n],
         #             self.syms,
@@ -851,7 +891,12 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               'nlin' : x['glms'][n_post]['nlin']
              }
 
-        ll = seval(self.glm.ll, s, xv)
+        # Compute the log likelihood for each data sequence
+        ll = 0
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            ll += seval(self.glm.ll, s, xv)
+
         # Reset A and W
         A[n_pre, n_post] = A_init
         W[n_pre, n_post] = W_init
@@ -878,7 +923,12 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               'nlin' : x['glms'][n_post]['nlin']
              }
 
-        ll = seval(self.glm.ll, s, xv)
+        # Compute the log likelihood for each data sequence
+        ll = 0
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            ll += seval(self.glm.ll, s, xv)
+
         return ll
 
     def _glm_ll_noA(self, n_pre, n_post, x, I_bias, I_stim, I_imp):
@@ -910,7 +960,11 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               'nlin' : x['glms'][n_post]['nlin']
              }
 
-        ll = seval(self.glm.ll, s, xv)
+        # Compute the log likelihood for each data sequence
+        ll = 0
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            ll += seval(self.glm.ll, s, xv)
         A[n_pre, n_post] = A_init
 
         return ll
@@ -1210,7 +1264,7 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         self.syms = population.get_variables()
 
         self.g_netlp_wrt_W = T.grad(self.network.log_p, self.syms['net']['weights']['W'])
-        self.g_glmlp_wrt_W = T.grad(self.glm.ll, self.syms['net']['weights']['W'])
+        self.g_glmll_wrt_W = T.grad(self.glm.ll, self.syms['net']['weights']['W'])
 
 
     def _precompute_currents(self, x, n_post):
@@ -1260,7 +1314,10 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               I_imp] + \
             _flatten(x['glms'][n_post]['nlin'])
 
-        lp += self.glm.ll.eval(dict(zip(s, xv)))
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += self.glm.ll.eval(dict(zip(s, xv)))
 
         return lp
 
@@ -1293,7 +1350,10 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               I_imp] + \
              _flatten(x['glms'][n_post]['nlin'])
 
-        lp += self.glm.ll.eval(dict(zip(s, xv)))
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += self.glm.ll.eval(dict(zip(s, xv)))
 
         return lp
 
@@ -1325,10 +1385,12 @@ class GibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
               I_imp] + \
              _flatten(x['glms'][n_post]['nlin'])
 
-        g_lp += seval(self.g_glmlp_wrt_W,
-                      dict(zip(range(len(s)), s)),
-                      dict(zip(range(len(xv)),xv)))
-        # g_lp += self.g_glmlp_wrt_W.eval(dict(zip(s, xv)))
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            g_lp += seval(self.g_glmll_wrt_W,
+                          dict(zip(range(len(s)), s)),
+                          dict(zip(range(len(xv)),xv)))
 
         # Ignore gradients wrt columns other than n_post
         g_mask = np.zeros((self.N,self.N))
@@ -1906,23 +1968,31 @@ class LatentTypeUpdate(MetropolisHastingsUpdate):
         # # Compute the log probability and its gradients, taking into
         # # account the prior and the likelihood of any consumers of the
         # # location.
-        # self.log_p = self.location.log_p
-        self.log_lkhd = T.constant(0.)
 
         from pyglm.components.graph import StochasticBlockGraphModel
         if isinstance(population.network.graph, StochasticBlockGraphModel):
-            self.log_lkhd += population.network.graph.log_p
+            self.net_log_lkhd = population.network.graph.log_p
+        else:
+            self.net_log_lkhd = T.constant(0.)
 
         from pyglm.components.bkgd import SharedTuningCurveStimulus
         if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
-            self.log_lkhd += population.glm.log_p
+            self.glm_log_lkhd = population.glm.ll
+        else:
+            self.glm_log_lkhd = T.constant(0.)
 
     def _lp_L(self, latent_type, Y, x, n):
         # Set Yin state dict x
         xn = self.population.extract_vars(x, n)
         set_vars('Y', xn['latent'][latent_type.name], Y.ravel())
         lp = seval(latent_type.log_p, self.syms, xn)
-        lp += seval(self.log_lkhd, self.syms, xn)
+        lp += seval(self.net_log_lkhd, self.syms, xn)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += seval(self.glm_log_lkhd, self.syms, xn)
+
         return lp
 
     def update(self, x):
@@ -1982,22 +2052,31 @@ class LatentLocationAndTypeUpdate(MetropolisHastingsUpdate):
         # # account the prior and the likelihood of any consumers of the
         # # location.
         # self.log_p = self.location.log_p
-        self.log_lkhd = T.constant(0.)
 
         from pyglm.components.graph import StochasticBlockGraphModel
         if isinstance(population.network.graph, StochasticBlockGraphModel):
-            self.log_lkhd += population.network.graph.log_p
+            self.net_log_lkhd = population.network.graph.log_p
+        else:
+            self.net_log_lkhd = T.constant(0.)
 
         from pyglm.components.bkgd import SharedTuningCurveStimulus
         if isinstance(population.glm.bkgd_model, SharedTuningCurveStimulus):
-            self.log_lkhd += population.glm.log_p
+            self.glm_log_lkhd = population.glm.ll
+        else:
+            self.glm_log_lkhd = T.constant(0.)
 
     def _lp_L(self, latent_type, Y, x, n):
         # Set Yin state dict x
         xn = self.population.extract_vars(x, n)
         set_vars('Y', xn['latent'][latent_type.name], Y.ravel())
         lp = seval(latent_type.log_p, self.syms, xn)
-        lp += seval(self.log_lkhd, self.syms, xn)
+        lp += seval(latent_type.net_log_lkhd, self.syms, xn)
+
+        # Compute the log likelihood for each data sequence
+        for data in self.population.data_sequences:
+            self.population.set_data(data)
+            lp += seval(self.glm_log_lkhd, self.syms, xn)
+
         return lp
 
     def update(self, x):
@@ -2173,9 +2252,10 @@ class SharedTuningCurveUpdate(MetropolisHastingsUpdate):
             }
             xv.update(xn['latent'])
 
-            # Compute this GLM's log likelihood
-            # lp += seval(self.log_lkhd, self.syms, xn)
-            lp += seval(self.log_lkhd, s, xv)
+            # Compute the GLM log likelihood for each data sequence
+            for data in self.population.data_sequences:
+                self.population.set_data(data)
+                lp += seval(self.log_lkhd, s, xv)
 
         return lp
 
@@ -2217,7 +2297,10 @@ class SharedTuningCurveUpdate(MetropolisHastingsUpdate):
             }
             xv.update(xn['latent'])
 
-            g_lp += seval(self.g_log_lkhd_wrt_wx, s, xv)
+            # Compute the GLM log likelihood for each data sequence
+            for data in self.population.data_sequences:
+                self.population.set_data(data)
+                g_lp += seval(self.g_log_lkhd_wrt_wx, s, xv)
 
         return g_lp
 
@@ -2257,9 +2340,10 @@ class SharedTuningCurveUpdate(MetropolisHastingsUpdate):
             }
             xv.update(xn['latent'])
 
-            g_lp += seval(self.g_log_lkhd_wrt_wt, s, xv)
-
-            # g_lp += seval(self.g_log_lkhd_wrt_wt, self.syms, xn)
+            # Compute the GLM log likelihood for each data sequence
+            for data in self.population.data_sequences:
+                self.population.set_data(data)
+                g_lp += seval(self.g_log_lkhd_wrt_wt, s, xv)
 
         return g_lp
 

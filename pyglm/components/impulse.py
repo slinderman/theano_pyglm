@@ -375,7 +375,7 @@ class DirichletImpulses(Component):
 
         self.ibasis = theano.shared(value=ibasis)
 
-    def set_data(self, data):
+    def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
         ibasis = self.ibasis.get_value()
@@ -390,7 +390,11 @@ class DirichletImpulses(Component):
         (nT,Nc,B) = fS.shape
         assert Nc == self.N, "ERROR: Convolution with spike train " \
                              "resulted in incorrect shape: %s" % str(fS.shape)
-        self.ir.set_value(fS)
+
+        data['fS'] = fS
+
+    def set_data(self, data):
+        self.ir.set_value(data['fS'])
 
 class ExponentialImpulses(Component):
     """ Exponential impulse response functions. Here we make use of Theano's

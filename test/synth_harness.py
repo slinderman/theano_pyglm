@@ -23,6 +23,8 @@ def initialize_test_harness():
     stabilize_sparsity(model)
     popn = Population(model)
     popn.add_data(data)
+    popn.add_data(data)
+    popn.add_data(data)
 
     # Initialize the GLM with the data
     popn_true = None
