@@ -18,9 +18,7 @@ def run_synth_test():
     print "LL0: %f" % ll0
 
     # Perform inference
-    x_inf = coord_descent(popn, data, x0=x0, maxiter=1,
-                          use_hessian=False,
-                          use_rop=False)
+    x_inf = coord_descent(popn, data, x0=x0, maxiter=1)
     ll_inf = popn.compute_log_p(x_inf)
     print "LL_inf: %f" % ll_inf
 
