@@ -17,8 +17,8 @@ stim = data['stim']
 spks = data['S']
 
 # Plot the STA at various lags
-maxlag = 30
-lags_to_plot = np.arange(maxlag, step=5)
+maxlag = 100
+lags_to_plot = np.arange(maxlag, step=20)
 
 
 # Downsample the spikes to the resolution of the stimulus
@@ -41,13 +41,15 @@ s_max = np.amax(abs(s.reshape((N,-1))), axis=1)
 plt.figure()
 for n in range(min(N,5)):
     for j,l in enumerate(lags_to_plot):
-        plt.subplot(N,len(lags_to_plot), n*len(lags_to_plot) + j + 1)
-        # plt.title('N: %d, Lag: %d' % (n, j))
+        plt.subplot(min(N,5),len(lags_to_plot), n*len(lags_to_plot) + j + 1)
+        plt.title('N: %d, Lag: %d' % (n, j))
         plt.imshow(np.kron(s[n,l,:].reshape((10,10)), np.ones((10,10))),
                    vmin=-s_max[n], vmax=s_max[n],
                    cmap='RdGy')
-        plt.xlabel(None)
-        plt.ylabel(None)
+        plt.xlabel()
+        plt.ylabel()
+        plt.xticks([])
+        plt.yticks([])
 
         if j == len(lags_to_plot) - 1:
             plt.colorbar()
