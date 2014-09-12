@@ -2506,9 +2506,9 @@ def gibbs_sample(population,
             # networks to weighted networks with normalized impulse responses.
             x0 = convert_model(mle_popn, mle_model, mle_x0, population, population.model, x0)
 
-    # TODO: Move this to a better place
-    from pyglm.inference.smart_init import initialize_locations_by_correlation
-    initialize_locations_by_correlation(population, x0)
+    # # TODO: Move this to a better place
+    # from pyglm.inference.smart_init import initialize_locations_by_correlation
+    # initialize_locations_by_correlation(population, x0)
 
     # Create updates for this population
     serial_updates, parallel_updates = initialize_updates(population)
