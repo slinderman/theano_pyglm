@@ -295,6 +295,9 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
             locsi, locsj = np.unravel_index(loc_max, stim_x.shape)
             locs[n,0], locs[n,1] = locsi.ravel(), locsj.ravel()
 
+            # # TODO: Test whether we have an issue with unraveling the data.
+            # locs[n,0], locs[n,1] = locsj.ravel(), locsi.ravel()
+
         # Get the stimulus response in the vicinity of the mode
         # Create a meshgrid of the correct shape, centered around the max
         max_rb = to_model['latent']['latent_location']['location_prior']['max0']

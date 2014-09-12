@@ -415,7 +415,11 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
     plt.plot(tt[T_lim], s_glm['lam'][T_lim],
              color=color)
     plt.hold(True)
-    
+
+    # TODO: DEBUG
+    plt.plot(tt[T_lim], s_glm['bkgd']['I_stim_xt'][T_lim], color=color)
+
+
     if s_glm_std is not None:
         # Make a shaded patch for the error bars
         from matplotlib.patches import Polygon
