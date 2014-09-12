@@ -419,8 +419,13 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plo
     if plot_currents:
         # Plot constituent currents
         gray = np.array([0.5, 0.5, 0.5])
+
+        if np.isscalar(s_glm['I_bias']):
+            plt.plot(tt[T_lim], s_glm['I_bias']*np.ones_like(tt[T_lim]), color=gray, linestyle='--')
+        else:
+            plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=gray, linestyle='--')
+
         plt.plot(tt[T_lim], s_glm['I_bkgd'][T_lim], color=gray, linestyle=':')
-        plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=gray, linestyle='--')
         plt.plot(tt[T_lim], s_glm['I_net'][T_lim], color=gray, linestyle='.-')
 
 
