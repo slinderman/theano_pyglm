@@ -193,7 +193,6 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
     # Idea: Get the state of the GLMs, e.g. the impulse responses, etc.
     #       Project those states onto the parameters of the to-model
     N = from_popn.N
-    # import pdb; pdb.set_trace()
     from_state = from_popn.eval_state(from_vars)
     to_state = to_popn.eval_state(to_vars)
 
@@ -327,7 +326,6 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
     to_vars['latent']['sharedtuningcurve_provider']['Y'] = Y
 
     # Initialize shared tuning curves (project onto the bases)
-    import pdb; pdb.set_trace()
     from pyglm.utils.basis import project_onto_basis
     for r in range(R):
         mean_filter_xr = flattened_filters_x[Y==r].mean(axis=0)
