@@ -255,11 +255,11 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             else:
                 conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
 
-            # Update simple other parameters
-            for n in np.arange(N):
-                conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
+    # Copy over the bias
+    for n in np.arange(N):
+        conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
 
-    # Update background params
+    # Copy over the background params
     if 'sharedtuningcurves' in to_model['latent'] and \
         from_model['bkgd']['type'] == 'spatiotemporal':
         convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars,

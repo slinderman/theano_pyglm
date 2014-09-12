@@ -502,8 +502,11 @@ def plot_locations(s_inf, name='location_provider', color='k'):
     locs = np.array([s['latent'][name]['L'] for s in s_inf])
     [N_smpls, N, D] = locs.shape
 
+    maxrow = 5
+    N_rows = np.ceil(N/float(maxrow))
+
     for n in range(N):
-        plt.subplot(1,N,n+1, aspect=1.0)
+        plt.subplot(N_rows,maxrow,n+1, aspect=1.0)
         plt.title('N: %d' % n)
 
         if N_smpls == 1:
