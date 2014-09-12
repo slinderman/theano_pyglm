@@ -407,7 +407,7 @@ def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor
     return fig
 
 
-def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
+def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plot_currents=True):
     if tt is None:
         tt = np.arange(np.size(s_glm['lam']))
     if T_lim is None:
@@ -416,8 +416,11 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
              color=color)
     plt.hold(True)
 
-    # TODO: DEBUG
-    plt.plot(tt[T_lim], s_glm['bkgd']['I_stim_xt'][T_lim], color=color)
+    if plot_currents:
+        # Plot constituent currents
+        plt.plot(tt[T_lim], s_glm['I_bkgd'][T_lim], color=color, linestyle=':')
+        plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=color, linestyle='--')
+        plt.plot(tt[T_lim], s_glm['I_net'][T_lim], color=color, linestyle='.-')
 
 
     if s_glm_std is not None:
@@ -440,7 +443,7 @@ def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
     """
     lam = s_glm['lam']
     # Cumulative integral of fr
-    I = dt * np.cumsum(lam);
+    I = dt * np.cumsum(lam)
 
     # Find rescaled spike times
     rescaled_isi = np.diff(I[S])

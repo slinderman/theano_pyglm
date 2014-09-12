@@ -410,7 +410,7 @@ class SharedTuningCurveStimulus(Component):
     def get_state(self):
         """ Get the theano variables associated with this model.
         """
-        return {'I_stim_xt' : self.I_stim_xt}
+        return {}
 
     def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data

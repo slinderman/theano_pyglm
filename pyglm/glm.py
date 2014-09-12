@@ -77,8 +77,13 @@ class Glm(Component):
         """
         state = {}
 
-        # Save the firing rate
+        # Save the firing rate and currents
         state['lam'] = self.lam
+        state['I_bias'] = self.bias_model.I_bias
+        state['I_bkgd'] = self.bkgd_model.I_stim
+        state['I_net'] = self.I_net
+
+        # Recursively save state of components
         state['bias'] = self.bias_model.get_state()
         state['bkgd'] = self.bkgd_model.get_state()
         state['imp']  = self.imp_model.get_state()
