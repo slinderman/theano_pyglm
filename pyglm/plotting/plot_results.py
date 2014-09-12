@@ -518,8 +518,8 @@ def plot_locations(s_inf, name='location_provider', color='k'):
                          color=color, markerfacecolor=color)
 
                 # TODO: Fix the limits!
-                plt.xlim((-0.5, 4.5))
-                plt.ylim((4.5, -0.5))
+                plt.xlim((-0.5, 9.5))
+                plt.ylim((9.5, -0.5))
             else:
                 raise Exception("Only plotting locs of dim <= 2")
         else:
@@ -527,9 +527,9 @@ def plot_locations(s_inf, name='location_provider', color='k'):
             if D == 1:
                 plt.hist(locs[:,n,0], bins=20, normed=True, color=color)
             elif D == 2:
-                plt.hist2d(locs[:,n,1], locs[:,n,0], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
-                plt.xlim((-0.5, 4.5))
-                plt.ylim((4.5, -0.5))
+                plt.hist2d(locs[:,n,1], locs[:,n,0], bins=np.arange(-0.5,10), cmap='Reds', alpha=0.5, normed=True)
+                plt.xlim((-0.5, 9.5))
+                plt.ylim((9.5, -0.5))
 
                 plt.colorbar()
             else:
