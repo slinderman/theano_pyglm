@@ -193,7 +193,6 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
     # Idea: Get the state of the GLMs, e.g. the impulse responses, etc.
     #       Project those states onto the parameters of the to-model
     N = from_popn.N
-    # import pdb; pdb.set_trace()
     from_state = from_popn.eval_state(from_vars)
     to_state = to_popn.eval_state(to_vars)
 
@@ -256,11 +255,11 @@ def convert_model(from_popn, from_model, from_vars, to_popn, to_model, to_vars):
             else:
                 conv_vars['net']['graph']['A'] = np.ones((N,N), dtype=np.int8)
 
-            # Update simple other parameters
-            for n in np.arange(N):
-                conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
+    # Copy over the bias
+    for n in np.arange(N):
+        conv_vars['glms'][n]['bias']['bias'] = from_vars['glms'][n]['bias']['bias']
 
-    # Update background params
+    # Copy over the background params
     if 'sharedtuningcurves' in to_model['latent'] and \
         from_model['bkgd']['type'] == 'spatiotemporal':
         convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars,
@@ -295,6 +294,9 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
         if stim_x.ndim == 2:
             locsi, locsj = np.unravel_index(loc_max, stim_x.shape)
             locs[n,0], locs[n,1] = locsi.ravel(), locsj.ravel()
+
+            # # TODO: Test whether we have an issue with unraveling the data.
+            # locs[n,0], locs[n,1] = locsj.ravel(), locsi.ravel()
 
         # Get the stimulus response in the vicinity of the mode
         # Create a meshgrid of the correct shape, centered around the max

@@ -407,7 +407,7 @@ def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor
     return fig
 
 
-def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
+def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plot_currents=True):
     if tt is None:
         tt = np.arange(np.size(s_glm['lam']))
     if T_lim is None:
@@ -415,7 +415,20 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None):
     plt.plot(tt[T_lim], s_glm['lam'][T_lim],
              color=color)
     plt.hold(True)
-    
+
+    if plot_currents:
+        # Plot constituent currents
+        gray = np.array([0.5, 0.5, 0.5])
+
+        if np.isscalar(s_glm['I_bias']):
+            plt.plot(tt[T_lim], s_glm['I_bias']*np.ones_like(tt[T_lim]), color=gray, linestyle='--')
+        else:
+            plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=gray, linestyle='--')
+
+        plt.plot(tt[T_lim], s_glm['I_bkgd'][T_lim], color=gray, linestyle=':')
+        plt.plot(tt[T_lim], s_glm['I_net'][T_lim], color=gray, linestyle='-.')
+
+
     if s_glm_std is not None:
         # Make a shaded patch for the error bars
         from matplotlib.patches import Polygon
@@ -436,7 +449,7 @@ def plot_ks(s_glm, S, dt, s_glm_std=None, color=None):
     """
     lam = s_glm['lam']
     # Cumulative integral of fr
-    I = dt * np.cumsum(lam);
+    I = dt * np.cumsum(lam)
 
     # Find rescaled spike times
     rescaled_isi = np.diff(I[S])
@@ -502,8 +515,11 @@ def plot_locations(s_inf, name='location_provider', color='k'):
     locs = np.array([s['latent'][name]['L'] for s in s_inf])
     [N_smpls, N, D] = locs.shape
 
+    maxrow = 5
+    N_rows = np.ceil(N/float(maxrow))
+
     for n in range(N):
-        plt.subplot(1,N,n+1, aspect=1.0)
+        plt.subplot(N_rows,maxrow,n+1, aspect=1.0)
         plt.title('N: %d' % n)
 
         if N_smpls == 1:
@@ -515,8 +531,8 @@ def plot_locations(s_inf, name='location_provider', color='k'):
                          color=color, markerfacecolor=color)
 
                 # TODO: Fix the limits!
-                plt.xlim((-0.5, 4.5))
-                plt.ylim((4.5, -0.5))
+                plt.xlim((-0.5, 9.5))
+                plt.ylim((9.5, -0.5))
             else:
                 raise Exception("Only plotting locs of dim <= 2")
         else:
@@ -524,9 +540,9 @@ def plot_locations(s_inf, name='location_provider', color='k'):
             if D == 1:
                 plt.hist(locs[:,n,0], bins=20, normed=True, color=color)
             elif D == 2:
-                plt.hist2d(locs[:,n,1], locs[:,n,0], bins=np.arange(-0.5,5), cmap='Reds', alpha=0.5, normed=True)
-                plt.xlim((-0.5, 4.5))
-                plt.ylim((4.5, -0.5))
+                plt.hist2d(locs[:,n,1], locs[:,n,0], bins=np.arange(-0.5,10), cmap='Reds', alpha=0.5, normed=True)
+                plt.xlim((-0.5, 9.5))
+                plt.ylim((9.5, -0.5))
 
                 plt.colorbar()
             else:
