@@ -408,7 +408,6 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plo
         tt = np.arange(np.size(s_glm['lam']))
     if T_lim is None:
         T_lim = slice(0,np.size(s_glm['lam']))
-
     plt.plot(tt[T_lim], s_glm['lam'][T_lim],
              color=color)
     plt.hold(True)

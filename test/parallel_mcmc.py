@@ -18,6 +18,8 @@ def run_synth_test():
     """
     options, popn, data, client, popn_true, x_true = initialize_parallel_test_harness()
 
+    raise Exception("Make sur ethe sparsity is set properly!")
+
     # If x0 specified, load x0 from file
     x0 = None
     if options.x0_file is not None:
