@@ -131,18 +131,25 @@ def initialize_imports(dview):
     """ Import required model code on the clients.
         Initialize global variable for each client's local population obj
     """
+    dview.execute('import os')
+    # Make sure that each node uses a different Theano compile directory
+    # This must be done before Theano is imported by pyglm
+    @interactive
+    def _set_theano_base_compiledir(n):
+        theano_compile_dir = os.path.join(os.environ['HOME'], '.theano', 'engine%d' % n)
+        os.environ['THEANO_FLAGS'] = 'base_compiledir=' + theano_compile_dir
+        # theano.config.base_compiledir = \
+        #     os.path.join(theano.config.base_compiledir, 'engine%d' % n)
+    dview.map(_set_theano_base_compiledir,
+              range(len(dview)))
+
+    # Now we can import PyGLM (which in turn loads theano)
     dview.execute('from pyglm.population import Population')
     dview.execute('from pyglm.models.model_factory import make_model')
     dview.execute('from pyglm.utils.theano_func_wrapper import seval')
     dview.execute('import cPickle')
 
-    # Make sure that each node uses a different Theano compile directory
-    @interactive
-    def _set_theano_base_compiledir(n):
-        theano.config.base_compiledir = \
-            os.path.join(theano.config.base_compiledir, 'engine%d' % n)
-    dview.map(_set_theano_base_compiledir,
-              range(len(dview)))
+
 
 def add_data_on_engines(dview, d,
                         use_shared_filesystem=False):
