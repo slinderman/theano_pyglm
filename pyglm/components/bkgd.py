@@ -446,8 +446,8 @@ class SharedTuningCurveStimulus(Component):
         fstim_cached = False
         pyglm_home = os.path.join(expanduser("~"), '.pyglm')
         hash = hashlib.sha1(stim)
-        hash.update(self.spatial_basis)
-        hash.update(self.temporal_basis)
+        hash.update(self.spatial_basis.ravel(order='C'))
+        hash.update(self.temporal_basis.ravel(order='C'))
         keystr = hash.hexdigest()
         cachefile = os.path.join(pyglm_home, "%s.pkl" % keystr)
 

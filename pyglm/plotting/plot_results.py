@@ -289,14 +289,10 @@ def plot_imp_responses(s_inf, s_std=None, fig=None, color=None, use_bgcolor=Fals
     cbar_ticks = np.array([-0.9*W_imp_max, 0.0, 0.9*W_imp_max]).round(2)
     if np.allclose(cbar_ticks, 0.0):
         cbar_ticks = None
-    try:
-        cbar = ColorbarBase(cbar_ax, cmap=cmap,
-                            values=np.linspace(-W_imp_max, W_imp_max, 500),
-                            boundaries=np.linspace(-W_imp_max, W_imp_max, 500),
-                            ticks=cbar_ticks)
-    except:
-        import pdb; pdb.set_trace()
-
+    cbar = ColorbarBase(cbar_ax, cmap=cmap,
+                        values=np.linspace(-W_imp_max, W_imp_max, 500),
+                        boundaries=np.linspace(-W_imp_max, W_imp_max, 500),
+                        ticks=cbar_ticks)
     return fig
 
 def plot_imp_responses_fast(s_inf, s_std=None, fig=None, color=None, use_bgcolor=False, linestyle='-'):
@@ -412,6 +408,7 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plo
         tt = np.arange(np.size(s_glm['lam']))
     if T_lim is None:
         T_lim = slice(0,np.size(s_glm['lam']))
+
     plt.plot(tt[T_lim], s_glm['lam'][T_lim],
              color=color)
     plt.hold(True)

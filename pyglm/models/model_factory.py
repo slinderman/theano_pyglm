@@ -334,6 +334,8 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
         mean_filter_xr = flattened_filters_x[Y==r].mean(axis=0)
         mean_filter_tr = flattened_filters_t[Y==r].mean(axis=0)
 
+        # TODO: Make sure the filters are being normalized properly!
+
         # Project the mean filters onto the basis
         to_vars['latent']['sharedtuningcurve_provider']['w_x'][:,r] = \
             project_onto_basis(mean_filter_xr,
@@ -346,7 +348,6 @@ def convert_stimulus_filters_to_sharedtc(from_popn, from_model, from_vars, to_po
         interp_mean_filter_tr = np.interp(t_temporal_basis, t_mean_filter_tr, mean_filter_tr)
         to_vars['latent']['sharedtuningcurve_provider']['w_t'][:,r] = \
             project_onto_basis(interp_mean_filter_tr, temporal_basis).ravel()
-
 
     # Initialize locations based on stimuls filters
     to_vars['latent']['location_provider']['L'] = locs.ravel().astype(np.int)
