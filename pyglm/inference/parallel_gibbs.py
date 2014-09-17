@@ -158,6 +158,7 @@ def parallel_gibbs_sample(client, N,
         # Go through variables, sampling one at a time, in parallel where possible
         interval = 0.1
         for i in range(n_parallel_updates):
+            print "DBG: Parallel update %d" % i
             xs = dview.map_async(_parallel_update,
                                  [i]*N,                                     
                                  [x]*N,
@@ -168,6 +169,7 @@ def parallel_gibbs_sample(client, N,
 
         # Sample serial updates
         for i in range(n_serial_updates):
+            print "DBG: Serial update %d" % i
             x = master.apply(_serial_update, i, x).get()
 
         # Call the callback with the current sample
