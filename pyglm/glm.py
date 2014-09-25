@@ -5,62 +5,58 @@ from pyglm.components.bias import *
 from pyglm.components.impulse import *
 from pyglm.components.nlin import *
 
-class Glm(Component):
-    def __init__(self, model, network, latent):
-        """
-        Create a GLM for the spikes on the n-th neuron out of N
-        This corresponds to the spikes in the n-th column of data["S"]
-        """
-        # Define the Poisson regression model
-        self.n = T.lscalar('n')
-        self.dt = theano.shared(name='dt', value=model['dt'])
-        self.S = theano.shared(name='S',
-                               value=np.zeros((1, model['N'])))
+class _GlmBase(Component):
+    @property
+    def n(self):
+        raise NotImplementedError()
 
+    @property
+    def dt(self):
+        raise NotImplementedError()
 
-        # Define a bias to the membrane potential
-        self.bias_model = create_bias_component(model, self, latent)
+    @property
+    def S(self):
+        raise NotImplementedError()
 
-        # Define stimulus and stimulus filter
-        self.bkgd_model = create_bkgd_component(model, self, latent)
+    @property
+    def bias_model(self):
+        raise NotImplementedError()
 
-        # Create a list of impulse responses for each incoming connections
-        self.imp_model = create_impulse_component(model, self, latent)
+    @property
+    def bkgd_model(self):
+        raise NotImplementedError()
 
-        # If a network is given, weight the impulse response currents and sum them up
-        if network is not None:
-            # Compute the effective incoming weights
-            An = network.graph.A[:,self.n]
-            Wn = network.weights.W[:,self.n]
-            self.W_eff = An * Wn
-        else:
-            self.W_eff = np.ones((model['N'],))
+    @property
+    def imp_model(self):
+        raise NotImplementedError()
 
-        self.I_net = T.dot(self.imp_model.I_imp, self.W_eff)
+    @property
+    def nlin_model(self):
+        raise NotImplementedError()
 
-        # Rectify the currents to get a firing rate
-        self.nlin_model = create_nlin_component(model)
-        self.lam = self.nlin_model.nlin(self.bias_model.I_bias +
-                                   self.bkgd_model.I_stim +
-                                   self.I_net)
+    @property
+    def lam(self):
+        raise NotImplementedError()
 
-        # Clip the rate to a reasonable range
-        # self.lam = T.clip(self.lam, 1e-128, 1e128)
-        self.lam.name = 'lambda'
+    @property
+    def I_net(self):
+        raise NotImplementedError()
 
-        # Compute the log likelihood under the Poisson process
-        self.ll = T.sum(-self.dt*self.lam + T.log(self.lam)*self.S[:,self.n])
+    @property
+    def ll(self):
+        raise NotImplementedError()
 
-        # Compute the log prior
-        lp_bias = self.bias_model.log_p
-        lp_bkgd = self.bkgd_model.log_p
-        lp_imp = self.imp_model.log_p
-        lp_nlin = self.nlin_model.log_p
-        self.log_prior = lp_bias + lp_bkgd + lp_imp + lp_nlin
+    @property
+    def log_prior(self):
+        raise NotImplementedError()
 
-        # Allow for a scaling of the likelihood to implement AIS
-        self.lkhd_scale = theano.shared(name='lkhd_scale', value=1.0)
-        self.log_p = self.lkhd_scale * self.ll + self.log_prior
+    @property
+    def lkhd_scale(self):
+        raise NotImplementedError()
+
+    @property
+    def log_p(self):
+        return self.lkhd_scale * self.ll + self.log_prior
 
     def get_variables(self):
         """ Get a list of all variables
@@ -96,19 +92,6 @@ class Glm(Component):
         self.imp_model.preprocess_data(data)
         self.nlin_model.preprocess_data(data)
 
-    def set_data(self, data):
-        """ Update the shared memory where the data is stored
-        """
-        if "S" in data.keys():
-            self.S.set_value(data["S"])
-        else:
-            self.S.set_value(np.zeros_like(data["stim"]))
-
-        # self.dt.set_value(data["dt"])
-
-        self.bkgd_model.set_data(data)
-        self.imp_model.set_data(data)
-
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
         """
@@ -127,3 +110,125 @@ class Glm(Component):
         v['nlin'] = self.nlin_model.sample(acc)
 
         return v
+
+    def set_data(self, data):
+        raise NotImplementedError()
+
+class TheanoGlm(_GlmBase):
+
+    def __init__(self, model, network, latent):
+        """
+        Create a GLM for the spikes on the n-th neuron out of N
+        This corresponds to the spikes in the n-th column of data["S"]
+        """
+        super(TheanoGlm, self).__init__(model)
+        # Define the Poisson regression model
+        self._n = T.lscalar('n')
+        self._dt = theano.shared(name='dt', value=model['dt'])
+        self._S = theano.shared(name='S',
+                               value=np.zeros((1, model['N'])))
+
+
+        # Define a bias to the membrane potential
+        self._bias_model = create_bias_component(model, self, latent)
+
+        # Define stimulus and stimulus filter
+        self._bkgd_model = create_bkgd_component(model, self, latent)
+
+        # Create a list of impulse responses for each incoming connections
+        self._imp_model = create_impulse_component(model, self, latent)
+
+        # If a network is given, weight the impulse response currents and sum them up
+        if network is not None:
+            # Compute the effective incoming weights
+            An = network.graph.A[:,self.n]
+            Wn = network.weights.W[:,self.n]
+            self.W_eff = An * Wn
+        else:
+            self.W_eff = np.ones((model['N'],))
+
+        self._I_net = T.dot(self.imp_model.I_imp, self.W_eff)
+
+        # Rectify the currents to get a firing rate
+        self._nlin_model = create_nlin_component(model)
+        self._lam = self.nlin_model.nlin(self.bias_model.I_bias +
+                                   self.bkgd_model.I_stim +
+                                   self.I_net)
+
+        # Clip the rate to a reasonable range
+        # self.lam = T.clip(self.lam, 1e-128, 1e128)
+        self._lam.name = 'lambda'
+
+        # Compute the log likelihood under the Poisson process
+        self._ll = T.sum(-self.dt*self.lam + T.log(self.lam)*self.S[:,self.n])
+
+        # Compute the log prior
+        lp_bias = self.bias_model.log_p
+        lp_bkgd = self.bkgd_model.log_p
+        lp_imp = self.imp_model.log_p
+        lp_nlin = self.nlin_model.log_p
+        self._log_prior = lp_bias + lp_bkgd + lp_imp + lp_nlin
+
+        # Allow for a scaling of the likelihood to implement AIS
+        self._lkhd_scale = theano.shared(name='lkhd_scale', value=1.0)
+
+    @property
+    def n(self):
+        return self._n
+
+    @property
+    def dt(self):
+        return self._dt
+
+    @property
+    def S(self):
+        return self._S
+
+    @property
+    def bias_model(self):
+        return self._bias_model
+
+    @property
+    def bkgd_model(self):
+        return self._bkgd_model
+
+    @property
+    def imp_model(self):
+        return self._imp_model
+
+    @property
+    def nlin_model(self):
+        return self._nlin_model
+
+    @property
+    def lam(self):
+        return self._lam
+
+    @property
+    def I_net(self):
+        return self._I_net
+
+    @property
+    def ll(self):
+        return self._ll
+
+    @property
+    def log_prior(self):
+        return self._log_prior
+
+    @property
+    def lkhd_scale(self):
+        return self._lkhd_scale
+
+    def set_data(self, data):
+        """ Update the shared memory where the data is stored
+        """
+        if "S" in data.keys():
+            self.S.set_value(data["S"])
+        else:
+            self.S.set_value(np.zeros_like(data["stim"]))
+
+        # self.dt.set_value(data["dt"])
+
+        self.bkgd_model.set_data(data)
+        self.imp_model.set_data(data)

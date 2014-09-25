@@ -3,9 +3,9 @@ import numpy as np
 from pyglm.components.latent import LatentVariables
 from pyglm.components.network import Network
 from glm import Glm
-from pyglm.utils.theano_func_wrapper import seval
+from utils.theano_func_wrapper import seval
 
-class Population:
+class _PopulationBase:
     """
     Population connected GLMs.
     """
@@ -44,92 +44,6 @@ class Population:
 
         return lp
 
-    def compute_log_prior(self, vars):
-        """ Compute the log joint probability under a given set of variables
-        """
-        lp = 0.0
-
-        # Get set of symbolic variables
-        syms = self.get_variables()
-
-        lp += seval(self.latent.log_p,
-                    syms['latent'],
-                    vars['latent'])
-
-        lp += seval(self.network.log_p,
-                    syms['net'],
-                    vars['net'])
-
-        for n in range(self.N):
-            nvars = self.extract_vars(vars, n)
-            lp += seval(self.glm.log_prior,
-                        syms,
-                        nvars)
-
-        return lp
-
-    def compute_ll(self, vars):
-        """ Compute the log likelihood under a given set of variables
-        """
-        ll = 0.0
-
-        # Get set of symbolic variables
-        syms = self.get_variables()
-
-        # Add the likelihood from each GLM
-        for n in range(self.N):
-            nvars = self.extract_vars(vars, n)
-            ll += seval(self.glm.ll,
-                        syms,
-                        nvars)
-
-        return ll
-
-    def eval_state(self, vars):
-        """ Evaluate the population state expressions given the parameters, 
-            e.g. the stimulus response curves from the basis function weights.
-        """
-        # Get set of symbolic variables
-        syms = self.get_variables()
-
-        # Get the symbolic state expression to evaluate
-        state_vars = self.get_state()
-        state = {}
-
-        state['latent'] = self._eval_state_helper(syms['latent'],
-                                                  state_vars['latent'],
-                                                  vars['latent'])
-
-        state['net'] = self._eval_state_helper(syms['net'],
-                                                  state_vars['net'], 
-                                                  vars['net'])
-
-        glm_states = []
-        for n in np.arange(self.N):
-            nvars = self.extract_vars(vars, n)
-            glm_states.append(self._eval_state_helper(syms,
-                                                      state_vars['glm'], 
-                                                      nvars))
-        state['glms'] = glm_states
-
-        # Finally, evaluate the log probability and the log likelihood
-        # state['logp'] = self.compute_log_p(vars)
-        state['logprior'] = self.compute_log_prior(vars)
-        state['ll'] = self.compute_ll(vars)
-        state['logp'] = state['ll'] + state['logprior']
-        return state
-
-    def _eval_state_helper(self, syms, d, vars):
-        """ Helper function to recursively evaluate state variables
-        """
-        state = {}
-        for (k,v) in d.items():
-            if isinstance(v,dict):
-                state[k] = self._eval_state_helper(syms, v, vars)
-            else:
-                state[k] = seval(v, syms, vars)
-        return state
-        
     def get_variables(self):
         """ Get a list of all variables
         """
@@ -229,6 +143,109 @@ class Population:
         self.latent.set_data(data)
         self.network.set_data(data)
         self.glm.set_data(data)
+
+
+    def compute_log_prior(self, vars):
+        raise NotImplementedError()
+
+    def compute_ll(self, vars):
+        raise NotImplementedError()
+
+    def eval_state(self, vars):
+        """ Evaluate the population state expressions given the parameters,
+            e.g. the stimulus response curves from the basis function weights.
+        """
+        # Get set of symbolic variables
+        syms = self.get_variables()
+
+        # Get the symbolic state expression to evaluate
+        state_vars = self.get_state()
+        state = {}
+
+        state['latent'] = self._eval_state_helper(syms['latent'],
+                                                  state_vars['latent'],
+                                                  vars['latent'])
+
+        state['net'] = self._eval_state_helper(syms['net'],
+                                                  state_vars['net'],
+                                                  vars['net'])
+
+        glm_states = []
+        for n in np.arange(self.N):
+            nvars = self.extract_vars(vars, n)
+            glm_states.append(self._eval_state_helper(syms,
+                                                      state_vars['glm'],
+                                                      nvars))
+        state['glms'] = glm_states
+
+        # Finally, evaluate the log probability and the log likelihood
+        # state['logp'] = self.compute_log_p(vars)
+        state['logprior'] = self.compute_log_prior(vars)
+        state['ll'] = self.compute_ll(vars)
+        state['logp'] = state['ll'] + state['logprior']
+        return state
+
+    def _eval_state_helper(self, syms, d, vars):
+        raise NotImplementedError()
+
+
+    def simulate(self, vars, (T_start,T_stop), dt, stim, dt_stim):
+        raise NotImplementedError()
+
+class TheanoPopulation(_PopulationBase):
+
+    def compute_log_prior(self, vars):
+        """ Compute the log joint probability under a given set of variables
+        """
+        lp = 0.0
+
+        # Get set of symbolic variables
+        syms = self.get_variables()
+
+        lp += seval(self.latent.log_p,
+                    syms['latent'],
+                    vars['latent'])
+
+        lp += seval(self.network.log_p,
+                    syms['net'],
+                    vars['net'])
+
+        for n in range(self.N):
+            nvars = self.extract_vars(vars, n)
+            lp += seval(self.glm.log_prior,
+                        syms,
+                        nvars)
+
+        return lp
+
+    def compute_ll(self, vars):
+        """ Compute the log likelihood under a given set of variables
+        """
+        ll = 0.0
+
+        # Get set of symbolic variables
+        syms = self.get_variables()
+
+        # Add the likelihood from each GLM
+        for n in range(self.N):
+            nvars = self.extract_vars(vars, n)
+            ll += seval(self.glm.ll,
+                        syms,
+                        nvars)
+
+        return ll
+
+    def _eval_state_helper(self, syms, d, vars):
+        """ Helper function to recursively evaluate state variables
+        """
+        state = {}
+        for (k,v) in d.items():
+            if isinstance(v,dict):
+                state[k] = self._eval_state_helper(syms, v, vars)
+            else:
+                state[k] = seval(v, syms, vars)
+        return state
+        
 
     def simulate(self, vars, (T_start,T_stop), dt, stim, dt_stim):
         """ Simulate spikes from a network of coupled GLMs
