@@ -11,7 +11,7 @@ from pyglm.components.component import Component
 def create_graph_component(model, latent):
     type = model['network']['graph']['type'].lower()
     if type == 'complete':
-        graph = CompleteGraphModel(model)
+        graph = TheanoCompleteGraphModel(model)
     elif type == 'erdos_renyi' or \
                     type == 'erdosrenyi':
         graph = ErdosRenyiGraphModel(model)
@@ -24,7 +24,15 @@ def create_graph_component(model, latent):
     return graph
 
 
-class CompleteGraphModel(Component):
+class _GraphModelBase(Component):
+    @property
+    def A(self):
+        raise NotImplementedError()
+
+    def get_state(self):
+        return {'A': self.A}
+
+class TheanoCompleteGraphModel(_GraphModelBase):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -32,14 +40,18 @@ class CompleteGraphModel(Component):
         N = model['N']
 
         # Define complete adjacency matrix
-        self.A = T.ones((N, N))
+        self._A = T.ones((N, N))
 
+        self._log_p = T.constant(0.0)
+
+    @property
+    def A(self):
+        return self._A
+
+    @property
+    def log_p(self):
         # Define log probability
-        self.log_p = T.constant(0.0)
-
-    def get_state(self):
-        return {'A': self.A}
-
+        return self._log_p
 
 class ErdosRenyiGraphModel(Component):
     def __init__(self, model):

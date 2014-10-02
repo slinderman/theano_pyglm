@@ -7,15 +7,24 @@ from pyglm.components.component import Component
 def create_bias_component(model, glm, latent):
     type = model['bias']['type'].lower()
     if type == 'constant':
-        bias = ConstantBias(model)
+        bias = TheanoConstantBias(model)
     else:
         raise Exception("Unrecognized bias model: %s" % type)
     return bias
 
-class ConstantBias(Component):
+class _ConstantBiasBase(Component):
+
+    @property
+    def I_bias(self):
+        raise NotImplementedError()
+
+    @property
+    def log_p(self):
+        raise NotImplementedError()
+
+class TheanoConstantBias(_ConstantBiasBase):
     """
     """
-    
     def __init__(self, model):
         """ Initialize a simple scalara bias. This is only in a class
             for consistency with the other model components
@@ -28,9 +37,16 @@ class ConstantBias(Component):
         # Define a bias to the membrane potential
         # TODO: Figure out if we can get around the vector requirement for grads
         self.bias = T.dvector('bias')
+        self._I_bias = self.bias[0]
+        self._log_p = -0.5/self.sig_bias**2 * (self.bias[0] - self.mu_bias)**2
 
-        self.I_bias = self.bias[0]
-        self.log_p = -0.5/self.sig_bias**2 * (self.bias[0] - self.mu_bias)**2
+    @property
+    def I_bias(self):
+        return self._I_bias
+
+    @property
+    def log_p(self):
+        return self._log_p
 
 #         self.f_I_bias = theano.function(self.bias,self.bias)
 

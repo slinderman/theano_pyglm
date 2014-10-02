@@ -1,12 +1,15 @@
 class Component(object):
     """
     """
-    
-    def __init__(self, model):
-        """ Initialize the component with the parameters from the given model.
+
+    @property
+    def log_p(self):
         """
-        pass
-    
+        Compute the log probability of this component
+        :return:
+        """
+        raise NotImplementedError()
+
     def get_variables(self):
         """ Get a dictionary of (name : Theano variable) items for all the
             symbolic variables associated with this component.

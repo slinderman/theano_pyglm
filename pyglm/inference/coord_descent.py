@@ -9,7 +9,7 @@ import scipy.optimize as opt
 from pyglm.utils.theano_func_wrapper import seval, _flatten
 from pyglm.utils.packvec import *
 from pyglm.utils.grads import *
-from pyglm.components.graph import CompleteGraphModel
+from pyglm.components.graph import TheanoCompleteGraphModel
 from pyglm.inference.smart_init import initialize_with_data
 
 def prep_first_order_glm_inference(population):
@@ -218,7 +218,7 @@ def coord_descent(population,
 
     # Make sure the network is a complete adjacency matrix because we
     # do not do integer programming
-    if not isinstance(network.graph, CompleteGraphModel):
+    if not isinstance(network.graph, TheanoCompleteGraphModel):
         print " WARNING: MAP inference via coordinate descent can only be performed "\
               "with the complete graph model."
               

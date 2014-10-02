@@ -11,14 +11,22 @@ from pyglm.components.priors import create_prior
 def create_weight_component(model, latent):
         type = model['network']['weight']['type'].lower()
         if type == 'constant':
-            weight = ConstantWeightModel(model)
+            weight = TheanoConstantWeightModel(model)
         elif type == 'gaussian':
             weight = GaussianWeightModel(model)
         else:
             raise Exception("Unrecognized weight model: %s" % type)
         return weight
 
-class ConstantWeightModel(Component):
+class _WeightModelBase(Component):
+    @property
+    def W(self):
+        raise NotImplementedError()
+
+    def get_state(self):
+        return {'W': self.W}
+
+class TheanoConstantWeightModel(_WeightModelBase):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -29,14 +37,19 @@ class ConstantWeightModel(Component):
         self.value = prms['value']
         
         # Define weight matrix
-        self.W = self.value * T.ones((N,N))
+        self._W = self.value * T.ones((N,N))
 
         # Define log probability
-        self.log_p = T.constant(0.0)
+        self._log_p = T.constant(0.0)
 
-    def get_state(self):
-        return {'W': self.W}
-    
+    @property
+    def W(self):
+        return self._W
+
+    @property
+    def log_p(self):
+        return self._log_p
+
 class GaussianWeightModel(Component):
     def __init__(self, model):
         """ Initialize the filtered stim model

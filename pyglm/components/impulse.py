@@ -15,6 +15,11 @@ def create_impulse_component(model, glm, latent):
     elif typ.lower() == 'exponential':
         return ExponentialImpulses(model)
 
+class _ImpulseBase(Component):
+    @property
+    def I_imp(self):
+        raise NotImplementedError()
+
 class LinearBasisImpulses(Component):
     """ Linear impulse response functions. Here we make use of Theano's
         tensordot to sum up the currents from each presynaptic neuron.
@@ -57,12 +62,14 @@ class LinearBasisImpulses(Component):
         # all time points
         self.I_imp = T.sum(self.ir*w_ir3, axis=2)
         # self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
-        self.log_p = self.prior.log_p(w_ir2)
-
-
+        self._log_p = self.prior.log_p(w_ir2)
         # Define a helper variable for the impulse response
         # after projecting onto the basis
         self.impulse = T.dot(w_ir2, T.transpose(self.ibasis))
+
+    @property
+    def log_p(self):
+        return self._log_p
 
     def get_variables(self):
         """ Get the theano variables associated with this model.

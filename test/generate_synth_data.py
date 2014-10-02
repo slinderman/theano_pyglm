@@ -4,7 +4,7 @@ import os
 
 import numpy as np
 
-from pyglm.population import Population
+from pyglm.population import TheanoPopulation
 from pyglm.models.model_factory import make_model, \
                                  stabilize_sparsity, \
                                  check_stability
@@ -90,7 +90,7 @@ def run_gen_synth_data():
     stabilize_sparsity(model)
 
     print "Creating master population object"
-    popn = Population(model)
+    popn = TheanoPopulation(model)
 
     # Sample random parameters from the model
     x_true = popn.sample()

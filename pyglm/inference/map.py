@@ -6,7 +6,7 @@ import scipy.optimize as opt
 
 from pyglm.utils.packvec import *
 from components.graph import CompleteGraphModel
-from pyglm.components.weights import ConstantWeightModel
+from pyglm.components.weights import TheanoConstantWeightModel
 
 def map_estimate(network_glm, x0=None):
     """
@@ -20,7 +20,7 @@ def map_estimate(network_glm, x0=None):
     # and basis function impulse responses
     if not isinstance(network.graph, CompleteGraphModel):
         raise Exception("MAP inference can only be performed with the complete graph model.")
-    if not isinstance(network.weights, ConstantWeightModel):
+    if not isinstance(network.weights, TheanoConstantWeightModel):
         raise Exception("MAP inference can only be performed with the constant weight model.")
     
     # Draw initial state from prior if not given

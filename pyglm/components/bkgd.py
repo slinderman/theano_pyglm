@@ -15,7 +15,7 @@ def create_bkgd_component(model, glm, latent):
     if type == 'no_stimulus' or \
        type == 'none' or \
        type == 'nostimulus':
-       bkgd = NoStimulus(model)
+       bkgd = TheanoNoStimulus(model)
     elif type == 'basis':
         bkgd = BasisStimulus(model)
     elif type == 'spatiotemporal':
@@ -26,21 +26,35 @@ def create_bkgd_component(model, glm, latent):
         raise Exception("Unrecognized backgound model: %s" % type)
     return bkgd
 
-class NoStimulus(Component):
+class _StimulusBase(Component):
+
+    @property
+    def I_stim(self):
+        raise NotImplementedError()
+
+class TheanoNoStimulus(_StimulusBase):
     """ No stimulus dependence. Constant biases are handled by the 
         bias component. 
     """
-
     def __init__(self, model):
         """ No stimulus.
         """        
         # Log probability
-        self.log_p = T.constant(0.0)
+        self._log_p = T.constant(0.0)
 
         # Due a theano quirk, I_stim cannot directly be a constant
         self.stim = T.constant(0.0)
+
         # Expose outputs to the Glm class
-        self.I_stim = T.dot(T.constant(1.0), self.stim)
+        self._I_stim = T.dot(T.constant(1.0), self.stim)
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    @property
+    def I_stim(self):
+        return self._I_stim
     
 class BasisStimulus(Component):
     """ Filter the stimulus and expose the filtered stimulus

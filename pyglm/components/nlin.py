@@ -23,10 +23,12 @@ class ExpNonlinearity(Component):
         the vector of symbolic variables, vars, and the offset into that vector, offset.
         """
         self.nlin = T.exp
-        self.log_p = T.constant(0.)
-
-
+        self._log_p = T.constant(0.)
         self.f_nlin = np.exp
+
+    @property
+    def log_p(self):
+        return self._log_p
 
 
 class ExpLinearNonlinearity(Component):
@@ -41,7 +43,11 @@ class ExpLinearNonlinearity(Component):
         """
         # self.nlin = lambda x: T.switch(T.lt(x,0), T.exp(x), 1.0+x)
         self.nlin = lambda x: T.log(1.0+T.exp(x))
-        self.log_p = T.constant(0.)
+        self._log_p = T.constant(0.)
         
         # self.f_nlin = lambda x: np.exp(x)*(x<0) + (1.0+x)*(x>=0)
         self.f_nlin = lambda x: np.log(1.0+np.exp(x))
+
+    @property
+    def log_p(self):
+        return self._log_p

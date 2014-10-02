@@ -37,7 +37,7 @@ class LatentVariables(Component):
         else:
             self.latent_model = {}
 
-        self.log_p = T.constant(0.0)
+        self._log_p = T.constant(0.0)
 
         # Enumerate and create latent variable component
         self.latentlist = []
@@ -46,11 +46,16 @@ class LatentVariables(Component):
         for (k,v) in self.latent_model.items():
             # Create the latent component
             latent_component = create_latent_component(model, v)
-            self.log_p += latent_component.log_p
+            self._log_p += latent_component.log_p
 
             # Add to the list of latent variable components
             self.latentlist.append(latent_component)
             self.latentdict[latent_component.name] = latent_component
+
+    @property
+    def log_p(self):
+        return self._log_p
+
 
     def get_variables(self):
         v = {}
@@ -104,7 +109,7 @@ class LatentType(Component):
         log_p_alpha = self.alpha_prior.log_p(self.alpha)
         log_p_Y = T.sum(T.log(self.alpha[self.Y]))
 
-        self.log_p = log_p_alpha + log_p_Y
+        self._log_p = log_p_alpha + log_p_Y
 
     def get_variables(self):
         return {str(self.alpha) : self.alpha,
