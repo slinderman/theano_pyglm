@@ -3,6 +3,8 @@ pyglm
 
 Generalized linear models for neural spike train modeling, in Python! With GPU-accelerated fully-Bayesian inference, MAP inference, and network priors.
 
+*NOTE* This project is undergoing substantial revision. Please stay tuned for more updates!
+
 usage
 -
 First, install Theano version 0.6.0 from here:
