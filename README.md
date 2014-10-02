@@ -3,7 +3,7 @@ pyglm
 
 Generalized linear models for neural spike train modeling, in Python! With GPU-accelerated fully-Bayesian inference, MAP inference, and network priors.
 
-*NOTE* This project is undergoing substantial revision. Please stay tuned for more updates!
+*NOTE* This project is undergoing substantial revision. Please stay tuned for more updates! 
 
 usage
 -
@@ -85,3 +85,4 @@ contributing
 Ideally, this project will offer a substrate for sharing our expertise
 in GLMs. Feel free to contact me if you'd like to contribute!
 
+This is a test..
