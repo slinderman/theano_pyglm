@@ -84,5 +84,3 @@ contributing
 
 Ideally, this project will offer a substrate for sharing our expertise
 in GLMs. Feel free to contact me if you'd like to contribute!
-
-This is a test..
