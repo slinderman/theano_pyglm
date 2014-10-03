@@ -466,7 +466,6 @@ class KayakPopulation(_PopulationBase):
         for glm in self._glms:
             self.log_prior += glm.log_prior
 
-
         self.ll = 0.0
         # Add the likelihood from each GLM
         for glm in self._glms:
@@ -538,17 +537,16 @@ class KayakPopulation(_PopulationBase):
 
     def set_parameters(self, values):
         params = self.get_parameters()
+        self._set_parameter_helper(params, values)
 
-        def _set_parameter_helper(curr_params, curr_values):
-            """ Helper function to recursively set the value of parameters in hierarchical dict
-            """
-            for (k,v) in curr_values.items():
-                if isinstance(v,dict):
-                    _set_parameter_helper(curr_params[k], v)
-                else:
-                    curr_params[k].value = v
-
-        _set_parameter_helper(params, values)
+    def _set_parameter_helper(self, curr_params, curr_values):
+        """ Helper function to recursively set the value of parameters in hierarchical dict
+        """
+        for (k,v) in curr_values.items():
+            if isinstance(v,dict):
+                self._set_parameter_helper(curr_params[k], v)
+            else:
+                curr_params[k].value = v
 
     def get_state(self):
         """ Get a list of all variables

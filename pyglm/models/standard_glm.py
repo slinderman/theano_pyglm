@@ -16,8 +16,8 @@ StandardGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : 20,
-            'sigma' : 0.1
+            'mu' : 5,   
+            'sigma' : 1
         },
 
     # Parameters of the background model
@@ -55,7 +55,7 @@ StandardGlm = \
                     'type' : 'group_lasso',
                     # 'type' : 'gaussian',
                     'mu' : 0.0,
-                    'sigma' : 10.0,
+                    'sigma' : 2.0,
                     'lam' : 1.0
                 },
             'basis' :
