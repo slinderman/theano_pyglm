@@ -5,6 +5,9 @@ import numpy as np
 
 import theano
 import theano.tensor as T
+
+import kayak as kyk
+
 from pyglm.components.component import Component
 
 
@@ -43,6 +46,27 @@ class TheanoCompleteGraphModel(_GraphModelBase):
         self._A = T.ones((N, N))
 
         self._log_p = T.constant(0.0)
+
+    @property
+    def A(self):
+        return self._A
+
+    @property
+    def log_p(self):
+        # Define log probability
+        return self._log_p
+
+class KayakCompleteGraphModel(_GraphModelBase):
+    def __init__(self, model):
+        """ Initialize the filtered stim model
+        """
+        self.model = model
+        N = model['N']
+
+        # Define complete adjacency matrix
+        self._A = kyk.Constant(np.ones((N, N)))
+
+        self._log_p = kyk.Constant(0.0)
 
     @property
     def A(self):

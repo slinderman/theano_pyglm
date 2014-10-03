@@ -1,7 +1,7 @@
 import numpy as np
 
-from pyglm.components.latent import LatentVariables
-from pyglm.components.network import Network
+from pyglm.components.latent import TheanoLatentVariables, KayakLatentVariables
+from pyglm.components.network import TheanoNetwork, KayakNetwork
 from glm import TheanoGlm, KayakGlm
 from utils.theano_func_wrapper import seval
 
@@ -100,10 +100,10 @@ class TheanoPopulation(_PopulationBase):
     def __init__(self, model):
         super(TheanoPopulation, self).__init__(model)
         # Initialize latent variables of the population
-        self._latent = LatentVariables(model)
+        self._latent = TheanoLatentVariables(model)
 
         # Create a network model to connect the GLMs
-        self._network = Network(model, self.latent)
+        self._network = TheanoNetwork(model, self.latent)
 
         # Create a single GLM that is shared across neurons
         # This is to simplify the model and reuse parameters.
@@ -449,10 +449,10 @@ class KayakPopulation(_PopulationBase):
     def __init__(self, model):
         super(KayakPopulation, self).__init__(model)
         # Initialize latent variables of the population
-        self._latent = LatentVariables(model)
+        self._latent = KayakLatentVariables(model)
 
         # Create a network model to connect the GLMs
-        self._network = Network(model, self.latent)
+        self._network = KayakNetwork(model, self.latent)
 
         # Create GLMs for each neuron
         self._glms = []
@@ -475,11 +475,11 @@ class KayakPopulation(_PopulationBase):
         """ Compute the log joint probability under a given set of variables
         """
         lp = 0.0
-        lp += self.latent.log_p.value()
-        lp += self.network.log_p.value()
+        lp += self.latent.log_p.value
+        lp += self.network.log_p.value
 
-        for n in range(self.N):
-            lp += self.glm.log_prior.value()
+        for glm in self._glms:
+            lp += glm.log_prior.value
 
         return lp
 
@@ -489,8 +489,8 @@ class KayakPopulation(_PopulationBase):
         ll = 0.0
 
         # Add the likelihood from each GLM
-        for n in range(self.N):
-            ll += self.glm.ll.value()
+        for glm in self._glms:
+            ll += glm.ll.value
 
         return ll
 
@@ -522,7 +522,7 @@ class KayakPopulation(_PopulationBase):
                 if isinstance(v,dict):
                     _set_parameter_helper(curr_params[k], v)
                 else:
-                    curr_params[k].set_value(v)
+                    curr_params[k].value = v
 
         _set_parameter_helper(params, values)
 
@@ -546,12 +546,28 @@ class KayakPopulation(_PopulationBase):
             state = {}
             for (k,v) in curr_state_vars.items():
                 if isinstance(v,dict):
-                    state[k] = self._eval_state_helper(v)
+                    state[k] = _eval_state_helper(v)
                 else:
-                    state[k] = v.value()
+                    state[k] = v.value
             return state
 
-        return _eval_state_helper(state_vars)
+        # return _eval_state_helper(state_vars)
+
+        # DEBUG
+        state = {}
+        state['latent'] = _eval_state_helper(state_vars['latent'])
+        state['net'] = _eval_state_helper(state_vars['net'])
+        state['glms'] = {}
+        for n,glm in enumerate(self.glms):
+            state['glms'][n] = _eval_state_helper(state_vars['glm_%d' % n])
+        # END DEBUG
+
+        # Finally, evaluate the log probability and the log likelihood
+        state['logprior'] = self.compute_log_prior(vars)
+        state['ll'] = self.compute_ll(vars)
+        state['logp'] = state['ll'] + state['logprior']
+
+        return state
 
     def sample(self):
         """
@@ -609,7 +625,7 @@ class KayakPopulation(_PopulationBase):
         # Initialize the background rate
         X = np.zeros((nT,N))
         for n in np.arange(N):
-            X[:,n] = self.glms[n].bias_model.I_bias.value()
+            X[:,n] = self.glms[n].bias_model.I_bias.value
 
         # Add stimulus induced currents if given
         temp_data = {'S' : np.zeros((nT, N)),
@@ -617,7 +633,7 @@ class KayakPopulation(_PopulationBase):
                      'dt_stim': dt_stim}
         self.add_data(temp_data)
         for n in np.arange(N):
-            X[:,n] += self.glms[n].bkgd_model.I_stim.value()
+            X[:,n] += self.glms[n].bkgd_model.I_stim.value
 
         print "Max background rate: %s" % str(self.glms[0].nlin_model.f_nlin(np.amax(X)))
 
@@ -627,7 +643,7 @@ class KayakPopulation(_PopulationBase):
         # Get the impulse response functions
         imps = []
         for n_post in np.arange(N):
-            imps.append(self.glms[n_post].imp_model.impulse.value())
+            imps.append(self.glms[n_post].imp_model.impulse.value)
         imps = np.transpose(np.array(imps), axes=[1,0,2])
         T_imp = imps.shape[2]
 
@@ -645,13 +661,11 @@ class KayakPopulation(_PopulationBase):
         # TODO: Handle time-varying weights appropriately
         time_varying_weights = False
         if not time_varying_weights:
-            At = np.tile(np.reshape(self.network.graph.A.value(),
+            At = np.tile(np.reshape(self.network.graph.A.value,
                                     [N,N,1]),
                          [1,1,T_imp])
 
-            Wt = np.tile(np.reshape(seval(self.network.weights.W,
-                                          syms['net'],
-                                          vars['net']),
+            Wt = np.tile(np.reshape(self.network.weights.W.value,
                                     [N,N,1]),
                          [1,1,T_imp])
 
@@ -676,11 +690,11 @@ class KayakPopulation(_PopulationBase):
             # Get the instantaneous connectivity
             if time_varying_weights:
                 # TODO: Really get the time-varying weights
-                At = np.tile(np.reshape(self.network.graph.A.value(),
+                At = np.tile(np.reshape(self.network.graph.A.value,
                                         [N,N,1]),
                              [1,1,t_imp])
 
-                Wt = np.tile(np.reshape(self.network.weights.W.value(),
+                Wt = np.tile(np.reshape(self.network.weights.W.value,
                                         [N,N,1]),
                              [1,1,t_imp])
 

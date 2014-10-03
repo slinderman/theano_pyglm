@@ -2,6 +2,9 @@ import numpy as np
 
 import theano
 import theano.tensor as T
+
+import kayak as kyk
+
 from pyglm.components.component import Component
 
 def create_prior(model, **kwargs):
@@ -157,6 +160,36 @@ class Gaussian(Component):
 
         return v
 
+class KayakGaussian(Component):
+    """ Wrapper for a scalar random variable with a Normal distribution
+    """
+    def __init__(self, model, value):
+        self.prms = model
+        self.mu = kyk.Parameter(self.prms['mu'])
+        self.sigma = kyk.Parameter(self.prms['sigma'])
+
+        self._log_p1 = -0.5/self.sigma**2
+        self._log_p = self._log_p1 * kyk.MatSum((value-self.mu)**2, keepdims=False)
+
+    @property
+    def log_p(self):
+        """ Compute log prob of the given value under this prior
+        """
+        return self._log_p
+
+    def set_hyperparameters(self, model):
+        """ Set the hyperparameters of the model
+        """
+        self.mu.value = model['mu']
+        self.sigma.value = model['sigma']
+
+    def sample(self, acc, size=(1,)):
+        """ Sample from the prior
+                """
+        v = self.mu.value + self.sigma.value * np.random.randn(*size)
+
+        return v
+
 class SphericalGaussian(Component):
     """ Wrapper for a vector random variable with a spherical distribution
     """
@@ -166,7 +199,7 @@ class SphericalGaussian(Component):
         self.value = T.dvector(name=name)
         self.mu = theano.shared(name='mu', value=self.prms['mu'])
         self.sigma = theano.shared(name='sigma', value=self.prms['sigma'])
-        self.log_p = -0.5/self.sigma**2 *T.sum((self.value-self.mu)**2)
+        self.log_p = -0.5/self.sigma**2 * T.sum((self.value-self.mu)**2)
 
     def get_variables(self):
         return {str(self.value): self.value}

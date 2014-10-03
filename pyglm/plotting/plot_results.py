@@ -5,7 +5,8 @@ import os
 import numpy as np
 import matplotlib
 
-matplotlib.use('Agg')       # To enable saving remotely
+if 'DISPLAY' not in os.environ:
+    matplotlib.use('Agg')       # To enable saving remotely
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
@@ -416,12 +417,19 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plo
         # Plot constituent currents
         gray = np.array([0.5, 0.5, 0.5])
 
+        # Plot the bias current
         if np.isscalar(s_glm['I_bias']):
             plt.plot(tt[T_lim], s_glm['I_bias']*np.ones_like(tt[T_lim]), color=gray, linestyle='--')
         else:
             plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=gray, linestyle='--')
 
-        plt.plot(tt[T_lim], s_glm['I_bkgd'][T_lim], color=gray, linestyle=':')
+        # Plot background current
+        if np.isscalar(s_glm['I_bkgd']) or len(s_glm['I_bkgd']) == 1:
+            plt.plot(tt[T_lim], s_glm['I_bias']*np.ones_like(tt[T_lim]), color=gray, linestyle=':')
+        else:
+            plt.plot(tt[T_lim], s_glm['I_bkgd'][T_lim], color=gray, linestyle=':')
+
+        # Plot network current
         plt.plot(tt[T_lim], s_glm['I_net'][T_lim], color=gray, linestyle='-.')
 
 
@@ -712,9 +720,12 @@ def plot_results(population,
                 plot_firing_rate(s_true['glms'][n], color='k', T_lim=T_lim)
             
             # Plot the spike times
-            St = np.nonzero(population.glm.S.get_value()[T_lim,n])[0]
+            if hasattr(population, 'glm'):
+                St = np.nonzero(population.glm.S.get_value()[T_lim,n])[0]
+            elif hasattr(population, 'glms'):
+                St = np.nonzero(population.glms[n].S.value[T_lim])[0]
+
             plt.plot(St,s_avg['glms'][n]['lam'][T_lim][St],'ko')
-            
             plt.title('Firing rate %d' % n)
             
             f.savefig(os.path.join(resdir,'firing_rate_%d.pdf' % n))
@@ -724,8 +735,15 @@ def plot_results(population,
         print "Plotting KS test results"
         for n in range(N):
             f = plt.figure()
-            St = np.nonzero(population.glm.S.get_value()[:,n])[0]
-            plot_ks(s_avg['glms'][n], St, population.glm.dt.get_value())
+
+            if hasattr(population, 'glm'):
+                St = np.nonzero(population.glm.S.get_value()[:,n])[0]
+                dt = population.glm.dt.get_value()
+            elif hasattr(population, 'glms'):
+                St = np.nonzero(population.glms[n].S.value)[0]
+                dt = population.glms[n].dt.value
+
+            plot_ks(s_avg['glms'][n], St, dt)
             f.savefig(os.path.join(resdir, 'ks_%d.pdf' %n))
             plt.close(f)
 

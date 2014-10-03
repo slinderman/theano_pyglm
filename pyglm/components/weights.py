@@ -4,6 +4,9 @@ Weight models for the Network GLM
 import numpy as np
 
 import theano.tensor as T
+
+import kayak as kyk
+
 from component import Component
 from pyglm.components.priors import create_prior
 
@@ -49,6 +52,32 @@ class TheanoConstantWeightModel(_WeightModelBase):
     @property
     def log_p(self):
         return self._log_p
+
+
+class KayakConstantWeightModel(_WeightModelBase):
+    def __init__(self, model):
+        """ Initialize the filtered stim model
+        """
+        self.model = model
+        N = model['N']
+
+        prms = model['network']['weight']
+        self.value = prms['value']
+
+        # Define weight matrix
+        self._W = kyk.Constant(self.value * np.ones((N,N)))
+
+        # Define log probability
+        self._log_p = kyk.Constant(0.0)
+
+    @property
+    def W(self):
+        return self._W
+
+    @property
+    def log_p(self):
+        return self._log_p
+
 
 class GaussianWeightModel(Component):
     def __init__(self, model):

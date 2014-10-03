@@ -6,6 +6,8 @@ from os.path import expanduser
 import theano
 import theano.tensor as T
 
+import kayak as kyk
+
 from pyglm.components.component import Component
 from pyglm.utils.basis import *
 
@@ -33,12 +35,12 @@ class _StimulusBase(Component):
         raise NotImplementedError()
 
 class TheanoNoStimulus(_StimulusBase):
-    """ No stimulus dependence. Constant biases are handled by the 
-        bias component. 
+    """ No stimulus dependence. Constant biases are handled by the
+        bias component.
     """
     def __init__(self, model):
         """ No stimulus.
-        """        
+        """
         # Log probability
         self._log_p = T.constant(0.0)
 
@@ -55,7 +57,29 @@ class TheanoNoStimulus(_StimulusBase):
     @property
     def I_stim(self):
         return self._I_stim
-    
+
+class KayakNoStimulus(_StimulusBase):
+    """ No stimulus dependence. Constant biases are handled by the
+        bias component.
+    """
+    def __init__(self, model):
+        """ No stimulus.
+        """
+        # Log probability
+        self._log_p = kyk.Constant(0.0)
+
+        # Constant stimulus
+        self._I_stim = kyk.Constant(0.0)
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    @property
+    def I_stim(self):
+        return self._I_stim
+
+
 class BasisStimulus(Component):
     """ Filter the stimulus and expose the filtered stimulus
     """

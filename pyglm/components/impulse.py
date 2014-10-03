@@ -1,13 +1,16 @@
 import theano
 import theano.tensor as T
+
+import kayak as kyk
+
 from pyglm.utils.basis import *
 from pyglm.components.component import Component
-from pyglm.components.priors import create_prior
+from pyglm.components.priors import create_prior, KayakGaussian
 
 def create_impulse_component(model, glm, latent):
     typ = model['impulse']['type'].lower()
     if typ.lower() == 'basis': 
-        return LinearBasisImpulses(model)
+        return TheanoLinearBasisImpulses(model)
     elif typ.lower() == 'normalized':
         return NormalizedBasisImpulses(model)
     elif typ.lower() == 'dirichlet':
@@ -20,14 +23,13 @@ class _ImpulseBase(Component):
     def I_imp(self):
         raise NotImplementedError()
 
-class LinearBasisImpulses(Component):
+class _LinearBasisImpulsesBase(Component):
     """ Linear impulse response functions. Here we make use of Theano's
         tensordot to sum up the currents from each presynaptic neuron.
     """
     def __init__(self, model):
         self.model = model
         self.imp_model = model['impulse']
-        self.prior = create_prior(self.imp_model['prior'])
 
         # Number of presynaptic neurons
         self.N = model['N']
@@ -42,59 +44,23 @@ class LinearBasisImpulses(Component):
         # The basis is interpolated once the data is specified
         self.initialize_basis()
 
-        # Initialize memory for the filtered spike train
-        self.ir = theano.shared(name='ir',
-                                value=np.zeros((1,self.N,self.B)))
-
-        # Define weights
-        self.w_ir = T.dvector('w_ir')
-        # Repeat them (in a differentiable manner) to create a 3-tensor
-        w_ir2 = T.reshape(self.w_ir, [self.N,self.B])
-        w_ir3 = T.reshape(self.w_ir, [1,self.N,self.B])
-
-        # Make w_ir3 broadcastable in the 1st dim
-        T.addbroadcast(w_ir3,0)
-
-        # Take the elementwise product of the filtered stimulus and
-        # the repeated weights to get the weighted impulse current along each
-        # impulse basis dimension. Then sum over bases to get the
-        # total coupling current from each presynaptic neurons at
-        # all time points
-        self.I_imp = T.sum(self.ir*w_ir3, axis=2)
-        # self.log_p = T.sum(-0.5/self.sigma**2 * (self.w_ir-self.mu)**2)
-        self._log_p = self.prior.log_p(w_ir2)
-        # Define a helper variable for the impulse response
-        # after projecting onto the basis
-        self.impulse = T.dot(w_ir2, T.transpose(self.ibasis))
+    @property
+    def w_ir(self):
+        raise NotImplementedError()
 
     @property
-    def log_p(self):
-        return self._log_p
+    def prior(self):
+        raise NotImplementedError()
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
         """
-        return {str(self.w_ir): self.w_ir}
+        return {'w_ir' : self.w_ir}
 
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
         """
         self.prior.set_hyperparameters(model['prior'])
-
-    def sample(self, acc):
-        """
-        return a sample of the variables
-        """
-        # w = self.mu + self.sigma*np.random.randn(self.N*self.B)
-        w = self.prior.sample(None, size=(self.N, self.B)).ravel()
-        return {str(self.w_ir): w}
-
-
-    def get_state(self):
-        """ Get the impulse responses
-        """
-        return {'impulse' : self.impulse,
-                'basis' : self.ibasis}
 
     def initialize_basis(self):
         """
@@ -113,15 +79,13 @@ class LinearBasisImpulses(Component):
         # Normalize so that the interpolated basis has volume 1
         if self.imp_model['basis']['norm']:
             ibasis = ibasis / self.imp_model['dt_max']
-        # Normalize so that the interpolated basis has unit L1 norm
-#         if self.prms['basis']['norm']:
-#             ibasis = ibasis / np.tile(np.sum(ibasis,0),[Lt_int,1])
-        self.ibasis = theano.shared(value=ibasis)
+
+        self.interpolated_basis = ibasis
 
     def preprocess_data(self, data):
         """ Set the shared memory variables that depend on the data
         """
-        ibasis = self.ibasis.get_value()
+        ibasis = self.interpolated_basis
 
         # Project the presynaptic spiking onto the basis
         nT,Ns = data["S"].shape
@@ -136,8 +100,132 @@ class LinearBasisImpulses(Component):
                              "resulted in incorrect shape: %s" % str(fS.shape)
         data['fS'] = fS
 
+
+class TheanoLinearBasisImpulses(_LinearBasisImpulsesBase):
+    def __init__(self, model):
+        super(TheanoLinearBasisImpulses, self).__init__(model)
+
+        # Create a theano variable for the interpolated basis
+        self.ibasis = theano.shared(value=self.interpolated_basis)
+
+
+        # Initialize memory for the filtered spike train
+        self.ir = theano.shared(name='ir',
+                                value=np.zeros((1,self.N,self.B)))
+
+        # Define weights
+        self._w_ir = T.dvector('w_ir')
+        # Repeat them (in a differentiable manner) to create a 3-tensor
+        w_ir2 = T.reshape(self.w_ir, [self.N,self.B])
+        w_ir3 = T.reshape(self.w_ir, [1,self.N,self.B])
+
+        # Make w_ir3 broadcastable in the 1st dim
+        T.addbroadcast(w_ir3,0)
+
+        # Take the elementwise product of the filtered stimulus and
+        # the repeated weights to get the weighted impulse current along each
+        # impulse basis dimension. Then sum over bases to get the
+        # total coupling current from each presynaptic neurons at
+        # all time points
+        self.I_imp = T.sum(self.ir*w_ir3, axis=2)
+
+        # Create a prior
+        self._prior = create_prior(self.imp_model['prior'])
+        self._log_p = self.prior.log_p(w_ir2)
+        # Define a helper variable for the impulse response
+        # after projecting onto the basis
+        self.impulse = T.dot(w_ir2, T.transpose(self.ibasis))
+
+    @property
+    def w_ir(self):
+        return self._w_ir
+
+    @property
+    def prior(self):
+        return self._prior
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    def get_state(self):
+        """ Get the impulse responses
+        """
+        return {'impulse' : self.impulse,
+                'basis' : self.ibasis}
+
     def set_data(self, data):
         self.ir.set_value(data['fS'])
+
+    def sample(self, acc):
+        """
+        return a sample of the variables
+        """
+        # w = self.mu + self.sigma*np.random.randn(self.N*self.B)
+        w = self.prior.sample(None, size=(self.N, self.B)).ravel()
+        return {'w_ir' : w}
+
+
+class KayakLinearBasisImpulses(_LinearBasisImpulsesBase):
+    def __init__(self, model):
+        super(KayakLinearBasisImpulses, self).__init__(model)
+
+        # Create a theano variable for the interpolated basis
+        self.ibasis = kyk.Parameter(self.interpolated_basis)
+
+
+        # Initialize parameter for the filtered spike train.
+        # The value will be set by set_data()
+        self.ir = kyk.Parameter(np.zeros((1,self.N,self.B)))
+
+        # Define weights
+        self._w_ir = kyk.Parameter(np.zeros([1,self.N,self.B]))
+
+        # Take the elementwise product of the filtered stimulus and
+        # the repeated weights to get the weighted impulse current along each
+        # impulse basis dimension. Then sum over bases to get the
+        # total coupling current from each presynaptic neurons at
+        # all time points
+        self.I_imp = kyk.MatSum(self.ir*self.w_ir, axis=2, keepdims=False)
+
+        # Define the prior
+        self._prior = KayakGaussian(self.imp_model['prior'], self.w_ir)
+        self._log_p = self.prior.log_p
+        # self._log_p = self.prior.log_p(self.w_ir)
+        # Define a helper variable for the impulse response
+        # after projecting onto the basis
+        self.impulse = kyk.MatMult(kyk.Reshape(self.w_ir, (self.N, self.B)),
+                                   kyk.Transpose(self.ibasis))
+
+    @property
+    def w_ir(self):
+        return self._w_ir
+
+    @property
+    def prior(self):
+        return self._prior
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    def get_state(self):
+        """ Get the impulse responses
+        """
+        return {'impulse' : self.impulse,
+                'basis' : self.ibasis}
+
+    def set_data(self, data):
+        self.ir.value = data['fS']
+
+    def sample(self, acc):
+        """
+        return a sample of the variables
+        """
+        # w = self.mu + self.sigma*np.random.randn(self.N*self.B)
+        w = self.prior.sample(None, size=(self.N, self.B))
+        return {'w_ir' : w}
+
 
 class NormalizedBasisImpulses(Component):
     """ Normalized impulse response functions. Here we make use of Theano's

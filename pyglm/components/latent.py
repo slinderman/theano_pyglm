@@ -4,6 +4,9 @@ Provide latent types that can be used by the graph/bkgd/impulse models
 import numpy as np
 
 import theano.tensor as T
+
+import kayak as kyk
+
 from component import Component
 from pyglm.utils.basis import create_basis
 from pyglm.components.priors import create_prior
@@ -23,7 +26,7 @@ def create_latent_component(model, component_model, **kwargs):
     else:
         raise Exception("Unrecognized latent component type: %s" % typ)
 
-class LatentVariables(Component):
+class _LatentVariablesBase(Component):
     """
     Container for a set of latent variables, e.g. neuron types/locations
     """
@@ -37,8 +40,6 @@ class LatentVariables(Component):
         else:
             self.latent_model = {}
 
-        self._log_p = T.constant(0.0)
-
         # Enumerate and create latent variable component
         self.latentlist = []
         self.latentdict = {}
@@ -46,7 +47,6 @@ class LatentVariables(Component):
         for (k,v) in self.latent_model.items():
             # Create the latent component
             latent_component = create_latent_component(model, v)
-            self._log_p += latent_component.log_p
 
             # Add to the list of latent variable components
             self.latentlist.append(latent_component)
@@ -54,7 +54,7 @@ class LatentVariables(Component):
 
     @property
     def log_p(self):
-        return self._log_p
+        raise NotImplementedError()
 
 
     def get_variables(self):
@@ -84,6 +84,44 @@ class LatentVariables(Component):
     # Allow consumers to access this container as a dict
     def __getitem__(self, item):
         return self.latentdict[item]
+
+class TheanoLatentVariables(_LatentVariablesBase):
+    """
+    Container for a set of latent variables, e.g. neuron types/locations
+    """
+    def __init__(self, model):
+        """
+        Go through the items in the model, each of which specifies a latent variable component
+        """
+        super(TheanoLatentVariables, self).__init__(model)
+        self._log_p = T.constant(0.0)
+
+        for latent_component in self.latentlist:
+            self._log_p += latent_component.log_p
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+
+class KayakLatentVariables(_LatentVariablesBase):
+    """
+    Container for a set of latent variables, e.g. neuron types/locations
+    """
+    def __init__(self, model):
+        """
+        Go through the items in the model, each of which specifies a latent variable component
+        """
+        super(KayakLatentVariables, self).__init__(model)
+        self._log_p = kyk.Constant(0.0)
+
+        for latent_component in self.latentlist:
+            self._log_p += latent_component.log_p
+
+    @property
+    def log_p(self):
+        return self._log_p
+
 
 class LatentType(Component):
     def __init__(self, model, type_model):
