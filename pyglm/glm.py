@@ -243,7 +243,7 @@ import kayak as kyk
 
 class KayakGlm(_GlmBase):
 
-    def __init__(self, n, model, network, latent):
+    def __init__(self, n, model, network, latent, batcher=None):
         """
         Create a GLM for the spikes on the n-th neuron out of N
         This corresponds to the spikes in the n-th column of data["S"]
@@ -251,6 +251,7 @@ class KayakGlm(_GlmBase):
         # Define the Poisson regression model
         self._n = n
         self._dt = kyk.Constant(model['dt'])
+
         self._S = kyk.Parameter(np.zeros((1,1)))
 
         # Define a bias to the membrane potential

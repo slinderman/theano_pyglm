@@ -418,7 +418,7 @@ def plot_firing_rate(s_glm, s_glm_std=None, color=None, tt=None, T_lim=None, plo
         gray = np.array([0.5, 0.5, 0.5])
 
         # Plot the bias current
-        if np.isscalar(s_glm['I_bias']):
+        if np.isscalar(s_glm['I_bias']) or len(s_glm['I_bias']) == 1:
             plt.plot(tt[T_lim], s_glm['I_bias']*np.ones_like(tt[T_lim]), color=gray, linestyle='--')
         else:
             plt.plot(tt[T_lim], s_glm['I_bias'][T_lim], color=gray, linestyle='--')

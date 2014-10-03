@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def pack(var_list):
     """ Pack a list of variables (as numpy arrays) into a single vector
     """
@@ -42,6 +43,32 @@ def packdict(var_dict, on_unpackable_type='raise'):
             vec = np.concatenate((vec, np.reshape(val, (sz,))))
         
     return vec, shapes
+
+
+def dictshapes(var_dict, on_unpackable_type='raise'):
+    """ Pack a dictionary of variables (as numpy arrays) into a single vector
+    """
+    shapes = {}
+    # This sorting is important!
+    for (var, val) in sorted(var_dict.items(), key=lambda t: t[0]):
+        if isinstance(val, dict):
+            # Recurse on sub dictionary
+            sshapes = dictshapes(val)
+            shapes[var] = sshapes
+        elif val == []:
+            continue
+        else:
+            if not isinstance(val, np.ndarray):
+                if on_unpackable_type.lower() == 'raise':
+                    raise Exception("Can only pack numpy arrays!")
+                else:
+                    print "Can only pack numpy arrays! Attempting to " \
+                          "pack type %s." % str(type(val))
+            shp = val.shape
+            shapes[var] = shp
+
+    return shapes
+
 
 def unpack(vec, shapes):
     """ Unpack a vector of variables into an array

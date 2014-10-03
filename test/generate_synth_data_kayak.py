@@ -92,9 +92,9 @@ def run_gen_synth_data():
 
     # Save the model so it can be loaded alongside the data
     fname_model = os.path.join(options.resultsDir, 'model.pkl')
-    print "Saving data to %s" % fname_model
+    print "Saving population to %s" % fname_model
     with open(fname_model,'w') as f:
-        cPickle.dump(model, f, protocol=-1)
+        cPickle.dump(popn, f, protocol=-1)
 
     print "Generating synthetic data with %d neurons and %.2f seconds." % \
           (options.N, options.T_stop)

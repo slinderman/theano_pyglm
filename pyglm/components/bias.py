@@ -84,7 +84,7 @@ class KayakConstantBias(_BiasBase):
         self.sig_bias = prms['sigma']
 
         # Define a bias to the membrane potential
-        self._I_bias = kyk.Parameter(0)
+        self._I_bias = kyk.Parameter(self.mu_bias)
         self._log_p = -0.5/self.sig_bias**2 * (self.I_bias - self.mu_bias)**2
 
     @property
@@ -113,5 +113,5 @@ class KayakConstantBias(_BiasBase):
         """
         return a sample of the variables
                 """
-        b = self.mu_bias + self.sig_bias * np.random.randn()
+        b = np.atleast_1d(self.mu_bias + self.sig_bias * np.random.randn())
         return {'I_bias' : b}

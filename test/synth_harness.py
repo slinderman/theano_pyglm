@@ -1,12 +1,12 @@
 import cPickle
 import os
 
-from pyglm.population import Population
+from pyglm.population import TheanoPopulation
 from pyglm.models.model_factory import *
 from pyglm.utils.io import parse_cmd_line_args, load_data
 
 
-def initialize_test_harness():
+def initialize_test_harness(population_class=TheanoPopulation):
     """ Initialize a model with N neurons. Use the data if specified on the
         command line, otherwise sample new data from the model.
         Return a population object, the data, and a set of true parameters
@@ -21,7 +21,7 @@ def initialize_test_harness():
     print "Creating master population object"
     model = make_model(options.model, N=data['N'], dt=0.001)
     stabilize_sparsity(model)
-    popn = Population(model)
+    popn = population_class(model)
     popn.add_data(data)
 
     # Initialize the GLM with the data
@@ -51,7 +51,7 @@ def initialize_test_harness():
                 x_true['net']['graph']['L'] = x_true['net']['graph']['L'].ravel()
             # END HACK
 
-            popn_true = Population(model_true)
+            popn_true = population_class(model_true)
             popn_true.add_data(data)
             ll_true = popn_true.compute_log_p(x_true)
             print "true LL: %f" % ll_true

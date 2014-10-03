@@ -459,6 +459,21 @@ class KayakPopulation(_PopulationBase):
         for n in range(model['N']):
             self._glms.append(KayakGlm(n, model, self.network, self.latent))
 
+        # Define Kayak objects for the prior, likelihood, and joint.
+        self.log_prior = self.latent.log_p
+        self.log_prior += self.network.log_p
+
+        for glm in self._glms:
+            self.log_prior += glm.log_prior
+
+
+        self.ll = 0.0
+        # Add the likelihood from each GLM
+        for glm in self._glms:
+            self.ll += glm.ll
+
+        self.log_p = self.log_prior + self.ll
+
     @property
     def latent(self):
         return self._latent
@@ -474,25 +489,34 @@ class KayakPopulation(_PopulationBase):
     def compute_log_prior(self, vars):
         """ Compute the log joint probability under a given set of variables
         """
-        lp = 0.0
-        lp += self.latent.log_p.value
-        lp += self.network.log_p.value
-
-        for glm in self._glms:
-            lp += glm.log_prior.value
-
-        return lp
+        # lp = 0.0
+        # lp += self.latent.log_p.value
+        # lp += self.network.log_p.value
+        #
+        # for glm in self._glms:
+        #     lp += glm.log_prior.value
+        #
+        # return lp
+        print "WARNING: IGNORING GIVEN VARS"
+        return self.log_prior.value
 
     def compute_ll(self, vars):
         """ Compute the log likelihood under a given set of variables
         """
-        ll = 0.0
+        # ll = 0.0
+        #
+        # # Add the likelihood from each GLM
+        # for glm in self._glms:
+        #     ll += glm.ll.value
+        # return ll
+        print "WARNING: IGNORING GIVEN VARS"
+        return self.ll.value
 
-        # Add the likelihood from each GLM
-        for glm in self._glms:
-            ll += glm.ll.value
-
-        return ll
+    def compute_log_p(self, vars):
+        """ Compute the log joint probability under a given set of variables
+        """
+        print "WARNING: IGNORING GIVEN VARS"
+        return self.log_p.value
 
     def set_hyperparameters(self, model):
         """ Set the hyperparameters of the model
