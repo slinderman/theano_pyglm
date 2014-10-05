@@ -26,6 +26,15 @@ def create_graph_component(model, latent):
         raise Exception("Unrecognized graph model: %s" % type)
     return graph
 
+def create_kayak_graph_component(model, latent):
+    type = model['network']['graph']['type'].lower()
+    if type == 'complete':
+        graph = KayakCompleteGraphModel(model)
+    elif type == 'erdos_renyi' or \
+         type == 'erdosrenyi':
+        graph = KayakErdosRenyiGraphModel(model)
+    return graph
+
 
 class _GraphModelBase(Component):
     @property
@@ -120,6 +129,59 @@ class ErdosRenyiGraphModel(Component):
 
     def get_state(self):
         return {'A': self.A}
+
+
+class KayakErdosRenyiGraphModel(_GraphModelBase):
+    def __init__(self, model):
+        """ Initialize the filtered stim model
+        """
+        self.model = model
+        self.prms = model['network']['graph']
+        N = model['N']
+
+        self.rho = self.prms['rho'] * np.ones((N, N))
+        if 'rho_refractory' in self.prms:
+            self.rho[np.diag_indices(N)] = self.prms['rho_refractory']
+
+        # Clip to avoid errors in lkhd calculation
+        self.rho = np.clip(self.rho, 1e-8, 1.0-1e-8)
+
+        self.pA = kyk.Parameter(self.rho)
+
+        # Define the adjacency matrix
+        self._A = kyk.Parameter(np.ones((N, N)))
+
+        # Allow for scaling the log likelihood of the graph so that we can do
+        # Annealed importance sampling
+        self.lkhd_scale = kyk.Parameter(1.0)
+
+        # Define log probability
+        self.lkhd = kyk.MatSum(self.A * kyk.ElemLog(self.pA) +
+                               (1 - self.A) * kyk.ElemLog(1.0-self.pA),
+                               keepdims=False)
+
+        self._log_p = self.lkhd_scale * self.lkhd
+
+    @property
+    def A(self):
+        return self._A
+
+    @property
+    def log_p(self):
+        # Define log probability
+        return self._log_p
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        return {'A' : self.A}
+
+
+    def sample(self, acc):
+        N = self.model['N']
+        A = np.random.rand(N, N) < self.rho
+        A = A.astype(np.int)
+        return {'A' : A}
 
 
 class StochasticBlockGraphModel(Component):

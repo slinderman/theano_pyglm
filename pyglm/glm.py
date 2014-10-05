@@ -263,8 +263,8 @@ class KayakGlm(_GlmBase):
         self._bkgd_model = KayakNoStimulus(model)
 
         # Create a list of impulse responses for each incoming connections
-        # self._imp_model = create_impulse_component(model, self, latent)
-        self._imp_model = KayakLinearBasisImpulses(model)
+        self._imp_model = create_kayak_impulse_component(model, self, latent)
+        # self._imp_model = KayakLinearBasisImpulses(model)
 
         # If a network is given, weight the impulse response currents and sum them up
         col_indicator_value  = np.zeros((model['N'],1))

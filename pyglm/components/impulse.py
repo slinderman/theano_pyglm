@@ -18,6 +18,13 @@ def create_impulse_component(model, glm, latent):
     elif typ.lower() == 'exponential':
         return ExponentialImpulses(model)
 
+def create_kayak_impulse_component(model, glm, latent):
+    typ = model['impulse']['type'].lower()
+    if typ.lower() == 'basis':
+        return KayakLinearBasisImpulses(model)
+    elif typ.lower() == 'dirichlet':
+        return KayakDirichletImpulses(model)
+
 class _ImpulseBase(Component):
     @property
     def I_imp(self):
@@ -490,6 +497,151 @@ class DirichletImpulses(Component):
 
     def set_data(self, data):
         self.ir.set_value(data['fS'])
+
+
+class KayakDirichletImpulses(_ImpulseBase):
+    """ Normalized impulse response functions using a Dirichlet prior.
+        Here we separate out the parameters of each impulse response
+        so that they may be sampled separately.
+    """
+    def __init__(self, model):
+        self.model = model
+        self.imp_model = model['impulse']
+
+        # Number of presynaptic neurons
+        self.N = model['N']
+
+        # Get parameters of the prior
+        self.alpha = self.imp_model['alpha']
+
+        # Create a basis for the impulse responses response
+        self.basis = create_basis(self.imp_model['basis'])
+        (_,self.B) = self.basis.shape
+        # The basis is interpolated once the data is specified
+        self.initialize_basis()
+
+        # Initialize memory for the filtered spike train
+        self.ir = kyk.Parameter((np.zeros((1, self.N, self.B))))
+
+        # Parameterize the Dirichlet distributed weight vectors using the
+        # expanded mean parameterization. That is, the parameters are B
+        # gamma distributed variables, and beta is the normalized gammas.
+        # To handle boundary conditions, let beta actually be normalized
+        # absolute value of the gammas.
+        self.gs = []
+        self.gabss = []
+        self.betas = []
+        for n in range(self.N):
+            g = kyk.Parameter(np.zeros((1,1,self.B)))
+            gabs = abs(g)
+            beta = gabs / kyk.MatSum(gabs)
+            self.gs.append(g)
+            self.gabss.append(gabs)
+            self.betas.append(beta)
+
+        # Concatenate the betas into a 1xNxB tensor
+        self.beta = kyk.Concatenate(1, *self.betas)
+
+        # self.gs = kyk.Parameter(np.ones((1,self.N,self.B)))
+        # self.gabs = abs(self.g)
+        # self.beta = self.gabs / kyk.MatSum(self.gabs, axis=2)
+
+        # Take the elementwise product of the filtered stimulus and
+        # the repeated weights to get the weighted impulse current along each
+        # impulse basis dimension. Then sum over bases to get the
+        # total coupling current from each presynaptic neurons at
+        # all time points
+        self._I_imp = kyk.MatSum(self.ir*self.beta, axis=2, keepdims=False)
+
+        # Log probability of a set of Dirichlet distributed vectors
+        # self.log_p = (self.alpha-1) * T.sum(T.log(beta2))
+        self._log_p = 0.0
+        for gabs in self.gabss:
+            self._log_p += (self.alpha-1.0) * kyk.MatSum(kyk.ElemLog(gabs), keepdims=False) \
+                           - kyk.MatSum(gabs, keepdims=False)
+
+        # Define a helper variable for the impulse response
+        # after projecting onto the basis
+        beta2 = kyk.MatSum(self.beta, axis=0, keepdims=False)
+
+        self.impulse = kyk.MatMult(beta2, kyk.Transpose(self.ibasis))
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    @property
+    def I_imp(self):
+        return self._I_imp
+
+    def get_variables(self):
+        """ Get the theano variables associated with this model.
+        """
+        v = {}
+        # for beta in self.betas:
+        #     v[str(beta)] = beta
+        for g in self.gs:
+            v[str(g)] = g
+
+        return v
+
+    def sample(self, acc):
+        """
+        return a sample of the variables
+                """
+        v = {}
+        # for beta in self.betas:
+        #     v[str(beta)] = np.random.dirichlet(self.alpha*np.ones(self.B))
+        for g in self.gs:
+            v[str(g)] = np.random.gamma(self.alpha, np.ones((1,1,self.B)))
+        return v
+
+    def get_state(self):
+        """ Get the impulse responses
+        """
+        return {'impulse' : self.impulse,
+                'basis' : self.ibasis}
+
+    def initialize_basis(self):
+        # Interpolate basis at the resolution of the data
+        dt = self.model['dt']
+        (L,B) = self.basis.shape
+        Lt_int = self.imp_model['dt_max']/dt
+        # t_int = np.linspace(0,1,Lt_int)
+        t_int = np.arange(0.0, self.imp_model['dt_max'], step=dt)
+        # t_bas = np.linspace(0,1,L)
+        t_bas = np.linspace(0.0, self.imp_model['dt_max'], L)
+        ibasis = np.zeros((len(t_int), B))
+        for b in np.arange(B):
+            ibasis[:,b] = np.interp(t_int, t_bas, self.basis[:,b])
+
+        # Normalize so that the interpolated basis has volume 1
+        if self.imp_model['basis']['norm']:
+            ibasis = ibasis / np.trapz(ibasis,t_int,axis=0)
+
+        self.ibasis = kyk.Parameter(ibasis)
+
+    def preprocess_data(self, data):
+        """ Set the shared memory variables that depend on the data
+        """
+        ibasis = self.ibasis.value
+        # Project the presynaptic spiking onto the basis
+        nT,Ns = data["S"].shape
+        assert Ns == self.N, "ERROR: Spike train must be (TxN) " \
+                             "dimensional where N=%d" % self.N
+        fS = convolve_with_basis(data["S"], ibasis)
+
+        # Flatten this manually to be safe
+        # (there's surely a way to do this with numpy)
+        (nT,Nc,B) = fS.shape
+        assert Nc == self.N, "ERROR: Convolution with spike train " \
+                             "resulted in incorrect shape: %s" % str(fS.shape)
+
+        data['fS'] = fS
+
+    def set_data(self, data):
+        self.ir.value = data['fS']
+
 
 class ExponentialImpulses(Component):
     """ Exponential impulse response functions. Here we make use of Theano's

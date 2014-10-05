@@ -78,10 +78,10 @@ class KayakNetwork(_NetworkBase):
         super(KayakNetwork, self).__init__(model, latent)
 
         # Create the graph model for the adjacency matrix
-        self._graph = KayakCompleteGraphModel(model)
+        self._graph = create_kayak_graph_component(model, latent)
 
         # Create the weight model for the weight matrix
-        self._weights = KayakConstantWeightModel(model)
+        self._weights = create_kayak_weight_component(model, latent)
 
         # Compute log probability
         self._log_p = self.graph.log_p + self.weights.log_p

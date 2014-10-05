@@ -16,7 +16,17 @@ def create_weight_component(model, latent):
         if type == 'constant':
             weight = TheanoConstantWeightModel(model)
         elif type == 'gaussian':
-            weight = GaussianWeightModel(model)
+            weight = TheanoGaussianWeightModel(model)
+        else:
+            raise Exception("Unrecognized weight model: %s" % type)
+        return weight
+
+def create_kayak_weight_component(model, latent):
+        type = model['network']['weight']['type'].lower()
+        if type == 'constant':
+            weight = KayakConstantWeightModel(model)
+        elif type == 'gaussian':
+            weight = KayakGaussianWeightModel(model)
         else:
             raise Exception("Unrecognized weight model: %s" % type)
         return weight
@@ -79,7 +89,7 @@ class KayakConstantWeightModel(_WeightModelBase):
         return self._log_p
 
 
-class GaussianWeightModel(Component):
+class TheanoGaussianWeightModel(_WeightModelBase):
     def __init__(self, model):
         """ Initialize the filtered stim model
         """
@@ -88,7 +98,7 @@ class GaussianWeightModel(Component):
         prms = model['network']['weight']
 
         self.prior = create_prior(prms['prior'])
-	
+
         # Implement refractory period by having negative mean on self loops
         if 'refractory_prior' in prms:
             #self.mu[np.diag_indices(N)] = prms['mu_refractory']
@@ -104,13 +114,21 @@ class GaussianWeightModel(Component):
 
         # Define weight matrix
         self.W_flat = T.dvector(name='W')
-        self.W = T.reshape(self.W_flat,(N,N))
+        self._W = T.reshape(self.W_flat,(N,N))
 
         if hasattr(self, 'refractory_prior'):
-            self.log_p = self.prior.log_p(self.W.take(self.nondiags)) + \
+            self._log_p = self.prior.log_p(self.W.take(self.nondiags)) + \
                          self.refractory_prior.log_p(self.W.take(self.diags))
         else:
-            self.log_p = self.prior.log_p(self.W)
+            self._log_p = self.prior.log_p(self.W)
+
+    @property
+    def W(self):
+        return self._W
+
+    @property
+    def log_p(self):
+        return self._log_p
 
     def sample(self, acc):
         """
@@ -137,6 +155,46 @@ class GaussianWeightModel(Component):
         """ Get the theano variables associated with this model.
         """
         return {str(self.W_flat): self.W_flat}
-    
-    def get_state(self):
-        return {'W': self.W}
+
+
+
+class KayakGaussianWeightModel(_WeightModelBase):
+    def __init__(self, model):
+        """ Initialize the filtered stim model
+        """
+        self.model = model
+        self.N = model['N']
+        prms = model['network']['weight']
+
+        self.mu = prms['prior']['mu'] * np.ones((self.N,self.N))
+        self.sigma = prms['prior']['sigma'] * np.ones((self.N,self.N))
+
+        if 'refractory_prior' in prms:
+            diags = np.diag_indices(self.N)
+            self.mu[diags] = prms['refractory_prior']['mu']
+            self.sigma[diags] = prms['refractory_prior']['sigma']
+
+        self._W = kyk.Parameter(np.zeros((self.N,self.N)))
+
+        # There is some weirdness with __mult__(np.ndarray, kyk.Differentiable))
+        self._log_p = kyk.MatSum(kyk.Parameter(-0.5/self.sigma**2) * (self.W - self.mu)**2)
+
+    @property
+    def W(self):
+        return self._W
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    def sample(self, acc):
+        """
+        return a sample of the variables
+        """
+        W = self.mu + self.sigma * np.random.randn(self.N,self.N)
+        return { 'W' : W}
+
+    def get_variables(self):
+        """ Get the Kayak variables associated with this model.
+        """
+        return { 'W' : self.W }
