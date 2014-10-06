@@ -177,7 +177,8 @@ class KayakGaussianWeightModel(_WeightModelBase):
         self._W = kyk.Parameter(np.zeros((self.N,self.N)))
 
         # There is some weirdness with __mult__(np.ndarray, kyk.Differentiable))
-        self._log_p = kyk.MatSum(kyk.Parameter(-0.5/self.sigma**2) * (self.W - self.mu)**2)
+        self._log_p = kyk.MatSum(kyk.Parameter(-0.5/self.sigma**2) * (self.W - self.mu)**2,
+                                 keepdims=False)
 
     @property
     def W(self):

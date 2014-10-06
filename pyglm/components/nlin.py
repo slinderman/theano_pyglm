@@ -73,8 +73,8 @@ class KayakExpLinearNonlinearity(Component):
         return self._log_p
 
     def nlin(self, x):
-        return kyk.ElemLog(1.0 + kyk.ElemExp(x))
+        return 1e-8 + kyk.ElemLog(1.0 + kyk.ElemExp(x))
 
     def f_nlin(self, x):
-        return np.log(1.0 + np.exp(x))
+        return 1e-8 + np.log(1.0 + np.exp(x))
 

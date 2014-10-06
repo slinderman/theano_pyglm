@@ -62,13 +62,6 @@ SparseWeightedModel = \
                     'norm' : True
                 }
         },
-    #'impulse' :
-    #    {
-    #        'type' : 'exponential',
-    #        'dt_max' : 0.2,
-    #        'tau0' : 0.07,
-    #        'sigma': 0.1
-    #    },
 
     # Parameters of the network
     'network' :

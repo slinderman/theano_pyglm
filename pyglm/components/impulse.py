@@ -580,8 +580,8 @@ class KayakDirichletImpulses(_ImpulseBase):
         v = {}
         # for beta in self.betas:
         #     v[str(beta)] = beta
-        for g in self.gs:
-            v[str(g)] = g
+        for n_pre,g in enumerate(self.gs):
+            v['g_%d' % n_pre] = g
 
         return v
 
@@ -592,8 +592,8 @@ class KayakDirichletImpulses(_ImpulseBase):
         v = {}
         # for beta in self.betas:
         #     v[str(beta)] = np.random.dirichlet(self.alpha*np.ones(self.B))
-        for g in self.gs:
-            v[str(g)] = np.random.gamma(self.alpha, np.ones((1,1,self.B)))
+        for n_pre,g in enumerate(self.gs):
+            v['g_%d' % n_pre] = np.random.gamma(self.alpha, np.ones((1,1,self.B)))
         return v
 
     def get_state(self):

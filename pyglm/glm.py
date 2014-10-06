@@ -51,9 +51,6 @@ class _GlmBase(Component):
     def lkhd_scale(self):
         raise NotImplementedError()
 
-    @property
-    def log_p(self):
-        return self.lkhd_scale * self.ll + self.log_prior
 
     def get_variables(self):
         """ Get a list of all variables
@@ -168,6 +165,8 @@ class TheanoGlm(_GlmBase):
         # Allow for a scaling of the likelihood to implement AIS
         self._lkhd_scale = theano.shared(name='lkhd_scale', value=1.0)
 
+        self._log_p = self.lkhd_scale * self.ll + self.log_prior
+
     @property
     def n(self):
         return self._n
@@ -215,6 +214,11 @@ class TheanoGlm(_GlmBase):
     @property
     def lkhd_scale(self):
         return self._lkhd_scale
+
+    @property
+    def log_p(self):
+        return self._log_p
+
 
     def get_variables(self):
         v = super(TheanoGlm, self).get_variables()
@@ -285,9 +289,15 @@ class KayakGlm(_GlmBase):
         self._nlin_model = KayakExpLinearNonlinearity(model)
 
         # Compute the firing rate.
-        self._lam = self.nlin_model.nlin(self.bias_model.I_bias +
-                                   self.bkgd_model.I_stim +
-                                   self.I_net)
+        self._I_tot = self.bias_model.I_bias + \
+                      self.bkgd_model.I_stim + \
+                      self.I_net
+
+        # self._lam = se lf.nlin_model.nlin(self.bias_model.I_bias +
+        #                            self.bkgd_model.I_stim +
+        #                            self.I_net)
+
+        self._lam = self.nlin_model.nlin(self._I_tot)
 
         # Compute the log likelihood under the Poisson process
         self._ll = kyk.MatSum(-self.dt*self.lam + kyk.ElemLog(self.lam)*self.S, keepdims=False)
@@ -301,6 +311,8 @@ class KayakGlm(_GlmBase):
 
         # Allow for a scaling of the likelihood to implement AIS
         self._lkhd_scale = kyk.Parameter(1.0)
+
+        self._log_p = self.lkhd_scale * self.ll + self.log_prior
 
     @property
     def n(self):
@@ -349,6 +361,10 @@ class KayakGlm(_GlmBase):
     @property
     def lkhd_scale(self):
         return self._lkhd_scale
+
+    @property
+    def log_p(self):
+        return self._log_p
 
     def get_variables(self):
         v = super(KayakGlm, self).get_variables()

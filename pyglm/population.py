@@ -508,13 +508,13 @@ class KayakPopulation(_PopulationBase):
         # for glm in self._glms:
         #     ll += glm.ll.value
         # return ll
-        print "WARNING: IGNORING GIVEN VARS"
+        # print "WARNING: IGNORING GIVEN VARS"
         return self.ll.value
 
     def compute_log_p(self, vars):
         """ Compute the log joint probability under a given set of variables
         """
-        print "WARNING: IGNORING GIVEN VARS"
+        # print "WARNING: IGNORING GIVEN VARS"
         return self.log_p.value
 
     def set_hyperparameters(self, model):
@@ -575,7 +575,7 @@ class KayakPopulation(_PopulationBase):
 
         # return _eval_state_helper(state_vars)
 
-        # DEBUG
+        # DEBUG: Copy state into format expected for plotting
         state = {}
         state['latent'] = _eval_state_helper(state_vars['latent'])
         state['net'] = _eval_state_helper(state_vars['net'])
