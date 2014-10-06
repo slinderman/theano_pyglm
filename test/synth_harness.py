@@ -37,24 +37,26 @@ def initialize_test_harness(population_class=TheanoPopulation):
         print "Loading true model from %s" % model_file
         with open(model_file) as f:
             model_true = cPickle.load(f)
-            # HACK FOR EXISTING DATA!
-            if 'N_dims' not in model_true['network']['graph']:
-                model_true['network']['graph']['N_dims'] = 1
-            if 'location_prior' not in model_true['network']['graph']:
-                model_true['network']['graph']['location_prior'] = \
-                         {
-                             'type' : 'gaussian',
-                             'mu' : 0.0,
-                             'sigma' : 1.0
-                         }
-            if 'L' in x_true['net']['graph']:
-                x_true['net']['graph']['L'] = x_true['net']['graph']['L'].ravel()
-            # END HACK
 
-            popn_true = population_class(model_true)
-            popn_true.add_data(data)
-            ll_true = popn_true.compute_log_p(x_true)
-            print "true LL: %f" % ll_true
+            if isinstance(model_true, dict):
+                # HACK FOR EXISTING DATA!
+                if 'N_dims' not in model_true['network']['graph']:
+                    model_true['network']['graph']['N_dims'] = 1
+                if 'location_prior' not in model_true['network']['graph']:
+                    model_true['network']['graph']['location_prior'] = \
+                             {
+                                 'type' : 'gaussian',
+                                 'mu' : 0.0,
+                                 'sigma' : 1.0
+                             }
+                if 'L' in x_true['net']['graph']:
+                    x_true['net']['graph']['L'] = x_true['net']['graph']['L'].ravel()
+                # END HACK
+
+                popn_true = population_class(model_true)
+                popn_true.add_data(data)
+                ll_true = popn_true.compute_log_p(x_true)
+                print "true LL: %f" % ll_true
 
     return options, popn, data, popn_true, x_true
 

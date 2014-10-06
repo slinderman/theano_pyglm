@@ -12,6 +12,7 @@ from pyglm.utils.packvec import *
 from pyglm.utils.grads import *
 
 from hips.inference.ars import adaptive_rejection_sample
+from hips.inference.ars2 import AdaptiveRejectionSampler
 from hips.inference.hmc import hmc
 from pyglm.inference.log_sum_exp import log_sum_exp_sample
 from pyglm.inference.coord_descent import coord_descent
@@ -1084,7 +1085,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         w = np.interp(v, F_W, W_nns)
         return w
 
-    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws, log_L, I_bias, I_stim, I_imp, I_other):
+    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws_init, log_L, I_bias, I_stim, I_imp, I_other):
         """
         Sample weights using adaptive rejection sampling.
         This only works for log-concave distributions, which will
@@ -1092,7 +1093,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         when the prior on w is log concave (as it is when w~Gaussian).
         """
         # import pdb; pdb.set_trace()
-        log_prior_W = -0.5/sigma_w**2 * (ws-mu_w)**2
+        log_prior_W = -0.5/sigma_w**2 * (ws_init-mu_w)**2
         log_posterior_W = log_prior_W + log_L
 
         #  Define a function to evaluate the log posterior
@@ -1119,11 +1120,14 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                                   log_posterior_W > -1e8,
                                   log_posterior_W < 1e8)
 
-        return adaptive_rejection_sample(_log_posterior,
-                                         ws[valid_ws], log_posterior_W[valid_ws] - Z,
-                                         (-np.Inf, np.Inf),
-                                         stepsz=sigma_w/2.0,
-                                         debug=False)
+        ars = AdaptiveRejectionSampler(_log_posterior, -np.inf, np.inf, ws_init[valid_ws], log_posterior_W[valid_ws] - Z)
+        return ars.sample()
+
+        # return adaptive_rejection_sample(_log_posterior,
+        #                                  ws[valid_ws], log_posterior_W[valid_ws] - Z,
+        #                                  (-np.Inf, np.Inf),
+        #                                  stepsz=sigma_w/2.0,
+        #                                  debug=False)
 
     def _collapsed_sample_AW_with_prior(self, n_pre, n_post, x,
                                         I_bias, I_stim, I_imp, p_A):

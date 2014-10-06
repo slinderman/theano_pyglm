@@ -546,6 +546,7 @@ class KayakPopulation(_PopulationBase):
             if isinstance(v,dict):
                 self._set_parameter_helper(curr_params[k], v)
             else:
+                # print 'setting %s to %s' % (str(k), str(v))
                 curr_params[k].value = v
 
     def get_state(self):

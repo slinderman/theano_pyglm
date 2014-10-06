@@ -227,7 +227,7 @@ class HmcDirichletImpulseUpdate(ParallelMetropolisHastingsUpdate):
             else:
                 # No edge: Sample g from the prior
                 new_g = np.random.gamma(self.population.glms[n_post].imp_model.alpha,
-                                        np.ones(self.population.glms[n_post].imp_model.B))
+                                        np.ones((1,1,self.population.glms[n_post].imp_model.B)))
 
             # Copy new impulse response parameter into x
             x['glm_%d' % n_post]['imp']['g_%d' % n_pre] = new_g
@@ -242,7 +242,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         super(CollapsedGibbsNetworkColumnUpdate, self).__init__()
 
         # Define constants for Sampling
-        self.DEG_GAUSS_HERMITE = 10
+        self.DEG_GAUSS_HERMITE = 15
         self.GAUSS_HERMITE_ABSCISSAE, self.GAUSS_HERMITE_WEIGHTS = \
             np.polynomial.hermite.hermgauss(self.DEG_GAUSS_HERMITE)
 
@@ -335,9 +335,10 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         try:
             A[n_pre, n_post] = log_sum_exp_sample([log_pr_noA, log_pr_A])
             if np.allclose(p_A[n_pre, n_post], 1.0) and not A[n_pre, n_post]:
+                print "Sampled no self edge"
                 print log_pr_noA
                 print log_pr_A
-                raise Exception("Sampled no self edge")
+                # raise Exception("Sampled no self edge")
         except Exception as e:
 
             raise e
@@ -345,11 +346,10 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         x['net']['graph']['A'] = A
         self.population.network.graph.A.value = A
 
-
         # Sample W from its posterior, i.e. log_L with denominator log_G
         # If A_nn = 0, we don't actually need to resample W since it has no effect
         if A[n_pre,n_post] == 1:
-            W[n_pre, n_post] = self._adaptive_rejection_sample_w(n_pre, n_post, x, mu_w, sigma_w, W_nns, log_L)
+            W[n_pre, n_post] = self._adaptive_rejection_sample_w(n_pre, n_post, mu_w, sigma_w, W_nns, log_L)
         else:
             # Sample W from the prior
             W[n_pre, n_post] = mu_w + sigma_w * np.random.randn()
@@ -358,14 +358,15 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         x['net']['weights']['W'] = W
         self.population.network.weights.W.value = W
 
-    def _adaptive_rejection_sample_w(self, n_pre, n_post, x, mu_w, sigma_w, ws, log_L):
+    def _adaptive_rejection_sample_w(self, n_pre, n_post, mu_w, sigma_w, ws_init, log_L):
         """
         Sample weights using adaptive rejection sampling.
         This only works for log-concave distributions, which will
         be the case if the nonlinearity is convex and log concave, and
         when the prior on w is log concave (as it is when w~Gaussian).
         """
-        log_prior_W = -0.5/sigma_w**2 * (ws-mu_w)**2
+        # log_prior_W = -0.5/sigma_w**2 * (ws_init-mu_w)**2
+        log_prior_W = 0
         log_posterior_W = log_prior_W + log_L
 
         #  Define a function to evaluate the log posterior
@@ -377,8 +378,10 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             ws = np.atleast_1d(ws)
             lp = np.zeros_like(ws)
             for (i,w) in enumerate(ws):
-                lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
-                        self._glm_ll(n_pre, n_post, w) - Z
+                # lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
+                #         self._glm_ll(n_pre, n_post, w) - Z
+                lp[i] = self._glm_ll(n_pre, n_post, w) - Z
+
 
             if isinstance(ws_in, np.ndarray):
                 return lp.reshape(shape)
@@ -390,7 +393,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
                                   log_posterior_W > -1e8,
                                   log_posterior_W < 1e8)
 
-        ars = AdaptiveRejectionSampler(_log_posterior, -np.Inf, np.Inf, ws[valid_ws], log_posterior_W[valid_ws] - Z )
+        ars = AdaptiveRejectionSampler(_log_posterior, -np.inf, np.inf, ws_init[valid_ws], log_posterior_W[valid_ws] - Z)
+        # ars = AdaptiveRejectionSampler(_log_posterior, np.amin(ws_init[valid_ws]), np.amax(ws_init[valid_ws]), ws_init[valid_ws], log_posterior_W[valid_ws] - Z)
         # return adaptive_rejection_sample(_log_posterior,
         #                                  ws[valid_ws], log_posterior_W[valid_ws] - Z,
         #                                  (-np.Inf, np.Inf),
@@ -1396,6 +1400,8 @@ def gibbs_sample(population,
     # Draw initial state from prior if not given
     if x0 is None:
         x0 = population.sample()
+        # DEBUG For stability
+        x0['net']['weights']['W'] *= 0
 
     # Initialize the population
     population.set_parameters(x0)

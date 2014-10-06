@@ -113,7 +113,7 @@ class ErdosRenyiGraphModel(Component):
         self.lkhd = T.sum(self.A * np.log(np.minimum(1.0-1e-8, self.rho)) +
                            (1 - self.A) * np.log(np.maximum(1e-8, 1.0 - self.rho)))
 
-        self.log_p = self.lkhd_scale * self.lkhd
+        self._log_p = self.lkhd_scale * self.lkhd
 
     def get_variables(self):
         """ Get the theano variables associated with this model.
@@ -129,6 +129,11 @@ class ErdosRenyiGraphModel(Component):
 
     def get_state(self):
         return {'A': self.A}
+
+    @property
+    def log_p(self):
+        # Define log probability
+        return self._log_p
 
 
 class KayakErdosRenyiGraphModel(_GraphModelBase):

@@ -17,6 +17,7 @@ SparseWeightedModel = \
         {
             'type' : 'constant',
             'mu' : 20.0,
+            # 'mu' : 1.0,
             'sigma' : 0.25
         },
 
@@ -74,13 +75,16 @@ SparseWeightedModel = \
                          'type' : 'gaussian',
                          'mu' : 0.0,
                          'sigma' : 1.0
+                         # 'sigma' : 0.1
                      },
                     'refractory_prior' :
                     {
                         'type' : 'gaussian',
                         # 'mu' : -0.2,
                         'mu' : -1.0,
+                        # 'mu' : 0.0,
                         'sigma' : 0.5
+                        # 'sigma' : 0.1
                     }
                 },
 

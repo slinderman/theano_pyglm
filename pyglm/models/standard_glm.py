@@ -16,7 +16,7 @@ StandardGlm = \
     'bias' :
         {
             'type' : 'constant',
-            'mu' : 5,   
+            'mu' : 5,
             'sigma' : 1
         },
 

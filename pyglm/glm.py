@@ -240,6 +240,7 @@ class TheanoGlm(_GlmBase):
     def sample(self, acc):
         v = super(TheanoGlm, self).sample(acc)
         v[str(self.n)] = -1  # Doesn't make sense to sample n
+        return v
 
 
 
@@ -287,6 +288,7 @@ class KayakGlm(_GlmBase):
         # Rectify the currents to get a firing rate
         # self._nlin_model = create_nlin_component(model)
         self._nlin_model = KayakExpLinearNonlinearity(model)
+        # self._nlin_model = KayakExpNonlinearity(model)
 
         # Compute the firing rate.
         self._I_tot = self.bias_model.I_bias + \

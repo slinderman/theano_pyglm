@@ -46,6 +46,12 @@ def initialize_test_harness():
         with open(model_file) as f:
             popn_true = cPickle.load(f)
 
+        popn_true.set_parameters(x_true)
+
+        popn_true.add_data(data)
+        popn_true.set_data(data)
+
+
     return options, popn, data, popn_true, x_true
 
 
@@ -80,7 +86,9 @@ def run_synth_test():
                 x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
         # DEBUG: Initialize with true params
-        x0 = x_true
+        # x0 = x_true
+
+        import pdb; pdb.set_trace()
 
         # Perform inference
         # raw_input('Press any key to begin inference...\n')

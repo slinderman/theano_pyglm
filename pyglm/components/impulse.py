@@ -419,9 +419,9 @@ class DirichletImpulses(Component):
 
         # Log probability of a set of Dirichlet distributed vectors
         # self.log_p = (self.alpha-1) * T.sum(T.log(beta2))
-        self.log_p = T.constant(0.0)
+        self._log_p = T.constant(0.0)
         for g in self.gs:
-            self.log_p += (self.alpha-1.0) * T.sum(T.log(abs(g))) - T.sum(abs(g))
+            self._log_p += (self.alpha-1.0) * T.sum(T.log(abs(g))) - T.sum(abs(g))
 
         # Define a helper variable for the impulse response
         # after projecting onto the basis
@@ -429,6 +429,10 @@ class DirichletImpulses(Component):
                                   axis=0)
 
         self.impulse = T.dot(beta2, T.transpose(self.ibasis))
+
+    @property
+    def log_p(self):
+        return self._log_p
 
     def get_variables(self):
         """ Get the theano variables associated with this model.

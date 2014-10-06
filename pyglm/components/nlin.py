@@ -73,8 +73,30 @@ class KayakExpLinearNonlinearity(Component):
         return self._log_p
 
     def nlin(self, x):
-        return 1e-8 + kyk.ElemLog(1.0 + kyk.ElemExp(x))
+        return kyk.ElemLog(1.0 + kyk.ElemExp(x))
 
     def f_nlin(self, x):
-        return 1e-8 + np.log(1.0 + np.exp(x))
+        return np.log(1.0 + np.exp(x))
 
+
+class KayakExpNonlinearity(Component):
+    """ Exponential nonlinearity (\lambda=e^x) for x<0,
+        Linear (\lambda=1+x) for x>0.
+        This is nice because it satisfies a Lipschitz bound of 1.
+    """
+
+    def __init__(self, model):
+        """ Initialize the component with the parameters from the given model,
+        the vector of symbolic variables, vars, and the offset into that vector, offset.
+        """
+        self._log_p = kyk.Constant(0.)
+
+    @property
+    def log_p(self):
+        return self._log_p
+
+    def nlin(self, x):
+        return kyk.ElemExp(x)
+
+    def f_nlin(self, x):
+        return np.exp(x)

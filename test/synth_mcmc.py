@@ -12,7 +12,7 @@ from pyglm.inference.gibbs import gibbs_sample
 from synth_harness import initialize_test_harness
 # from plotting.plot_results import plot_results
 from pyglm.plotting.plotting import NetworkPlotProvider, LocationPlotProvider
-from pyglm.population import Population
+from pyglm.population import TheanoPopulation
 
 
 def initialize_plotting(popn_true, x_true, popn_inf):
@@ -77,21 +77,22 @@ def run_synth_test():
                 mle_x0 = cPickle.load(f)
                 # HACK: We're assuming x0 came from a standard GLM
                 mle_model = make_model('standard_glm', N=data['N'])
-                mle_popn = Population(mle_model)
+                mle_popn = TheanoPopulation(mle_model)
                 mle_popn.set_data(data)
 
                 x0 = popn.sample()
                 x0 = convert_model(mle_popn, mle_model, mle_x0, popn, popn.model, x0)
 
-        # Prepare for online plotting
-        plt.ion()
-        plotters = initialize_plotting(popn_true, x_true, popn)
-        plt.show()
-        cbk = lambda x: plot_sample_callback(x, plotters)
+        # # Prepare for online plotting
+        # plt.ion()
+        # plotters = initialize_plotting(popn_true, x_true, popn)
+        # plt.show()
+        # cbk = lambda x: plot_sample_callback(x, plotters)
+        cbk = None
 
         # Perform inference
         raw_input('Press any key to begin inference...\n')
-        x_smpls = gibbs_sample(popn, data, x0=x0, N_samples=N_samples,
+        x_smpls = gibbs_sample(popn, x0=x0, N_samples=N_samples,
                                init_from_mle=False,
                                callback=cbk)
 
