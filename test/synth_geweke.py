@@ -5,8 +5,9 @@ import os
 import matplotlib.pyplot as plt
 
 from pyglm.models.model_factory import *
-from pyglm.inference.gibbs import initialize_updates
-from population import Population
+# from pyglm.inference.gibbs import initialize_updates
+from pyglm.inference.kayak_gibbs import initialize_updates, CollapsedGibbsNetworkColumnUpdate
+from pyglm.population import KayakPopulation
 
 
 def geweke_test(population,
@@ -33,14 +34,14 @@ def geweke_test(population,
     x = x0
 
     import time
-    start_time = time.clock()
+    start_time = time.time()
 
     for smpl in np.arange(N_samples):
         # Print the current log likelihood
         lp = population.compute_log_p(x)
 
         # Compute iters per second
-        stop_time = time.clock()
+        stop_time = time.time()
         if stop_time - start_time == 0:
             print "Geweke iteration %d. Iter/s exceeds time resolution. Log prob: %.3f" % (smpl, lp)
         else:
@@ -49,18 +50,25 @@ def geweke_test(population,
                                                                        lp)
         start_time = stop_time
 
-        # Go through each parallel MH update
         for parallel_update in parallel_updates:
-            for n in np.arange(N):
-                parallel_update.update(x, n)
+            if isinstance(parallel_update, CollapsedGibbsNetworkColumnUpdate):
+                for n in np.arange(N):
+                    parallel_update.update(x, n)
 
-        # Sample the serial updates
-        for serial_update in serial_updates:
-            serial_update.update(x)
+        # # Go through each parallel MH update
+        # for parallel_update in parallel_updates:
+        #     for n in np.arange(N):
+        #         parallel_update.update(x, n)
+        #
+        # # Sample the serial updates
+        # for serial_update in serial_updates:
+        #     serial_update.update(x)
 
         # Geweke step: Sample new data
+        # import pdb; pdb.set_trace()
         data = gen_synth_data(population, x, N, data['T'] )
-        population.set_data(data)
+        population.data_sequences.pop()
+        population.add_data(data)
 
         x_smpls.append(copy.deepcopy(x))
 
@@ -87,16 +95,28 @@ def gen_synth_data(popn, x_true, N, T_stop=15):
     stim = np.random.randn(T_stop/dt_stim, D_stim)
 
     # Initialize the GLMs with just the stimulus
-    temp_data = {"S": np.zeros((T_stop/dt, N)),
-                 "N": N,
-                 "dt": dt,
-                 "T": np.float(T_stop),
-                 "stim": stim,
-                 'dt_stim': dt_stim}
-    popn.set_data(temp_data)
+    # temp_data = {"S": np.zeros((T_stop/dt, N)),
+    #              "N": N,
+    #              "dt": dt,
+    #              "T": np.float(T_stop),
+    #              "stim": stim,
+    #              'dt_stim': dt_stim}
+    # popn.set_data(temp_data)
+    #
+    # # Simulate spikes
+    # S,X = popn.simulate(x_true, (0, T_stop), dt)
+    #
+    # # Package data into dict
+    # data = {"S": S,
+    #         "X": X,
+    #         "N": N,
+    #         "dt": dt,
+    #         "T": np.float(T_stop),
+    #         "stim": stim,
+    #         'dt_stim': dt_stim}
 
     # Simulate spikes
-    S,X = popn.simulate(x_true, (0, T_stop), dt)
+    S,X = popn.simulate(x_true, (0, T_stop), dt, stim, dt_stim)
 
     # Package data into dict
     data = {"S": S,
@@ -105,7 +125,10 @@ def gen_synth_data(popn, x_true, N, T_stop=15):
             "dt": dt,
             "T": np.float(T_stop),
             "stim": stim,
-            'dt_stim': dt_stim}
+            'dt_stim': dt_stim,
+            'vars' : x_true}
+
+    return data
 
     return data
 
@@ -162,15 +185,19 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
     plt.close(f)
 
     # Plot the weight histogram
-    mu_w = popn.network.weights.prior.mu.get_value()
-    sigma_w = popn.network.weights.prior.sigma.get_value()
-
-    if hasattr(popn.network.weights, 'refractory_prior'):
-        mu_w_ref = popn.network.weights.refractory_prior.mu.get_value()
-        sigma_w_ref = popn.network.weights.refractory_prior.sigma.get_value()
+    if isinstance(popn, KayakPopulation):
+        mu_w = popn.network.weights.mu
+        sigma_w = popn.network.weights.sigma
     else:
-        mu_w_ref = popn.mu_w
-        sigma_w_ref = popn.sigma_w
+        mu_w = popn.network.weights.prior.mu.get_value()
+        sigma_w = popn.network.weights.prior.sigma.get_value()
+
+        if hasattr(popn.network.weights, 'refractory_prior'):
+            mu_w_ref = popn.network.weights.refractory_prior.mu.get_value()
+            sigma_w_ref = popn.network.weights.refractory_prior.sigma.get_value()
+        else:
+            mu_w_ref = mu_w
+            sigma_w_ref = sigma_w
 
     Ws = [s['net']['weights']['W'] for s in s_smpls]
     Ws = np.array(Ws)
@@ -180,10 +207,13 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
             ax = f.add_subplot(N,N,1+n1*N+n2)
             n, bins, patches = ax.hist(np.squeeze(Ws[:,n1,n2]), 20, normed=1)
             bincenters = 0.5*(bins[1:]+bins[:-1])
-            if n1==n2:
-                y = mlab.normpdf(bincenters, mu_w_ref, sigma_w_ref)
+            if isinstance(popn, KayakPopulation):
+                y = mlab.normpdf(bincenters, mu_w[n1,n2], sigma_w[n1,n2])
             else:
-                y = mlab.normpdf(bincenters, mu_w, sigma_w)
+                if n1==n2:
+                    y = mlab.normpdf(bincenters, mu_w_ref, sigma_w_ref)
+                else:
+                    y = mlab.normpdf(bincenters, mu_w, sigma_w)
             ax.plot(bincenters, y, 'r--', linewidth=1)
     f.savefig(os.path.join(resdir,'geweke_W.pdf'))
 
@@ -207,7 +237,12 @@ def plot_geweke_results(popn, x_smpls, model, resdir='.'):
 
     # Plot the gamma distributed latent vars of the normalized impulse resp
     # gs = [[np.exp(x['glms'][n]['imp']['w_lng']) for n in range(N)] for x in x_smpls]
-    gs = [[x['glms'][n]['imp']['g_%d'%n] for n in range(N)] for x in x_smpls]
+    if isinstance(popn, KayakPopulation):
+        gs = np.concatenate([np.concatenate([x['glm_%d'%n]['imp']['g_%d'%n]
+                                             for n in range(N)], axis=1)
+                             for x in x_smpls], axis=0)
+    else:
+        gs = [[x['glms'][n]['imp']['g_%d'%n] for n in range(N)] for x in x_smpls]
     gs = np.array(gs)
     gs = np.abs(gs)
     (_,N,B) = gs.shape
@@ -235,7 +270,8 @@ def run_synth_test():
     (options, args) = parse_cmd_line_args()
     print "Creating master population object"
     model = make_model(options.model, N=options.N)
-    popn = Population(model)
+    # popn = TheanoPopulation(model)
+    popn = KayakPopulation(model)
 
     results_file = os.path.join(options.resultsDir, 'geweke_results.pkl')
     if os.path.exists(results_file) and not options.force_recompute:
@@ -245,10 +281,10 @@ def run_synth_test():
     else:
         x0 = popn.sample()
         data = gen_synth_data(popn, x0, options.N, options.T)
-        popn.set_data(data)
+        popn.add_data(data)
 
         # Perform inference
-        N_samples = 1000
+        N_samples = 10000
         x_smpls = geweke_test(popn, data, N_samples=N_samples)
 
         # Save results

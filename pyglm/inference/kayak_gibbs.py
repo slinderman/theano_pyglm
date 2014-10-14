@@ -358,6 +358,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         x['net']['weights']['W'] = W
         self.population.network.weights.W.value = W
 
+        self.population.network.graph.A.value = A
+
     def _adaptive_rejection_sample_w(self, n_pre, n_post, mu_w, sigma_w, ws_init, log_L):
         """
         Sample weights using adaptive rejection sampling.
@@ -365,8 +367,7 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
         be the case if the nonlinearity is convex and log concave, and
         when the prior on w is log concave (as it is when w~Gaussian).
         """
-        # log_prior_W = -0.5/sigma_w**2 * (ws_init-mu_w)**2
-        log_prior_W = 0
+        log_prior_W = -0.5/sigma_w**2 * (ws_init-mu_w)**2
         log_posterior_W = log_prior_W + log_L
 
         #  Define a function to evaluate the log posterior
@@ -378,10 +379,8 @@ class CollapsedGibbsNetworkColumnUpdate(ParallelMetropolisHastingsUpdate):
             ws = np.atleast_1d(ws)
             lp = np.zeros_like(ws)
             for (i,w) in enumerate(ws):
-                # lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
-                #         self._glm_ll(n_pre, n_post, w) - Z
-                lp[i] = self._glm_ll(n_pre, n_post, w) - Z
-
+                lp[i] = -0.5/sigma_w**2 * (w-mu_w)**2 + \
+                        self._glm_ll(n_pre, n_post, w) - Z
 
             if isinstance(ws_in, np.ndarray):
                 return lp.reshape(shape)

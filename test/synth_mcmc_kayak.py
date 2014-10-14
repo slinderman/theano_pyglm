@@ -88,8 +88,6 @@ def run_synth_test():
         # DEBUG: Initialize with true params
         # x0 = x_true
 
-        import pdb; pdb.set_trace()
-
         # Perform inference
         # raw_input('Press any key to begin inference...\n')
         x_smpls = gibbs_sample(popn, x0=x0, N_samples=N_samples,

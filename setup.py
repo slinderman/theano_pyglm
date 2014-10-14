@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 
 from distutils.core import setup
+from Cython.Build import cythonize
+
 
 setup(name='PyGLM',
       version='0.1',
@@ -14,4 +16,5 @@ setup(name='PyGLM',
                 'pyglm.models',
                 'pyglm.plotting',
                 'pyglm.utils'],
+      ext_modules=cythonize('**/*.pyx'),
      )

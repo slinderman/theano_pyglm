@@ -5,6 +5,7 @@ SparseWeightedModel = \
 {
     # Number of neurons (parametric model!)
     'N' : 1,
+    'dt' : 0.001,
     
     # Parameters of the nonlinearity
     'nonlinearity' :
@@ -18,7 +19,7 @@ SparseWeightedModel = \
             'type' : 'constant',
             'mu' : 20.0,
             # 'mu' : 1.0,
-            'sigma' : 0.25
+            'sigma' : 1.0
         },
 
     # Parameters of the background model
@@ -92,7 +93,7 @@ SparseWeightedModel = \
                 {
                     'type' : 'erdos_renyi',
                     'rho' : 0.5,
-                    'rho_refractory' : 1.0
+                    'rho_refractory' : 0.5
                 }
         },
 }
